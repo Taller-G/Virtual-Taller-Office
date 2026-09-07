@@ -1,7 +1,13 @@
 import { Client, CloseCode, type Room } from '@colyseus/sdk'
 import {
   Message,
+  newChatId,
   ROOM_NAME,
+  validateChatText,
+  type ChatErrorPayload,
+  type ChatMessagePayload,
+  type ChatRejection,
+  type ChatSendPayload,
   type JoinOptions,
   type OfficeState,
   type RoomInfoPayload,
@@ -24,6 +30,14 @@ export interface ConnectionEvents {
   room: (room: OfficeRoom) => void
   /** Metadatos que el servidor envía al entrar (sessionId incluido). */
   roomInfo: (info: RoomInfoPayload) => void
+  /**
+   * Llegó un mensaje de la burbuja. El servidor ya filtró los destinatarios,
+   * así que todo lo que llega acá es de mi conversación; incluye el eco de mis
+   * propios mensajes, que hace de acuse.
+   */
+  chat: (message: ChatMessagePayload) => void
+  /** El servidor no aceptó uno de mis mensajes (`id` para reconocerlo). */
+  chatError: (error: ChatErrorPayload) => void
 }
 
 type Listener<E extends keyof ConnectionEvents> = ConnectionEvents[E]
@@ -53,6 +67,8 @@ export class OfficeConnection {
     status: new Set(),
     room: new Set(),
     roomInfo: new Set(),
+    chat: new Set(),
+    chatError: new Set(),
   }
   private rejoinAttempts = 0
   private rejoinTimer?: ReturnType<typeof setTimeout>
@@ -95,6 +111,24 @@ export class OfficeConnection {
     this.room?.send(Message.SET_NAME, payload)
   }
 
+  /**
+   * Manda un mensaje a mi burbuja. Valida el texto antes de gastar red (mismo
+   * validador que usa el servidor) y devuelve el `id` con el que el remitente
+   * va a reconocer el eco o el error, más el texto ya normalizado tal como lo
+   * va a ver el resto. Quién lo recibe lo decide el servidor.
+   */
+  sendChat(
+    text: string,
+  ): { ok: true; id: string; text: string } | { ok: false; reason: ChatRejection } {
+    const valid = validateChatText(text)
+    if (!valid.ok) return { ok: false, reason: valid.reason }
+    if (!this.room) return { ok: false, reason: 'offline' }
+    const id = newChatId()
+    const payload: ChatSendPayload = { id, text: valid.text }
+    this.room.send(Message.CHAT_SEND, payload)
+    return { ok: true, id, text: valid.text }
+  }
+
   /** Fija o quita a mano mi estado "ausente". */
   setAway(away: boolean) {
     const payload: SetAwayPayload = { away }
@@ -135,6 +169,8 @@ export class OfficeConnection {
     room.reconnection.maxDelay = 2_000
 
     room.onMessage(Message.ROOM_INFO, (info) => this.emit('roomInfo', info))
+    room.onMessage(Message.CHAT_MESSAGE, (message) => this.emit('chat', message))
+    room.onMessage(Message.CHAT_ERROR, (error) => this.emit('chatError', error))
 
     room.onDrop((code, reason) => {
       this.setStatus('reconnecting', reason || `código ${code}`)

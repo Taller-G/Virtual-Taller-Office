@@ -16,6 +16,18 @@ const SNAP_DISTANCE = 160
 /** Si pasó más que esto entre frames (pestaña oculta), se salta al objetivo. */
 const SNAP_AFTER_MS = 500
 
+/** Globo de diálogo: cuánto se queda en pantalla y cuánto texto entra. */
+const SAY = {
+  /** Tiempo base (ms) + un rato extra por carácter, con tope. */
+  baseMs: 2_500,
+  perCharMs: 45,
+  maxMs: 8_000,
+  /** Ancho de envoltura, en px del mundo. */
+  width: 108,
+  /** Recorte visual: el mensaje completo está en el panel de conversación. */
+  maxChars: 90,
+} as const
+
 export interface AvatarOptions {
   avatar: string
   name: string
@@ -34,6 +46,9 @@ export class Avatar extends Phaser.GameObjects.Container {
   private badge: Phaser.GameObjects.Text
   /** Anillo a los pies: marca a los miembros de mi burbuja de conversación. */
   private ring: Phaser.GameObjects.Graphics
+  /** Globo de diálogo del último mensaje de la burbuja. */
+  private balloon: Phaser.GameObjects.Text
+  private balloonTimer?: Phaser.Time.TimerEvent
   avatarId: string
   dir: Direction = 'down'
   moving = false
@@ -78,12 +93,50 @@ export class Avatar extends Phaser.GameObjects.Container {
       .setOrigin(0.5, 1)
       .setVisible(false)
 
+    this.balloon = scene.add
+      .text(0, 0, '', {
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: '7px',
+        color: '#1b1f2a',
+        backgroundColor: '#f7f9fc',
+        align: 'center',
+        padding: { x: 3, y: 2 },
+        wordWrap: { width: SAY.width },
+      })
+      .setResolution(4)
+      .setOrigin(0.5, 1)
+      .setVisible(false)
+
     // El anillo va primero: se dibuja detrás del sprite, a los pies.
-    this.add([this.ring, this.sprite, this.label, this.badge])
+    // El globo va último: tapa al resto del avatar cuando aparece.
+    this.add([this.ring, this.sprite, this.label, this.badge, this.balloon])
     this.setSize(BODY.width, BODY.height)
     this.updateDepth()
     this.playAnim('idle', 'down')
     scene.add.existing(this)
+    this.once(Phaser.GameObjects.Events.DESTROY, () => this.balloonTimer?.remove())
+  }
+
+  /**
+   * Muestra el mensaje como globo sobre el avatar. Es efímero: se va solo a
+   * los pocos segundos (más si el texto es largo) y un mensaje nuevo reemplaza
+   * al anterior. El texto va como texto plano en un `Phaser.Text`, así que las
+   * etiquetas HTML se leen literales.
+   */
+  say(text: string) {
+    const shown = text.length > SAY.maxChars ? `${text.slice(0, SAY.maxChars)}…` : text
+    this.balloon.setText(shown)
+    // Arriba de todo lo que ya tenga el avatar (nombre y, si está, "ausente").
+    const top = this.badge.visible
+      ? this.badge.y - this.badge.height
+      : this.label.y - this.label.height
+    this.balloon.setY(top - 2)
+    this.balloon.setVisible(true)
+    this.balloonTimer?.remove()
+    this.balloonTimer = this.scene.time.delayedCall(
+      Math.min(SAY.maxMs, SAY.baseMs + shown.length * SAY.perCharMs),
+      () => this.balloon.setVisible(false),
+    )
   }
 
   setLabel(name: string) {

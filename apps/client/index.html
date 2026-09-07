@@ -32,6 +32,24 @@
           <ul id="bubble-list" class="bubble__list"></ul>
           <p id="bubble-hint" class="bubble__hint"></p>
         </section>
+
+        <section id="chat" class="chat" data-state="none" aria-label="Conversación de tu burbuja">
+          <h3 class="chat__title">Conversación</h3>
+          <ol id="chat-log" class="chat__log" aria-live="polite"></ol>
+          <form id="chat-form" class="chat__form" autocomplete="off">
+            <input
+              id="chat-input"
+              class="chat__input"
+              type="text"
+              spellcheck="false"
+              placeholder="Acercate a alguien para conversar"
+              aria-label="Mensaje para tu burbuja"
+              disabled
+            />
+            <span id="chat-count" class="chat__count" aria-hidden="true"></span>
+          </form>
+          <p id="chat-hint" class="chat__hint" data-tone="info"></p>
+        </section>
         <footer class="presence__me">
           <label class="presence__field">
             <span>Tu nombre</span>

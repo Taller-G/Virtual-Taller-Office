@@ -44,6 +44,9 @@ interface Sent {
  * `state.bubbles`, con el radio que manda el servidor. La propia va resaltada
  * y los avatares de mis compañeros llevan un anillo a los pies. La membresía
  * nunca se calcula acá: sale de `player.bubbleId`.
+ *
+ * Los mensajes del chat de la burbuja aparecen como globo sobre el avatar del
+ * autor y no se guardan: el globo se va solo (ver `Avatar.say`).
  */
 export class OfficeScene extends Phaser.Scene {
   private map!: BuiltMap
@@ -54,6 +57,7 @@ export class OfficeScene extends Phaser.Scene {
   private room?: OfficeRoom
   private unbindRoom: Array<() => void> = []
   private offRoom?: () => void
+  private offChat?: () => void
   private lastSent: Sent = { x: NaN, y: NaN, dir: 'down', moving: false, at: 0 }
   private debug: boolean
 
@@ -93,8 +97,14 @@ export class OfficeScene extends Phaser.Scene {
 
     this.offRoom = this.connection.on('room', (room) => this.bindRoom(room))
     if (this.connection.room) this.bindRoom(this.connection.room)
+    // Todo mensaje que llega es de mi burbuja (el servidor ya filtró), así que
+    // se muestra como globo sobre el avatar de quien lo dijo, yo incluido.
+    this.offChat = this.connection.on('chat', (message) =>
+      this.avatars.get(message.from)?.say(message.text),
+    )
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.offRoom?.()
+      this.offChat?.()
       this.clearRoom()
     })
   }

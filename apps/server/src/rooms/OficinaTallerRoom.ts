@@ -10,6 +10,7 @@ import {
   ROOM_DISPLAY_NAME,
   sanitizeAvatar,
   sanitizeName,
+  type ChatSendPayload,
   type JoinOptions,
   type MovePayload,
   type RoomInfoPayload,
@@ -17,6 +18,7 @@ import {
   type SetNamePayload,
 } from '@vto/shared'
 import { BubbleManager } from '../bubbles'
+import { ChatRelay } from '../chat'
 import { config, DEFAULT_BUBBLE_RADIUS_TILES } from '../config'
 import { DEFAULT_MAP_FILE, loadOfficeMap, type OfficeMap } from '../map'
 
@@ -46,6 +48,11 @@ const AWAY_CHECK_INTERVAL_MS = 1_000
  * cada salida se recalcula la pertenencia. El cliente no tiene mensaje para
  * pedir ni forzar una burbuja: solo refleja `state.bubbles` y `player.bubbleId`.
  *
+ * Chat de la burbuja (ver `chat.ts`): `CHAT_SEND` se retransmite únicamente a
+ * los miembros que la burbuja del remitente tiene en ese momento (el remitente
+ * incluido, como acuse). Los mensajes son efímeros: no entran al estado ni se
+ * guardan en ningún lado, así que quien llega después no ve nada de antes.
+ *
  * El servidor es la fuente de verdad de la lista de jugadores y de las
  * burbujas: el cliente solo refleja `state.players` y `state.bubbles`.
  *
@@ -60,6 +67,7 @@ export class OficinaTallerRoom extends Room<{ state: OfficeState }> {
   state = new OfficeState()
   map!: OfficeMap
   bubbles!: BubbleManager
+  chat!: ChatRelay
   /** Último instante (ms, reloj de la sala) con actividad por sessionId. */
   private lastActivity = new Map<string, number>()
 
@@ -77,12 +85,20 @@ export class OficinaTallerRoom extends Room<{ state: OfficeState }> {
       `[sala] burbujas: radio ${this.bubbles.radius} px, tope ${this.bubbles.maxMembers} miembros`,
     )
 
+    this.chat = new ChatRelay(this.state, {
+      maxPerWindow: config.chatMaxPerWindow,
+      windowMs: config.chatRateWindowMs,
+    })
+
     this.onMessage(Message.MOVE, (client, payload: MovePayload) => this.onMove(client, payload))
     this.onMessage(Message.SET_NAME, (client, payload: SetNamePayload) =>
       this.onSetName(client, payload),
     )
     this.onMessage(Message.SET_AWAY, (client, payload: SetAwayPayload) =>
       this.onSetAway(client, payload),
+    )
+    this.onMessage(Message.CHAT_SEND, (client, payload: ChatSendPayload) =>
+      this.onChatSend(client, payload),
     )
 
     this.clock.setInterval(() => this.checkAway(), AWAY_CHECK_INTERVAL_MS)
@@ -162,6 +178,25 @@ export class OficinaTallerRoom extends Room<{ state: OfficeState }> {
     }
   }
 
+  /**
+   * Mensaje de chat: lo resuelve `ChatRelay` (valida, exige burbuja y acota el
+   * ritmo) y el servidor lo manda solo a los clientes de esa burbuja. Si no se
+   * acepta, el motivo vuelve únicamente al remitente. Nada se guarda.
+   */
+  private onChatSend(client: Client, payload: ChatSendPayload) {
+    const outcome = this.chat.submit(client.sessionId, payload, Date.now())
+    if (!outcome.ok) {
+      client.send(Message.CHAT_ERROR, outcome.error)
+      return
+    }
+    for (const sessionId of outcome.recipients) {
+      this.clients.getById(sessionId)?.send(Message.CHAT_MESSAGE, outcome.message)
+    }
+    // Escribir también es actividad: no te marca ausente mientras conversás.
+    const player = this.state.players.get(client.sessionId)
+    if (player) this.markActive(player)
+  }
+
   /** Registra actividad; el ausente automático se levanta, el manual no. */
   private markActive(player: Player) {
     this.touch(player.sessionId)
@@ -210,6 +245,7 @@ export class OficinaTallerRoom extends Room<{ state: OfficeState }> {
     this.state.players.delete(client.sessionId)
     if (player) this.bubbles.onPlayerLeft(player)
     this.lastActivity.delete(client.sessionId)
+    this.chat.forget(client.sessionId)
     const reason = code === CloseCode.CONSENTED ? 'salida consentida' : `code=${code}`
     console.log(`[sala] sale ${client.sessionId} (${reason}; ${this.state.players.size} en sala)`)
   }

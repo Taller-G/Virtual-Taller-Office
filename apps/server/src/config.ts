@@ -36,6 +36,10 @@ export const config = {
   bubbleRadiusPx: optionalInteger('BUBBLE_RADIUS_PX'),
   /** Máximo de miembros por burbuja; una burbuja llena no absorbe a nadie más. */
   bubbleMaxMembers: integer('BUBBLE_MAX_MEMBERS', 6),
+  /** Tope de mensajes de chat aceptados por jugador en `chatRateWindowMs`. */
+  chatMaxPerWindow: integer('CHAT_MAX_PER_WINDOW', 5),
+  /** Ventana del tope de ritmo del chat, en ms. */
+  chatRateWindowMs: integer('CHAT_RATE_WINDOW_MS', 2000),
   pingIntervalMs: integer('PING_INTERVAL_MS', 2000),
   pingMaxRetries: integer('PING_MAX_RETRIES', 2),
   isProduction: process.env.NODE_ENV === 'production',
