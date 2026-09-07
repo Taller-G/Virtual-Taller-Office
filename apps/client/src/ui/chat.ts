@@ -26,7 +26,7 @@ const MAX_ENTRIES = 200
 const INPUT_MAX_LENGTH = CHAT_MAX_LENGTH * 2
 
 const HINT_NO_BUBBLE = 'Acercate a alguien para conversar'
-const HINT_IN_BUBBLE = 'Enter para escribir · Esc para cerrar'
+const HINT_IN_BUBBLE = 'Enter para escribir y enviar · Esc para cerrar'
 
 const time = new Intl.DateTimeFormat('es', { hour: '2-digit', minute: '2-digit' })
 
@@ -210,7 +210,20 @@ export function mountChat(connection: OfficeConnection) {
       status: 'sending',
     })
     inputEl.value = ''
+    // Enviado: se suelta el foco para volver a mover al avatar en el acto
+    // (mientras un campo de texto tiene el foco, el teclado no llega al
+    // juego). Otro Enter reabre el campo para seguir la charla.
+    inputEl.blur()
     render()
+  }
+
+  /** Cierra el campo descartando el borrador y devuelve el teclado al juego. */
+  function close() {
+    inputEl.value = ''
+    rejection = undefined
+    inputEl.blur()
+    renderHint()
+    renderCount()
   }
 
   formEl.addEventListener('submit', (event) => {
@@ -224,15 +237,20 @@ export function mountChat(connection: OfficeConnection) {
     renderCount()
   })
 
-  // Esc cierra el campo (y descarta el borrador); el foco vuelve al juego.
   inputEl.addEventListener('keydown', (event) => {
+    // Enter envía. Se atiende acá en vez de dejar que el navegador dispare el
+    // submit implícito para poder marcar el evento como atendido: el mismo
+    // keydown sigue burbujeando hasta el listener del documento, que si no
+    // volvería a enfocar el campo apenas se suelta.
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      send()
+      return
+    }
+    // Esc cierra el campo (y descarta el borrador); el foco vuelve al juego.
     if (event.key !== 'Escape') return
     event.preventDefault()
-    inputEl.value = ''
-    rejection = undefined
-    inputEl.blur()
-    renderHint()
-    renderCount()
+    close()
   })
 
   // Enter abre el campo, pero solo dentro de una burbuja: sin burbuja no pasa
