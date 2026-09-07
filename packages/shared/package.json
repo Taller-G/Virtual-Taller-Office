@@ -1,0 +1,22 @@
+{
+  "name": "@vto/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Contratos compartidos entre cliente y servidor: nombre de sala, mensajes y esquema de estado",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@colyseus/schema": "^5.0.27"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

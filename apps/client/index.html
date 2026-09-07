@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1b1f2a" />
+    <meta name="description" content="Oficina virtual 2D de Taller" />
+    <link rel="icon" href="data:," />
+    <title>Oficina Taller</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header id="hud" class="hud" data-status="connecting">
+      <span class="hud__dot" aria-hidden="true"></span>
+      <span id="hud-status" class="hud__status">Conectando…</span>
+      <span id="hud-players" class="hud__players"></span>
+    </header>
+    <main id="game" class="game"></main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

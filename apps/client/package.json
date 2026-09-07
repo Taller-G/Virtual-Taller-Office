@@ -1,0 +1,23 @@
+{
+  "name": "@vto/client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cliente web (Vite + Phaser 3) de la Oficina Taller; se despliega como sitio estático",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@colyseus/sdk": "^0.18.2",
+    "@vto/shared": "*",
+    "phaser": "^3.90.0"
+  },
+  "devDependencies": {
+    "@vto/server": "*",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.2"
+  }
+}

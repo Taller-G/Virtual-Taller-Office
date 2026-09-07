@@ -1,0 +1,87 @@
+:root {
+  color-scheme: dark;
+  --bg: #1b1f2a;
+  --panel: #262c3a;
+  --text: #e8ecf3;
+  --muted: #9aa3b5;
+  --ok: #3ddc84;
+  --warn: #f5c451;
+  --bad: #ff5d6c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    14px/1.4 system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+.hud {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 1rem;
+  background: var(--panel);
+  border-bottom: 1px solid #0006;
+}
+
+.hud__dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: var(--warn);
+  box-shadow: 0 0 0 3px #fff1;
+}
+
+.hud[data-status='connected'] .hud__dot {
+  background: var(--ok);
+}
+
+.hud[data-status='reconnecting'] .hud__dot {
+  background: var(--warn);
+  animation: pulse 1s infinite;
+}
+
+.hud[data-status='disconnected'] .hud__dot {
+  background: var(--bad);
+  animation: pulse 1s infinite;
+}
+
+.hud__players {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.game {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.game canvas {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}

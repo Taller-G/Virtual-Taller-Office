@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+coverage/
+*.log
+.DS_Store
+
+# Entorno local: se versionan solo los .env.example y .env.development
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Colyseus
+.devmode.json
+.colyseus-cloud.json
