@@ -1,5 +1,6 @@
 import Phaser from 'phaser'
-import type { TiledMap } from '@vto/shared'
+import { AVATAR_FRAME, AVATAR_IDS, type TiledMap } from '@vto/shared'
+import { textureKey } from './avatarAnims'
 
 /** Clave con la que el mapa queda en la caché de Phaser. */
 export const MAP_KEY = 'office-map'
@@ -8,14 +9,17 @@ export const MAP_KEY = 'office-map'
  * Carga el mapa Tiled JSON y, leyendo sus tilesets, encola las imágenes que
  * ese mapa necesita. Así agregar un tileset en Tiled no requiere tocar código:
  * la imagen se resuelve relativa al archivo del mapa, igual que en Tiled.
+ * También carga las hojas de sprites de los avatares del catálogo.
  */
 export class BootScene extends Phaser.Scene {
   private mapUrl: string
+  private avatarsUrl: string
   private failed = false
 
-  constructor(mapUrl: string) {
+  constructor(mapUrl: string, avatarsUrl: string) {
     super('boot')
     this.mapUrl = mapUrl
+    this.avatarsUrl = avatarsUrl
   }
 
   preload() {
@@ -23,6 +27,12 @@ export class BootScene extends Phaser.Scene {
       this.fail(`No se pudo cargar ${file.src}`)
     })
     this.load.tilemapTiledJSON(MAP_KEY, this.mapUrl)
+    for (const id of AVATAR_IDS) {
+      this.load.spritesheet(textureKey(id), `${this.avatarsUrl}${id}.png`, {
+        frameWidth: AVATAR_FRAME.width,
+        frameHeight: AVATAR_FRAME.height,
+      })
+    }
   }
 
   create() {
@@ -57,7 +67,7 @@ export class BootScene extends Phaser.Scene {
     console.error(`[mapa] ${message}`)
     const { width, height } = this.scale
     this.add
-      .text(width / 2, height / 2, `No se pudo cargar el mapa de la oficina.\n${message}`, {
+      .text(width / 2, height / 2, `No se pudo cargar la oficina.\n${message}`, {
         fontFamily: 'system-ui, sans-serif',
         fontSize: '14px',
         color: '#ff5d6c',

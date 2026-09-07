@@ -3,10 +3,14 @@ import { config } from './config'
 import { OfficeConnection } from './network/connection'
 import { BootScene } from './game/BootScene'
 import { OfficeScene } from './game/OfficeScene'
+import { installTypingGuard } from './game/typingGuard'
+import { showEntry } from './ui/entry'
 import { mountHud } from './ui/hud'
+import { mountPresence } from './ui/presence'
 
 const connection = new OfficeConnection(config.serverUrl)
 mountHud(connection)
+mountPresence(connection)
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -20,8 +24,14 @@ const game = new Phaser.Game({
   // En modo debug el bucle usa setTimeout en vez de requestAnimationFrame: así
   // el juego sigue corriendo con la pestaña en segundo plano (pruebas automatizadas).
   fps: { forceSetTimeOut: config.debug },
-  scene: [new BootScene(config.mapUrl), new OfficeScene(connection, { debug: config.debug })],
+  scene: [
+    new BootScene(config.mapUrl, config.avatarsUrl),
+    new OfficeScene(connection, { debug: config.debug }),
+  ],
 })
+
+// Mientras se escribe en un campo de texto, las teclas no llegan al juego.
+game.events.once(Phaser.Core.Events.READY, () => installTypingGuard(game))
 
 // Con `?debug`, juego y conexión quedan accesibles desde la consola del navegador.
 if (config.debug) Object.assign(window, { __vto: { game, connection } })
@@ -30,4 +40,5 @@ if (config.debug) Object.assign(window, { __vto: { game, connection } })
 // quite al instante (sin fantasma ni duplicado al volver a entrar).
 window.addEventListener('pagehide', () => connection.leaveForGood())
 
-void connection.start()
+// Primero se elige nombre y avatar; recién entonces se entra a la sala.
+void showEntry().then((identity) => connection.start(identity))

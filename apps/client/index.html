@@ -15,7 +15,46 @@
       <span id="hud-status" class="hud__status">Conectando…</span>
       <span id="hud-players" class="hud__players"></span>
     </header>
-    <main id="game" class="game"></main>
+
+    <div class="layout">
+      <main id="game" class="game">
+        <div id="toasts" class="toasts" aria-live="polite"></div>
+      </main>
+
+      <aside id="presence" class="presence" data-state="out" aria-label="Quién está en la oficina">
+        <h2 class="presence__title">
+          En la oficina <span id="presence-count" class="presence__count"></span>
+        </h2>
+        <ul id="presence-list" class="presence__list"></ul>
+        <footer class="presence__me">
+          <label class="presence__field">
+            <span>Tu nombre</span>
+            <input id="my-name" type="text" autocomplete="off" spellcheck="false" />
+          </label>
+          <button id="away-toggle" type="button" class="button button--ghost" aria-pressed="false">
+            Marcarme ausente
+          </button>
+        </footer>
+      </aside>
+    </div>
+
+    <div id="entry" class="entry" hidden>
+      <form class="entry__card" autocomplete="off">
+        <h1 class="entry__title">Oficina Taller</h1>
+        <p class="entry__hint">Elegí cómo te van a ver los demás.</p>
+        <label class="entry__field">
+          <span>Tu nombre</span>
+          <input id="entry-name" type="text" required placeholder="Nombre visible" />
+        </label>
+        <fieldset class="entry__avatars">
+          <legend>Tu avatar</legend>
+          <div id="entry-avatars" class="avatar-grid"></div>
+        </fieldset>
+        <button type="submit" class="button">Entrar a la oficina</button>
+        <p class="entry__keys">Te movés con las flechas o con W A S D.</p>
+      </form>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

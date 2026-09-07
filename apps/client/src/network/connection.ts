@@ -1,5 +1,13 @@
 import { Client, CloseCode, type Room } from '@colyseus/sdk'
-import { Message, ROOM_NAME, type OfficeState, type RoomInfoPayload } from '@vto/shared'
+import {
+  Message,
+  ROOM_NAME,
+  type JoinOptions,
+  type OfficeState,
+  type RoomInfoPayload,
+  type SetAwayPayload,
+  type SetNamePayload,
+} from '@vto/shared'
 import type { OficinaTallerRoom } from '@vto/server/rooms/OficinaTallerRoom'
 
 export type OfficeRoom = Room<OficinaTallerRoom, OfficeState>
@@ -49,6 +57,8 @@ export class OfficeConnection {
   private rejoinAttempts = 0
   private rejoinTimer?: ReturnType<typeof setTimeout>
   private stopped = false
+  /** Nombre y avatar con los que se entra (y se reingresa tras una caída). */
+  private joinOptions: JoinOptions = {}
 
   constructor(serverUrl: string) {
     this.client = new Client(serverUrl)
@@ -70,11 +80,25 @@ export class OfficeConnection {
     this.emit('status', status, detail)
   }
 
-  /** Entra a la sala y deja armada la recuperación automática. */
-  async start() {
+  /** Entra a la sala con la identidad elegida y deja armada la recuperación automática. */
+  async start(options: JoinOptions) {
+    this.joinOptions = options
     this.stopped = false
     this.setStatus('connecting')
     await this.join()
+  }
+
+  /** Cambia mi nombre visible. El servidor lo valida y lo replica a todos. */
+  setName(name: string) {
+    this.joinOptions = { ...this.joinOptions, name }
+    const payload: SetNamePayload = { name }
+    this.room?.send(Message.SET_NAME, payload)
+  }
+
+  /** Fija o quita a mano mi estado "ausente". */
+  setAway(away: boolean) {
+    const payload: SetAwayPayload = { away }
+    this.room?.send(Message.SET_AWAY, payload)
   }
 
   /**
@@ -90,7 +114,11 @@ export class OfficeConnection {
   private async join() {
     if (this.stopped) return
     try {
-      const room = await this.client.joinOrCreate<OficinaTallerRoom>(ROOM_NAME)
+      const room = await this.client.joinOrCreate<OficinaTallerRoom>(ROOM_NAME, this.joinOptions)
+      // `joinOrCreate` resuelve al completar el handshake; el estado inicial
+      // llega en el mensaje siguiente. Se espera para que quien escuche
+      // `room` encuentre ya a todos los jugadores (incluido uno mismo).
+      await new Promise<void>((resolve) => room.onStateChange.once(() => resolve()))
       this.attach(room)
     } catch (error) {
       this.scheduleRejoin(describe(error))

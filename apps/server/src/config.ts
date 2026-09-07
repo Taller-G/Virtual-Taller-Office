@@ -19,6 +19,8 @@ export const config = {
   mapFile: process.env.MAP_FILE || undefined,
   maxClients: integer('MAX_CLIENTS', 50),
   reconnectGraceSeconds: integer('RECONNECT_GRACE_SECONDS', 2),
+  /** Segundos sin actividad tras los cuales un jugador pasa a "ausente". */
+  awayAfterSeconds: integer('AWAY_AFTER_SECONDS', 300),
   pingIntervalMs: integer('PING_INTERVAL_MS', 2000),
   pingMaxRetries: integer('PING_MAX_RETRIES', 2),
   isProduction: process.env.NODE_ENV === 'production',

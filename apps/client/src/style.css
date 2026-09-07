@@ -2,8 +2,11 @@
   color-scheme: dark;
   --bg: #1b1f2a;
   --panel: #262c3a;
+  --panel-2: #2f3646;
+  --line: #0006;
   --text: #e8ecf3;
   --muted: #9aa3b5;
+  --accent: #1b6ef3;
   --ok: #3ddc84;
   --warn: #f5c451;
   --bad: #ff5d6c;
@@ -17,6 +20,7 @@ html,
 body {
   margin: 0;
   height: 100%;
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
   font:
@@ -31,13 +35,21 @@ body {
   flex-direction: column;
 }
 
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+/* ---- HUD ------------------------------------------------------------------ */
+
 .hud {
   display: flex;
   align-items: center;
   gap: 0.6rem;
   padding: 0.6rem 1rem;
   background: var(--panel);
-  border-bottom: 1px solid #0006;
+  border-bottom: 1px solid var(--line);
 }
 
 .hud__dot {
@@ -67,15 +79,314 @@ body {
   color: var(--muted);
 }
 
-.game {
+/* ---- Layout: juego + panel ------------------------------------------------ */
+
+.layout {
+  display: flex;
   flex: 1;
   min-height: 0;
+}
+
+.game {
+  flex: 1;
+  min-width: 0;
   position: relative;
   overflow: hidden;
 }
 
 .game canvas {
   display: block;
+}
+
+/* ---- Panel de presencia --------------------------------------------------- */
+
+.presence {
+  width: 15rem;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+}
+
+.presence__title {
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+
+.presence__count:not(:empty)::before {
+  content: '· ';
+}
+
+.presence__list {
+  list-style: none;
+  margin: 0;
+  padding: 0.4rem 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.presence__row {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 0.6rem;
+  align-items: center;
+  padding: 0.3rem 0.9rem;
+}
+
+.presence__row .avatar-thumb {
+  grid-row: 1 / span 2;
+}
+
+.presence__name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.presence__you {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: #1b6ef322;
+  border-radius: 0.3rem;
+  padding: 0 0.3rem;
+  vertical-align: 1px;
+}
+
+.presence__status {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.presence__status::before {
+  content: '';
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.35rem;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.presence__row[data-status='away'] .presence__status::before {
+  background: var(--warn);
+}
+
+.presence__row[data-status='away'] .avatar-thumb {
+  opacity: 0.6;
+}
+
+.presence__row[data-status='offline'] .presence__status::before {
+  background: var(--bad);
+}
+
+.presence__row[data-status='offline'] .avatar-thumb {
+  opacity: 0.35;
+}
+
+.presence__me {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.7rem 0.9rem 0.9rem;
+  border-top: 1px solid var(--line);
+  background: var(--panel-2);
+}
+
+.presence[data-state='out'] .presence__me {
+  display: none;
+}
+
+.presence__field,
+.entry__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.presence__field input,
+.entry__field input {
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.4rem;
+  border: 1px solid #fff2;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.presence__field input:focus,
+.entry__field input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---- Botones -------------------------------------------------------------- */
+
+.button {
+  padding: 0.55rem 0.9rem;
+  border: 0;
+  border-radius: 0.4rem;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button--ghost {
+  background: transparent;
+  border: 1px solid #fff3;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.button--ghost[aria-pressed='true'] {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+/* ---- Avatares en DOM ------------------------------------------------------ */
+
+.avatar-thumb {
+  display: inline-block;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  flex: none;
+}
+
+.avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+}
+
+.avatar-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.5rem 0.25rem 0.35rem;
+  border: 2px solid transparent;
+  border-radius: 0.5rem;
+  background: var(--panel-2);
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.avatar-pick:hover {
+  background: #3a4256;
+}
+
+.avatar-pick[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--text);
+  background: #1b6ef322;
+}
+
+/* ---- Pantalla de entrada -------------------------------------------------- */
+
+.entry {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: #1b1f2acc;
+  backdrop-filter: blur(3px);
+  z-index: 10;
+}
+
+.entry[hidden] {
+  display: none;
+}
+
+.entry__card {
+  width: min(28rem, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.4rem;
+  border-radius: 0.8rem;
+  background: var(--panel);
+  box-shadow: 0 20px 60px #0008;
+}
+
+.entry__title {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.entry__hint,
+.entry__keys {
+  margin: 0;
+  color: var(--muted);
+}
+
+.entry__keys {
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.entry__avatars {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.entry__avatars legend {
+  padding: 0 0 0.35rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* ---- Avisos --------------------------------------------------------------- */
+
+.toasts {
+  position: absolute;
+  left: 0.8rem;
+  bottom: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.toast {
+  padding: 0.4rem 0.7rem;
+  border-radius: 0.4rem;
+  background: #262c3ae6;
+  border: 1px solid #fff2;
+  font-size: 0.8rem;
+  animation: toast-in 0.25s ease-out;
+}
+
+.toast--out {
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.4rem);
+  }
 }
 
 @keyframes pulse {

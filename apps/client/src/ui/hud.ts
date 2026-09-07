@@ -15,7 +15,7 @@ export function mountHud(connection: OfficeConnection) {
   const statusEl = document.getElementById('hud-status')!
   const playersEl = document.getElementById('hud-players')!
   let myName = ''
-  let unbindCount: (() => void)[] = []
+  let unbind: (() => void)[] = []
 
   connection.on('status', (status, detail) => {
     hud.dataset.status = status
@@ -27,17 +27,25 @@ export function mountHud(connection: OfficeConnection) {
   })
 
   connection.on('room', (room) => {
-    for (const unbind of unbindCount.splice(0)) unbind()
+    for (const off of unbind.splice(0)) off()
     const $ = Callbacks.get(room)
     const refresh = () => {
       const n = room.state.players.size
-      playersEl.textContent = `${n} ${n === 1 ? 'persona' : 'personas'} en la sala`
+      playersEl.textContent = `${n} ${n === 1 ? 'persona' : 'personas'} en la oficina`
       const me = room.state.players.get(room.sessionId)
       if (me && me.name !== myName) {
         myName = me.name
-        statusEl.textContent = `${STATUS_TEXT.connected} como ${myName}`
+        if (connection.status === 'connected') {
+          statusEl.textContent = `${STATUS_TEXT.connected} como ${myName}`
+        }
       }
     }
-    unbindCount = [$.onAdd('players', refresh), $.onRemove('players', refresh)]
+    unbind = [
+      $.onAdd('players', (player, sessionId) => {
+        refresh()
+        if (sessionId === room.sessionId) unbind.push($.listen(player, 'name', refresh))
+      }),
+      $.onRemove('players', refresh),
+    ]
   })
 }

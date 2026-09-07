@@ -1,34 +1,18 @@
 import Phaser from 'phaser'
 import { Callbacks } from '@colyseus/sdk'
-import { Message, type MovePayload, type Player } from '@vto/shared'
+import { Message, type Direction, type MovePayload, type Player } from '@vto/shared'
 import type { OfficeConnection, OfficeRoom } from '../network/connection'
+import { Avatar, BODY } from './Avatar'
+import { createAvatarAnims } from './avatarAnims'
 import { buildOfficeMap, drawCollisionDebug, type BuiltMap } from './officeMap'
+import { isTyping } from './typingGuard'
 
-const AVATAR_RADIUS = 12
-/** Cuerpo físico del avatar: los "pies", más chico que el círculo para pasar por puertas de un tile. */
-const BODY = { width: 18, height: 12, offsetY: 6 }
 /** Velocidad de caminata, px/s. */
 const SPEED = 150
 /** Zoom de la cámara: entero para que el pixel art no se vea borroso. */
 const CAMERA_ZOOM = 2
-/** Cada cuánto, como máximo, se manda la posición propia al servidor. */
+/** Cada cuánto, como máximo, se manda la posición propia al servidor (20 veces/s). */
 const SEND_INTERVAL_MS = 50
-/** Factor de interpolación de los otros avatares hacia su última posición conocida. */
-const LERP = 0.25
-
-/** Paleta estable por jugador, derivada de su sessionId. */
-function colorFor(sessionId: string): number {
-  let hash = 0
-  for (const char of sessionId) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
-  const hue = hash % 360
-  return Phaser.Display.Color.HSLToColor(hue / 360, 0.6, 0.55).color
-}
-
-interface Avatar {
-  container: Phaser.GameObjects.Container
-  /** Posición objetivo (otros jugadores): se interpola hacia ella en `update`. */
-  target: { x: number; y: number }
-}
 
 interface Keys {
   up: Phaser.Input.Keyboard.Key[]
@@ -37,10 +21,23 @@ interface Keys {
   right: Phaser.Input.Keyboard.Key[]
 }
 
+interface Sent {
+  x: number
+  y: number
+  dir: Direction
+  moving: boolean
+  at: number
+}
+
 /**
- * Escena de la oficina: dibuja el mapa Tiled con sus colisiones, un avatar por
- * jugador presente en la sala y mueve el propio con flechas / WASD. La cámara
- * sigue al jugador. Las posiciones se sincronizan vía el estado de la sala.
+ * Escena de la oficina: dibuja el mapa Tiled con sus colisiones y un avatar
+ * por jugador presente en el estado de la sala. El propio se mueve con
+ * flechas / WASD (física Arcade contra paredes y muebles) y manda posición y
+ * animación al servidor a lo sumo 20 veces por segundo, solo cuando cambian.
+ * Los demás se deslizan hacia la última posición recibida.
+ *
+ * La lista de avatares refleja `state.players` tal cual: se crean en
+ * `onAdd` y se destruyen en `onRemove`; nada más los agrega o los retiene.
  */
 export class OfficeScene extends Phaser.Scene {
   private map!: BuiltMap
@@ -50,7 +47,7 @@ export class OfficeScene extends Phaser.Scene {
   private room?: OfficeRoom
   private unbindRoom: Array<() => void> = []
   private offRoom?: () => void
-  private lastSent = { x: NaN, y: NaN, at: 0 }
+  private lastSent: Sent = { x: NaN, y: NaN, dir: 'down', moving: false, at: 0 }
   private debug: boolean
 
   constructor(
@@ -64,6 +61,7 @@ export class OfficeScene extends Phaser.Scene {
   create() {
     this.map = buildOfficeMap(this)
     if (this.debug) drawCollisionDebug(this, this.map)
+    createAvatarAnims(this.anims)
 
     const camera = this.cameras.main
     camera.setBounds(0, 0, this.map.bounds.width, this.map.bounds.height)
@@ -94,37 +92,42 @@ export class OfficeScene extends Phaser.Scene {
     })
   }
 
-  update(time: number) {
+  update(time: number, delta: number) {
     if (this.me) this.moveMe(time)
     for (const avatar of this.avatars.values()) {
-      if (avatar === this.me) continue
-      const { container, target } = avatar
-      container.x += (target.x - container.x) * LERP
-      container.y += (target.y - container.y) * LERP
-      container.setDepth(container.y)
+      if (!avatar.isMe) avatar.interpolate(delta)
     }
   }
 
   private moveMe(time: number) {
-    const { container } = this.me!
-    const body = container.body as Phaser.Physics.Arcade.Body
-    const down = (keys: Phaser.Input.Keyboard.Key[]) => keys.some((k) => k.isDown)
+    const me = this.me!
+    const body = me.body as Phaser.Physics.Arcade.Body
+    // Con el foco en un campo de texto las teclas no mueven al avatar.
+    const typing = isTyping()
+    const down = (keys: Phaser.Input.Keyboard.Key[]) => !typing && keys.some((k) => k.isDown)
     const dx = (down(this.keys.right) ? 1 : 0) - (down(this.keys.left) ? 1 : 0)
     const dy = (down(this.keys.down) ? 1 : 0) - (down(this.keys.up) ? 1 : 0)
+
     if (dx || dy) {
       const length = Math.hypot(dx, dy)
       body.setVelocity((dx / length) * SPEED, (dy / length) * SPEED)
+      // En diagonal gana el eje horizontal para elegir la dirección del sprite.
+      const dir: Direction = dx > 0 ? 'right' : dx < 0 ? 'left' : dy > 0 ? 'down' : 'up'
+      me.playAnim('walk', dir)
     } else {
       body.setVelocity(0, 0)
+      me.playAnim('idle', me.dir)
     }
-    container.setDepth(container.y)
+    me.updateDepth()
 
     if (!this.room || time - this.lastSent.at < SEND_INTERVAL_MS) return
-    const x = Math.round(container.x)
-    const y = Math.round(container.y)
-    if (x === this.lastSent.x && y === this.lastSent.y) return
-    this.lastSent = { x, y, at: time }
-    const payload: MovePayload = { x, y }
+    const x = Math.round(me.x)
+    const y = Math.round(me.y)
+    const { dir, moving } = me
+    const last = this.lastSent
+    if (x === last.x && y === last.y && dir === last.dir && moving === last.moving) return
+    this.lastSent = { x, y, dir, moving, at: time }
+    const payload: MovePayload = { x, y, dir, moving }
     this.room.send(Message.MOVE, payload)
   }
 
@@ -137,23 +140,30 @@ export class OfficeScene extends Phaser.Scene {
     this.unbindRoom.push(
       $.onAdd('players', (player, sessionId) => {
         const isMe = sessionId === room.sessionId
-        this.addAvatar(player, sessionId, isMe)
+        const avatar = this.addAvatar(player, sessionId, isMe)
         this.unbindRoom.push(
-          $.listen(player, 'connected', (connected) => {
-            this.avatars.get(sessionId)?.container.setAlpha(connected ? 1 : 0.35)
-          }),
-          $.listen(player, 'name', (name) => this.setLabel(sessionId, name)),
+          $.listen(player, 'connected', (connected) => avatar.setConnected(connected)),
+          $.listen(player, 'away', (away) => avatar.setAway(away)),
+          $.listen(player, 'name', (name) => avatar.setLabel(name)),
+          $.listen(player, 'avatar', (id) => avatar.setAvatar(id)),
         )
-        // La posición propia la manda este cliente: no se pisa con el eco del servidor.
+        // La posición y animación propias las manda este cliente: no se pisan con el eco.
         if (!isMe) {
           this.unbindRoom.push(
-            $.listen(player, 'x', (x) => this.setTarget(sessionId, { x })),
-            $.listen(player, 'y', (y) => this.setTarget(sessionId, { y })),
+            $.listen(player, 'x', (x) => avatar.setTarget({ x })),
+            $.listen(player, 'y', (y) => avatar.setTarget({ y })),
+            $.listen(player, 'dir', () => this.syncAnim(avatar, player)),
+            $.listen(player, 'moving', () => this.syncAnim(avatar, player)),
           )
         }
       }),
       $.onRemove('players', (_player, sessionId) => this.removeAvatar(sessionId)),
     )
+  }
+
+  private syncAnim(avatar: Avatar, player: Player) {
+    const dir = player.dir as Direction
+    avatar.playAnim(player.moving ? 'walk' : 'idle', dir)
   }
 
   private clearRoom() {
@@ -163,50 +173,30 @@ export class OfficeScene extends Phaser.Scene {
     this.me = undefined
   }
 
-  private addAvatar(player: Player, sessionId: string, isMe: boolean) {
+  private addAvatar(player: Player, sessionId: string, isMe: boolean): Avatar {
     this.removeAvatar(sessionId)
-    const body = this.add.circle(0, 0, AVATAR_RADIUS, colorFor(sessionId))
-    body.setStrokeStyle(isMe ? 2 : 1, isMe ? 0xffffff : 0x000000, 0.9)
-    const label = this.add
-      .text(0, AVATAR_RADIUS + 3, player.name, {
-        fontFamily: 'system-ui, sans-serif',
-        fontSize: '7px',
-        color: '#e8ecf3',
-        backgroundColor: '#0009',
-        padding: { x: 2, y: 1 },
-      })
-      .setResolution(4)
-      .setOrigin(0.5, 0)
-      .setName('label')
-    const container = this.add.container(player.x, player.y, [body, label])
-    container.setAlpha(player.connected ? 1 : 0.35)
-    container.setDepth(player.y)
-    container.setSize(BODY.width, BODY.height)
-
-    const avatar: Avatar = { container, target: { x: player.x, y: player.y } }
+    const avatar = new Avatar(this, player.x, player.y, {
+      avatar: player.avatar,
+      name: player.name,
+      isMe,
+    })
+    avatar.setConnected(player.connected)
+    avatar.setAway(player.away)
+    this.syncAnim(avatar, player)
     this.avatars.set(sessionId, avatar)
 
     if (isMe) {
       this.me = avatar
-      this.physics.add.existing(container)
-      const physicsBody = container.body as Phaser.Physics.Arcade.Body
-      physicsBody.setOffset(0, BODY.offsetY)
-      physicsBody.setCollideWorldBounds(true)
-      this.physics.add.collider(container, this.map.collisionLayers)
-      this.physics.add.collider(container, this.map.solids)
-      this.cameras.main.startFollow(container, true, 0.15, 0.15)
-      this.lastSent = { x: player.x, y: player.y, at: 0 }
+      this.physics.add.existing(avatar)
+      const body = avatar.body as Phaser.Physics.Arcade.Body
+      body.setOffset(0, BODY.offsetY)
+      body.setCollideWorldBounds(true)
+      this.physics.add.collider(avatar, this.map.collisionLayers)
+      this.physics.add.collider(avatar, this.map.solids)
+      this.cameras.main.startFollow(avatar, true, 0.15, 0.15)
+      this.lastSent = { x: player.x, y: player.y, dir: 'down', moving: false, at: 0 }
     }
-  }
-
-  private setTarget(sessionId: string, partial: Partial<{ x: number; y: number }>) {
-    const avatar = this.avatars.get(sessionId)
-    if (avatar && avatar !== this.me) Object.assign(avatar.target, partial)
-  }
-
-  private setLabel(sessionId: string, name: string) {
-    const label = this.avatars.get(sessionId)?.container.getByName('label')
-    if (label instanceof Phaser.GameObjects.Text) label.setText(name)
+    return avatar
   }
 
   private removeAvatar(sessionId: string) {
@@ -216,7 +206,7 @@ export class OfficeScene extends Phaser.Scene {
       this.cameras.main.stopFollow()
       this.me = undefined
     }
-    avatar.container.destroy(true)
+    avatar.destroy(true)
     this.avatars.delete(sessionId)
   }
 }

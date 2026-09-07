@@ -14,11 +14,15 @@ if (!serverUrl) {
 const mapUrl =
   (import.meta.env.VITE_MAP_URL as string | undefined) || '/assets/map/oficina-taller.json'
 
+/** Carpeta con las hojas de sprites de los avatares (`<id>.png`). */
+const avatarsUrl = '/assets/avatars/'
+
 /** `?debug` en la URL dibuja los cuerpos de colisión (mapa y avatares). */
 const debug = new URLSearchParams(window.location.search).has('debug')
 
 export const config = {
   serverUrl,
   mapUrl,
+  avatarsUrl,
   debug,
 } as const

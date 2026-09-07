@@ -5,17 +5,19 @@ condiciones se puede usar. Si agregás un asset nuevo, sumalo acá en el mismo c
 
 ## Resumen
 
-| Archivo                                   | Contenido                                           | Autor  | Licencia                                   | Vía       |
-| ----------------------------------------- | --------------------------------------------------- | ------ | ------------------------------------------ | --------- |
-| `tilesets/FloorAndGround.png`             | Pisos y paredes (Room Builder)                      | LimeZu | LimeZu Modern Interiors                    | SkyOffice |
-| `tilesets/Modern_Office_Black_Shadow.png` | Muebles de oficina (escritorios, sillas, plantas…)  | LimeZu | LimeZu Modern Office                       | SkyOffice |
-| `tilesets/Generic.png`                    | Muebles genéricos (mesas, heladera, cocina, sofás…) | LimeZu | LimeZu Modern Interiors                    | SkyOffice |
-| `tilesets/Basement.png`                   | Objetos varios (cajas, máquinas, estanterías)       | LimeZu | LimeZu Modern Interiors                    | SkyOffice |
-| `tilesets/chair.png`                      | Sillas en 4 direcciones (hoja 32×64)                | LimeZu | LimeZu Modern Office                       | SkyOffice |
-| `tilesets/computer.png`                   | Escritorio con computadora (hoja 96×64)             | LimeZu | LimeZu Modern Office                       | SkyOffice |
-| `tilesets/whiteboard.png`                 | Pizarra (hoja 64×64)                                | LimeZu | LimeZu Modern Office                       | SkyOffice |
-| `tilesets/vendingmachine.png`             | Máquina expendedora (48×72)                         | LimeZu | LimeZu Modern Interiors                    | SkyOffice |
-| `map/oficina-taller.json`                 | Plano de la oficina (mapa Tiled)                    | Taller | Propio; deriva del mapa de SkyOffice (MIT) | —         |
+| Archivo                                               | Contenido                                                                                                                          | Autor                    | Licencia                                    | Vía       |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------- | --------- |
+| `tilesets/FloorAndGround.png`                         | Pisos y paredes (Room Builder)                                                                                                     | LimeZu                   | LimeZu Modern Interiors                     | SkyOffice |
+| `tilesets/Modern_Office_Black_Shadow.png`             | Muebles de oficina (escritorios, sillas, plantas…)                                                                                 | LimeZu                   | LimeZu Modern Office                        | SkyOffice |
+| `tilesets/Generic.png`                                | Muebles genéricos (mesas, heladera, cocina, sofás…)                                                                                | LimeZu                   | LimeZu Modern Interiors                     | SkyOffice |
+| `tilesets/Basement.png`                               | Objetos varios (cajas, máquinas, estanterías)                                                                                      | LimeZu                   | LimeZu Modern Interiors                     | SkyOffice |
+| `tilesets/chair.png`                                  | Sillas en 4 direcciones (hoja 32×64)                                                                                               | LimeZu                   | LimeZu Modern Office                        | SkyOffice |
+| `tilesets/computer.png`                               | Escritorio con computadora (hoja 96×64)                                                                                            | LimeZu                   | LimeZu Modern Office                        | SkyOffice |
+| `tilesets/whiteboard.png`                             | Pizarra (hoja 64×64)                                                                                                               | LimeZu                   | LimeZu Modern Office                        | SkyOffice |
+| `tilesets/vendingmachine.png`                         | Máquina expendedora (48×72)                                                                                                        | LimeZu                   | LimeZu Modern Interiors                     | SkyOffice |
+| `avatars/adam.png` `ash.png` `lucy.png` `nancy.png`   | Personajes (hojas 32×48, 52 frames: quieto/caminar en 4 direcciones)                                                               | LimeZu                   | LimeZu Modern Interiors                     | SkyOffice |
+| `avatars/bruno.png` `dana.png` `iris.png` `tomas.png` | Variantes recoloreadas de los cuatro anteriores (ropa y pelo; piel y contornos intactos), generadas con `tools/recolor-avatars.py` | LimeZu (edición: Taller) | LimeZu Modern Interiors (edición permitida) | —         |
+| `map/oficina-taller.json`                             | Plano de la oficina (mapa Tiled)                                                                                                   | Taller                   | Propio; deriva del mapa de SkyOffice (MIT)  | —         |
 
 ## LimeZu — Modern Interiors / Modern Office
 
@@ -29,7 +31,8 @@ condiciones se puede usar. Si agregás un asset nuevo, sumalo acá en el mismo c
 
 Qué implica para este proyecto:
 
-- El uso en la oficina virtual interna de Taller está permitido.
+- El uso en la oficina virtual interna de Taller está permitido, incluidas las variantes recoloreadas
+  de los personajes (la licencia permite editar los assets).
 - El crédito figura en el `README.md` del repo (sección "Créditos") y debe mantenerse.
 - La prohibición de redistribuir significa que **estos PNG no deberían vivir en un repositorio
   público**. El repo `Taller-G/Virtual-Taller-Office` debe ser privado mientras contenga estos

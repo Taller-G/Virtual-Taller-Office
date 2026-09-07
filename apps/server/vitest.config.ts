@@ -8,6 +8,7 @@ export default defineConfig({
     // Gracia corta para que la prueba de "desconexión sin aviso" sea rápida.
     env: {
       RECONNECT_GRACE_SECONDS: '1',
+      AWAY_AFTER_SECONDS: '1',
       PING_INTERVAL_MS: '500',
       PING_MAX_RETRIES: '2',
     },
