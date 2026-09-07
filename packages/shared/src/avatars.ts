@@ -9,6 +9,11 @@
  *
  * El servidor valida el avatar elegido contra esta lista; el cliente la usa
  * para el selector de entrada y para cargar las hojas.
+ *
+ * `persona1`, `persona2` y `persona3` son los avatares del equipo de Taller,
+ * derivados de los sprites base (lucy/nancy/ash) recoloreando pelo y ropa para
+ * conservar los rasgos de cada persona real; se generan con
+ * `tools/person-avatars.py`. Renombrá sus labels cuando tengas los nombres.
  */
 export interface AvatarInfo {
   id: string
@@ -25,6 +30,9 @@ export const AVATARS: readonly AvatarInfo[] = [
   { id: 'dana', label: 'Dana' },
   { id: 'iris', label: 'Iris' },
   { id: 'tomas', label: 'Tomás' },
+  { id: 'persona1', label: 'Persona 1' },
+  { id: 'persona2', label: 'Persona 2' },
+  { id: 'persona3', label: 'Persona 3' },
 ]
 
 export const AVATAR_IDS: readonly string[] = AVATARS.map((a) => a.id)

@@ -29,9 +29,11 @@ packages/
   shared/        Contratos compartidos: sala, mensajes, esquema del estado, mapa, catálogo de avatares e identidad.
 tools/
   recolor-avatars.py   Genera las 4 variantes recoloreadas de los avatares (solo desarrollo, Python + Pillow).
+  person-avatars.py    Genera los 3 avatares del equipo (persona1/2/3) desde los sprites base (solo desarrollo).
 docs/
   mapa.md              Cómo editar el mapa en Tiled y qué capas/propiedades espera la app
   licencias-assets.md  Origen y licencia de cada asset gráfico
+  assets-pixel-art.md  Logo y avatares del equipo: dimensiones y organización de los sprite sheets
 ```
 
 Es un monorepo con npm workspaces. El cliente importa de `@vto/shared` las definiciones del estado

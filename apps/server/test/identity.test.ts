@@ -10,9 +10,9 @@ import {
 } from '@vto/shared'
 
 describe('catálogo de avatares', () => {
-  it('ofrece exactamente 8 avatares con ids únicos', () => {
-    expect(AVATARS).toHaveLength(8)
-    expect(new Set(AVATAR_IDS).size).toBe(8)
+  it('ofrece exactamente 11 avatares con ids únicos', () => {
+    expect(AVATARS).toHaveLength(11)
+    expect(new Set(AVATAR_IDS).size).toBe(11)
     expect(AVATAR_IDS).toContain(DEFAULT_AVATAR)
   })
 
