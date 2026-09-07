@@ -5,6 +5,8 @@
 export const Message = {
   /** Servidor -> cliente, una vez al entrar: metadatos de la sala. */
   ROOM_INFO: 'room_info',
+  /** Cliente -> servidor: nueva posición de mi avatar (px en coordenadas del mapa). */
+  MOVE: 'move',
 } as const
 
 export type MessageType = (typeof Message)[keyof typeof Message]
@@ -14,4 +16,9 @@ export interface RoomInfoPayload {
   name: string
   /** Identificador de sesión asignado al cliente que recibe el mensaje. */
   sessionId: string
+}
+
+export interface MovePayload {
+  x: number
+  y: number
 }

@@ -70,14 +70,12 @@ body {
 .game {
   flex: 1;
   min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: relative;
+  overflow: hidden;
 }
 
 .game canvas {
-  max-width: 100%;
-  max-height: 100%;
+  display: block;
 }
 
 @keyframes pulse {

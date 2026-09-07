@@ -1,9 +1,16 @@
 import { Room, type Client, CloseCode } from 'colyseus'
-import { Message, OfficeState, Player, ROOM_DISPLAY_NAME, type RoomInfoPayload } from '@vto/shared'
+import {
+  clamp,
+  Message,
+  OfficeState,
+  Player,
+  randomSpawnPosition,
+  ROOM_DISPLAY_NAME,
+  type MovePayload,
+  type RoomInfoPayload,
+} from '@vto/shared'
 import { config } from '../config'
-
-/** Zona de aparición: los jugadores entran repartidos alrededor de este punto. */
-const SPAWN = { x: 400, y: 300, radius: 120 }
+import { DEFAULT_MAP_FILE, loadOfficeMap, type OfficeMap } from '../map'
 
 /**
  * Sala única y persistente "Oficina Taller".
@@ -18,26 +25,37 @@ const SPAWN = { x: 400, y: 300, radius: 120 }
  *
  * El cliente hace un `leave` consentido al cerrar/refrescar la pestaña, así
  * la baja es inmediata y refrescar nunca deja un avatar duplicado.
+ *
+ * Mapa: al crearse, la sala lee el mismo archivo Tiled que dibuja el cliente
+ * (`MAP_FILE`) y toma de ahí el punto de aparición y los límites. Si el mapa
+ * no es válido la sala no se crea y el servidor no arranca.
  */
 export class OficinaTallerRoom extends Room<{ state: OfficeState }> {
   /** La sala vive aunque no haya nadie: todos entran siempre a la misma. */
   autoDispose = false
   maxClients = config.maxClients
   state = new OfficeState()
+  map!: OfficeMap
 
   async onCreate() {
+    this.map = loadOfficeMap(config.mapFile ?? DEFAULT_MAP_FILE)
+    console.log(
+      `[sala] mapa ${this.map.file} (${this.map.bounds.width}x${this.map.bounds.height} px, spawn ${this.map.spawn.x},${this.map.spawn.y})`,
+    )
+
+    this.onMessage(Message.MOVE, (client, payload: MovePayload) => this.onMove(client, payload))
+
     await this.setMetadata({ name: ROOM_DISPLAY_NAME })
     console.log(`[sala] "${ROOM_DISPLAY_NAME}" creada (roomId=${this.roomId})`)
   }
 
   onJoin(client: Client) {
-    const angle = Math.random() * Math.PI * 2
-    const distance = Math.random() * SPAWN.radius
+    const { x, y } = randomSpawnPosition(this.map.spawn, this.map.bounds)
     const player = new Player({
       sessionId: client.sessionId,
       name: `Invitado-${client.sessionId.slice(0, 4)}`,
-      x: Math.round(SPAWN.x + Math.cos(angle) * distance),
-      y: Math.round(SPAWN.y + Math.sin(angle) * distance),
+      x,
+      y,
       connected: true,
     })
     this.state.players.set(client.sessionId, player)
@@ -49,6 +67,21 @@ export class OficinaTallerRoom extends Room<{ state: OfficeState }> {
     }
     client.send(Message.ROOM_INFO, info)
     console.log(`[sala] entra ${client.sessionId} (${this.state.players.size} en sala)`)
+  }
+
+  /**
+   * El cliente manda su posición ya resuelta contra las colisiones del mapa;
+   * el servidor la acota a los límites y la replica. (Validar colisiones del
+   * lado del servidor queda para más adelante.)
+   */
+  private onMove(client: Client, payload: MovePayload) {
+    const player = this.state.players.get(client.sessionId)
+    if (!player) return
+    const x = Number(payload?.x)
+    const y = Number(payload?.y)
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return
+    player.x = clamp(Math.round(x), 0, this.map.bounds.width)
+    player.y = clamp(Math.round(y), 0, this.map.bounds.height)
   }
 
   onDrop(client: Client, code?: number) {

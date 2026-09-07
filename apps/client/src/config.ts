@@ -10,6 +10,15 @@ if (!serverUrl) {
   )
 }
 
+/** Mapa Tiled JSON de la oficina. Las imágenes de sus tilesets se resuelven relativas a él. */
+const mapUrl =
+  (import.meta.env.VITE_MAP_URL as string | undefined) || '/assets/map/oficina-taller.json'
+
+/** `?debug` en la URL dibuja los cuerpos de colisión (mapa y avatares). */
+const debug = new URLSearchParams(window.location.search).has('debug')
+
 export const config = {
   serverUrl,
+  mapUrl,
+  debug,
 } as const

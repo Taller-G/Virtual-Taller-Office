@@ -19,5 +19,7 @@ WORKDIR /repo
 COPY --from=build /repo/node_modules ./node_modules
 COPY --from=build /repo/apps/server/build ./apps/server/build
 COPY --from=build /repo/apps/server/package.json ./apps/server/package.json
+# El servidor lee el mismo mapa Tiled que sirve el cliente (spawn y límites).
+COPY apps/client/public/assets/map ./apps/client/public/assets/map
 EXPOSE 2567
 CMD ["node", "apps/server/build/index.mjs"]

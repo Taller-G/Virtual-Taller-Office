@@ -156,4 +156,34 @@ describe('Sala "Oficina Taller": ciclo conectar / desconectar', () => {
     await waitFor(() => observer.state.players.size === 2, 2_000, 'observador ve 2')
     expect(room.state.players.has(current.sessionId)).toBe(true)
   })
+
+  it('el jugador aparece en el punto de aparición definido en el mapa', async () => {
+    await createRoom()
+    const client = await connect()
+    await client.waitForInitialState()
+
+    const me = room.state.players.get(client.sessionId)!
+    const { spawn } = room.map
+    const distance = Math.hypot(me.x - spawn.x, me.y - spawn.y)
+    expect(distance).toBeLessThanOrEqual(spawn.radius + 1)
+  })
+
+  it('un mensaje de movimiento actualiza la posición y la acota al mapa', async () => {
+    await createRoom()
+    const a = await connect()
+    const b = await connect()
+    await waitFor(() => b.state.players.size === 2, 2_000, 'b ve 2')
+
+    a.send(Message.MOVE, { x: 300, y: 200 })
+    await waitFor(() => room.state.players.get(a.sessionId)?.x === 300, 1_000, 'servidor mueve')
+    await waitFor(() => b.state.players.get(a.sessionId)?.y === 200, 1_000, 'b ve el movimiento')
+
+    a.send(Message.MOVE, { x: -50, y: 99_999 })
+    await waitFor(() => room.state.players.get(a.sessionId)?.x === 0, 1_000, 'acotado en x')
+    expect(room.state.players.get(a.sessionId)?.y).toBe(room.map.bounds.height)
+
+    a.send(Message.MOVE, { x: 'nope', y: NaN })
+    await room.waitForNextPatch().catch(() => {})
+    expect(room.state.players.get(a.sessionId)?.x).toBe(0)
+  })
 })

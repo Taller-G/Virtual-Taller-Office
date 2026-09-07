@@ -15,6 +15,8 @@ function integer(name: string, fallback: number): number {
 
 export const config = {
   port: integer('PORT', 2567),
+  /** Ruta al mapa Tiled JSON. Vacío = el mapa que sirve el cliente (ver map.ts). */
+  mapFile: process.env.MAP_FILE || undefined,
   maxClients: integer('MAX_CLIENTS', 50),
   reconnectGraceSeconds: integer('RECONNECT_GRACE_SECONDS', 2),
   pingIntervalMs: integer('PING_INTERVAL_MS', 2000),

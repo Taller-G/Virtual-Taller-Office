@@ -3,3 +3,6 @@ dist
 build
 coverage
 package-lock.json
+
+# Mapas Tiled: los genera el editor, no se formatean a mano
+apps/client/public/assets/map/*.json
