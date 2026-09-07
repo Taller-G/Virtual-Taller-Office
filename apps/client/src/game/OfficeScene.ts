@@ -4,6 +4,7 @@ import { Message, type Direction, type MovePayload, type Player } from '@vto/sha
 import type { OfficeConnection, OfficeRoom } from '../network/connection'
 import { Avatar, BODY } from './Avatar'
 import { createAvatarAnims } from './avatarAnims'
+import { BubbleArea } from './BubbleArea'
 import { buildOfficeMap, drawCollisionDebug, type BuiltMap } from './officeMap'
 import { isTyping } from './typingGuard'
 
@@ -38,10 +39,16 @@ interface Sent {
  *
  * La lista de avatares refleja `state.players` tal cual: se crean en
  * `onAdd` y se destruyen en `onRemove`; nada más los agrega o los retiene.
+ *
+ * Las burbujas de conversación se dibujan igual: un área por cada entrada de
+ * `state.bubbles`, con el radio que manda el servidor. La propia va resaltada
+ * y los avatares de mis compañeros llevan un anillo a los pies. La membresía
+ * nunca se calcula acá: sale de `player.bubbleId`.
  */
 export class OfficeScene extends Phaser.Scene {
   private map!: BuiltMap
   private avatars = new Map<string, Avatar>()
+  private bubbleAreas = new Map<string, BubbleArea>()
   private me?: Avatar
   private keys!: Keys
   private room?: OfficeRoom
@@ -97,6 +104,7 @@ export class OfficeScene extends Phaser.Scene {
     for (const avatar of this.avatars.values()) {
       if (!avatar.isMe) avatar.interpolate(delta)
     }
+    for (const area of this.bubbleAreas.values()) area.interpolate(delta)
   }
 
   private moveMe(time: number) {
@@ -146,6 +154,7 @@ export class OfficeScene extends Phaser.Scene {
           $.listen(player, 'away', (away) => avatar.setAway(away)),
           $.listen(player, 'name', (name) => avatar.setLabel(name)),
           $.listen(player, 'avatar', (id) => avatar.setAvatar(id)),
+          $.listen(player, 'bubbleId', () => this.refreshBubbles()),
         )
         // La posición y animación propias las manda este cliente: no se pisan con el eco.
         if (!isMe) {
@@ -157,8 +166,56 @@ export class OfficeScene extends Phaser.Scene {
           )
         }
       }),
-      $.onRemove('players', (_player, sessionId) => this.removeAvatar(sessionId)),
+      $.onRemove('players', (_player, sessionId) => {
+        this.removeAvatar(sessionId)
+        this.refreshBubbles()
+      }),
+      $.onAdd('bubbles', (bubble, id) => {
+        const area = new BubbleArea(this, bubble, this.bubbleRadius(), false)
+        this.bubbleAreas.set(id, area)
+        this.unbindRoom.push(
+          $.listen(bubble, 'x', (x) => area.setTarget({ x })),
+          $.listen(bubble, 'y', (y) => area.setTarget({ y })),
+          $.onAdd(bubble, 'members', () => this.refreshBubbles()),
+          $.onRemove(bubble, 'members', () => this.refreshBubbles()),
+        )
+        this.refreshBubbles()
+      }),
+      $.onRemove('bubbles', (_bubble, id) => {
+        this.bubbleAreas.get(id)?.destroy(true)
+        this.bubbleAreas.delete(id)
+        this.refreshBubbles()
+      }),
+      // El radio llega con el estado inicial; si cambiara, se redibuja.
+      $.listen('bubbleRadius', (radius) => {
+        for (const area of this.bubbleAreas.values()) area.setRadius(radius)
+      }),
     )
+  }
+
+  /** Radio de las burbujas según el servidor (0 hasta que llega el estado). */
+  private bubbleRadius(): number {
+    return this.room?.state.bubbleRadius ?? 0
+  }
+
+  /**
+   * Redibuja el resaltado: cuál área es la mía, cuántos somos y qué avatares
+   * están en mi burbuja. Todo sale del estado del servidor.
+   */
+  private refreshBubbles() {
+    const state = this.room?.state
+    if (!state) return
+    const myBubbleId = state.players.get(this.room!.sessionId)?.bubbleId ?? ''
+    for (const [id, area] of this.bubbleAreas) {
+      const mine = id === myBubbleId
+      area.setMine(mine)
+      area.setRadius(this.bubbleRadius())
+      area.setCount(state.bubbles.get(id)?.members.length ?? 0)
+    }
+    for (const [sessionId, avatar] of this.avatars) {
+      const bubbleId = state.players.get(sessionId)?.bubbleId ?? ''
+      avatar.setInBubble(myBubbleId !== '' && bubbleId === myBubbleId)
+    }
   }
 
   private syncAnim(avatar: Avatar, player: Player) {
@@ -169,6 +226,8 @@ export class OfficeScene extends Phaser.Scene {
   private clearRoom() {
     for (const unbind of this.unbindRoom.splice(0)) unbind()
     for (const sessionId of [...this.avatars.keys()]) this.removeAvatar(sessionId)
+    for (const area of this.bubbleAreas.values()) area.destroy(true)
+    this.bubbleAreas.clear()
     this.room = undefined
     this.me = undefined
   }
@@ -184,6 +243,7 @@ export class OfficeScene extends Phaser.Scene {
     avatar.setAway(player.away)
     this.syncAnim(avatar, player)
     this.avatars.set(sessionId, avatar)
+    this.refreshBubbles()
 
     if (isMe) {
       this.me = avatar

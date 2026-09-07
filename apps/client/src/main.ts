@@ -7,10 +7,12 @@ import { installTypingGuard } from './game/typingGuard'
 import { showEntry } from './ui/entry'
 import { mountHud } from './ui/hud'
 import { mountPresence } from './ui/presence'
+import { mountBubble } from './ui/bubble'
 
 const connection = new OfficeConnection(config.serverUrl)
 mountHud(connection)
 mountPresence(connection)
+mountBubble(connection)
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,

@@ -32,6 +32,8 @@ export class Avatar extends Phaser.GameObjects.Container {
   readonly sprite: Phaser.GameObjects.Sprite
   private label: Phaser.GameObjects.Text
   private badge: Phaser.GameObjects.Text
+  /** Anillo a los pies: marca a los miembros de mi burbuja de conversación. */
+  private ring: Phaser.GameObjects.Graphics
   avatarId: string
   dir: Direction = 'down'
   moving = false
@@ -47,6 +49,12 @@ export class Avatar extends Phaser.GameObjects.Container {
     this.target = { x, y }
 
     const feetY = BODY.height
+    this.ring = scene.add.graphics()
+    this.ring.fillStyle(0x1b6ef3, 0.28)
+    this.ring.fillEllipse(0, feetY - 2, BODY.width + 6, 8)
+    this.ring.lineStyle(1, 0x6ea8ff, 0.9)
+    this.ring.strokeEllipse(0, feetY - 2, BODY.width + 6, 8)
+    this.ring.setVisible(false)
     this.sprite = scene.add.sprite(0, feetY, textureKey(options.avatar)).setOrigin(0.5, 1)
     this.label = scene.add
       .text(0, feetY - AVATAR_FRAME.height - 1, options.name, {
@@ -70,7 +78,8 @@ export class Avatar extends Phaser.GameObjects.Container {
       .setOrigin(0.5, 1)
       .setVisible(false)
 
-    this.add([this.sprite, this.label, this.badge])
+    // El anillo va primero: se dibuja detrás del sprite, a los pies.
+    this.add([this.ring, this.sprite, this.label, this.badge])
     this.setSize(BODY.width, BODY.height)
     this.updateDepth()
     this.playAnim('idle', 'down')
@@ -93,6 +102,11 @@ export class Avatar extends Phaser.GameObjects.Container {
     this.away = away
     this.badge.setVisible(away)
     this.refreshAlpha()
+  }
+
+  /** `true` si este jugador está en la misma burbuja que yo. */
+  setInBubble(inMyBubble: boolean) {
+    this.ring.setVisible(inMyBubble)
   }
 
   setConnected(connected: boolean) {

@@ -4,9 +4,11 @@ Oficina virtual 2D de Taller, estilo Gather: avatares en una sala compartida en 
 Este repositorio contiene la **fundación**: cliente web, servidor en tiempo real y la sala única
 **"Oficina Taller"** a la que todo el mundo entra automáticamente, con un ciclo de conexión sólido
 (entrar, salir, refrescar, perder la red, caída del servidor); el **mapa 2D de la oficina**
-(recepción, escritorios, sala de reunión, cocina) con paredes y muebles que bloquean el paso; y la
+(recepción, escritorios, sala de reunión, cocina) con paredes y muebles que bloquean el paso; la
 **presencia en tiempo real**: cada persona elige nombre y avatar, se mueve con flechas o WASD, ve a
-los demás moverse con animación, y un panel muestra quién está y quién está ausente.
+los demás moverse con animación, y un panel muestra quién está y quién está ausente; y las
+**burbujas de conversación por proximidad**: acercarse a alguien abre un grupo que el servidor
+calcula por radio, igual para todos.
 
 El mapa es un archivo [Tiled](https://www.mapeditor.org/) editable por cualquiera del equipo, sin
 tocar código: ver [`docs/mapa.md`](docs/mapa.md).
@@ -79,6 +81,8 @@ No hay valores hardcodeados: puerto y URL del servidor salen del entorno. Cada a
 | `PING_INTERVAL_MS`        | `2000`           | Cada cuánto se hace ping a cada socket.                                                |
 | `PING_MAX_RETRIES`        | `2`              | Pings sin respuesta antes de dar la conexión por muerta.                               |
 | `MAP_FILE`                | mapa del cliente | Ruta al mapa Tiled JSON del que se toman el punto de aparición y los límites.          |
+| `BUBBLE_RADIUS_PX`        | 2 tiles (64 px)  | Radio de una burbuja de conversación. Vacío = 2 tiles del mapa cargado.                |
+| `BUBBLE_MAX_MEMBERS`      | `6`              | Máximo de personas en una misma burbuja.                                               |
 
 `@colyseus/tools` carga automáticamente `.env.development` o `.env.production` según `NODE_ENV`.
 En producción lo habitual es definir las variables en el proveedor de hosting.
@@ -133,6 +137,34 @@ servidor hay que volver a construirlo. Si falta, el cliente falla al arrancar co
 - **Escribir no mueve.** Mientras un campo de texto tiene el foco, el teclado del juego se apaga y
   deja de capturar flechas y espacio, así el cursor del campo funciona y el avatar no se mueve.
 
+## Burbujas de conversación por proximidad
+
+Acercarse a alguien significa algo concreto y **compartido por todos**: el servidor decide quién
+está en cada conversación, así nunca pasa que dos personas vean burbujas distintas. Es el modelo de
+grupos por radio de [WorkAdventure](https://github.com/workadventure/workadventure) (su
+`back/src/Model/Group.ts`), no el de SkyOffice, donde la proximidad dispara una videollamada.
+
+- **El servidor arma las burbujas.** Tras cada movimiento (ya acotado al mapa), la sala recalcula la
+  pertenencia: dos jugadores sin burbuja que quedan a menos de `BUBBLE_RADIUS_PX` abren una; quien
+  no tiene burbuja y llega al alcance de una que no está llena se suma a ella. Si hay varias
+  opciones gana la más cercana.
+- **El centro es el baricentro.** La burbuja se ubica en el promedio de las posiciones de sus
+  miembros y se recalcula con cada paso.
+- **Salir es alejarse del centro.** Un miembro sale cuando queda a más de un radio del baricentro.
+  Medirlo contra el centro (y no contra cada miembro) da histéresis: dos personas se juntan a `R` y
+  se sueltan recién a `~2R`, así la burbuja no parpadea con un paso de más. Cuando queda **un solo
+  miembro, la burbuja se destruye**.
+- **Tope de personas.** Una burbuja con `BUBBLE_MAX_MEMBERS` miembros no absorbe a nadie más; quien
+  se acerca ve el aviso de "burbuja llena" y puede abrir la suya con otra persona.
+- **En pantalla.** Cada burbuja se dibuja como un área del radio real que informa el servidor,
+  centrada en el baricentro y deslizándose con el mismo suavizado que los avatares: la propia
+  resaltada y con la cuenta de personas, las ajenas apenas visibles. Los miembros de mi burbuja
+  llevan un anillo a los pies y el panel lateral lista quiénes están dentro.
+- **Avisos.** Un toast al entrar y al salir de una burbuja, y cuando alguien se suma o se va.
+- **El cliente no puede forzar su burbuja.** El protocolo no tiene ningún mensaje de burbujas: la
+  membresía viaja solo del servidor al cliente (`Player.bubbleId` y `state.bubbles`). Lo único que
+  el cliente manda es su posición, y el servidor la acota al mapa **antes** de decidir.
+
 ## Cómo funciona la conexión
 
 - **Sala única.** El servidor registra la sala `oficina_taller` con `autoDispose = false` y la crea
@@ -167,7 +199,13 @@ dentro de la gracia conserva la sesión, que refrescar varias veces deja exactam
 el jugador aparece en el spawn del mapa, que el movimiento (posición, dirección, animación) se
 replica acotado al mapa, que nombre y avatar elegidos llegan a todos (y los inválidos caen en el
 fallback), que renombrar se replica, que la inactividad marca "ausente" y moverse lo quita, y que
-el ausente manual solo se quita a mano. Además validan el **mapa real** (`test/map.test.ts`):
+el ausente manual solo se quita a mano. Las burbujas tienen sus propias pruebas: la lógica pura en
+`test/bubbles.test.ts` (creación por radio, baricentro, histéresis, tope, destrucción al quedar uno)
+y el comportamiento contra la sala real en `test/bubbles.room.test.ts` (los dos clientes ven la
+misma burbuja en menos de 300 ms, un tercero entra y los tres ven tres miembros, quien se aleja sale
+y los otros siguen, al quedar uno desaparece, el jugador N+1 no entra en una burbuja llena, y una
+posición falsa del cliente no crea ni rompe burbujas distintas a las que calcula el servidor).
+Además validan el **mapa real** (`test/map.test.ts`):
 spawn único sobre piso transitable, cuatro zonas, tilesets embebidos con imágenes presentes y
 colisiones declaradas en el mapa; y el **catálogo de avatares** y la normalización de nombres
 (`test/identity.test.ts`).

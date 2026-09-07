@@ -394,3 +394,68 @@ input {
     opacity: 0.35;
   }
 }
+
+/* ---- Burbuja de conversación ---------------------------------------------- */
+
+.bubble {
+  flex: none;
+  padding: 0.6rem 0.9rem 0.7rem;
+  border-top: 1px solid var(--line);
+  background: var(--panel-2);
+}
+
+.bubble__title {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.bubble[data-state='in'] .bubble__title {
+  color: var(--text);
+}
+
+.bubble[data-state='full'] .bubble__title {
+  color: var(--warn);
+}
+
+.bubble__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.bubble__list:empty {
+  display: none;
+}
+
+.bubble__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bubble__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bubble__hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.bubble__hint:empty {
+  display: none;
+}
+
+.bubble[data-state='full'] .bubble__hint {
+  color: var(--warn);
+}

@@ -30,14 +30,47 @@ export const Player = schema(
      * conexión se cortó sin aviso, a la espera de que reconecte.
      */
     connected: t.boolean().default(true),
+    /**
+     * Id de la burbuja de conversación en la que está (clave en `bubbles`), o
+     * `''` si no está en ninguna. **Solo lo escribe el servidor**: no hay
+     * mensaje para pedir ni forzar la pertenencia.
+     */
+    bubbleId: t.string().default(''),
   },
   'Player',
 )
 export type Player = SchemaType<typeof Player>
 
+/**
+ * Burbuja de conversación: el grupo de jugadores que quedaron a menos del
+ * radio unos de otros. La decide el servidor (ver `apps/server/src/bubbles.ts`);
+ * el cliente solo la dibuja y avisa.
+ */
+export const Bubble = schema(
+  {
+    /** Identificador único dentro de la sala. Coincide con la clave en `bubbles`. */
+    id: t.string(),
+    /** Centro de la burbuja: baricentro de sus miembros, recalculado al moverse. */
+    x: t.number().default(0),
+    y: t.number().default(0),
+    /** sessionIds de los miembros, en orden de llegada. */
+    members: t.array('string'),
+  },
+  'Bubble',
+)
+export type Bubble = SchemaType<typeof Bubble>
+
 export const OfficeState = schema(
   {
     players: t.map(Player),
+    bubbles: t.map(Bubble),
+    /**
+     * Parámetros con los que el servidor arma las burbujas, replicados para
+     * que el cliente dibuje el radio real y detecte "llena" con los mismos
+     * valores (configurables por variables de entorno del servidor).
+     */
+    bubbleRadius: t.number().default(0),
+    bubbleMaxMembers: t.number().default(0),
   },
   'OfficeState',
 )
