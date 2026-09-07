@@ -29,7 +29,7 @@ const game = new Phaser.Game({
   // el juego sigue corriendo con la pestaña en segundo plano (pruebas automatizadas).
   fps: { forceSetTimeOut: config.debug },
   scene: [
-    new BootScene(config.mapUrl, config.avatarsUrl),
+    new BootScene(config.mapUrl, config.avatarsUrl, config.logoUrl),
     new OfficeScene(connection, { debug: config.debug }),
   ],
 })

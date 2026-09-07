@@ -15,8 +15,12 @@ pixel art se suman aparte, acá en `virtual-taller-office`.
 - **Cómo se hizo:** escalado del original a la grilla, paleta reducida a los colores de
   marca (blanco, naranja, naranja oscuro) y un contorno oscuro de 1 px para que se lea
   sobre pisos claros u oscuros del mapa.
-- **Uso:** pensado para colocarse en el mapa (p. ej. en una pared de recepción). La
-  integración en el mapa Tiled es una tarea aparte.
+- **Uso:** se dibuja como decoración de la recepción, anclado a la zona `Recepción` del
+  mapa, en `apps/client/src/game/officeMap.ts` (`addReceptionLogo`). Es un sprite **sin
+  cuerpo físico**, así que no bloquea el paso ni interfiere con las interacciones; va como
+  calcomanía de piso (profundidad debajo de muebles y avatares, por eso los personajes le
+  pasan por encima). Se carga en `BootScene`; si el archivo faltara, la oficina igual abre
+  sin logo. Para reubicarlo, ver las constantes `LOGO_ZONE_*` en `officeMap.ts`.
 
 ## Avatares de las personas
 
@@ -34,6 +38,11 @@ de cada persona (largo y color de pelo, color de ropa) para que se reconozca qui
   Parte de los sprites base de LimeZu y recolorea de forma independiente el pelo y la ropa
   para acercarse a cada persona, conservando piel, contornos y el sombreado. Es la misma
   convención que `tools/recolor-avatars.py`. Para regenerarlos: `python3 tools/person-avatars.py`.
+- **Selección:** aparecen en el selector de entrada junto a los avatares genéricos (el catálogo
+  está en `packages/shared/src/avatars.ts`); la elección se guarda en `localStorage` y se
+  mantiene al recargar.
+- **Fallback:** si una hoja no cargara, `BootScene` no aborta y `Avatar`/`avatarAnims` resuelven
+  ese avatar al por defecto, de modo que la oficina abre igual y nunca queda en pantalla en blanco.
 
 ### Organización del sprite sheet (igual que el resto de avatares)
 

@@ -17,6 +17,9 @@ const mapUrl =
 /** Carpeta con las hojas de sprites de los avatares (`<id>.png`). */
 const avatarsUrl = '/assets/avatars/'
 
+/** Logo de Taller en pixel art, decoración de la recepción. */
+const logoUrl = '/assets/logo/taller-logo-pixel.png'
+
 /** `?debug` en la URL dibuja los cuerpos de colisión (mapa y avatares). */
 const debug = new URLSearchParams(window.location.search).has('debug')
 
@@ -24,5 +27,6 @@ export const config = {
   serverUrl,
   mapUrl,
   avatarsUrl,
+  logoUrl,
   debug,
 } as const

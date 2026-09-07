@@ -4,6 +4,11 @@ import { textureKey } from './avatarAnims'
 
 /** Clave con la que el mapa queda en la caché de Phaser. */
 export const MAP_KEY = 'office-map'
+/** Clave de la textura del logo de Taller (decoración de la recepción). */
+export const LOGO_KEY = 'logo-taller'
+
+/** Prefijo de las claves de textura de avatar (ver `textureKey`). */
+const AVATAR_KEY_PREFIX = 'avatar-'
 
 /**
  * Carga el mapa Tiled JSON y, leyendo sus tilesets, encola las imágenes que
@@ -14,19 +19,28 @@ export const MAP_KEY = 'office-map'
 export class BootScene extends Phaser.Scene {
   private mapUrl: string
   private avatarsUrl: string
+  private logoUrl: string
   private failed = false
 
-  constructor(mapUrl: string, avatarsUrl: string) {
+  constructor(mapUrl: string, avatarsUrl: string, logoUrl: string) {
     super('boot')
     this.mapUrl = mapUrl
     this.avatarsUrl = avatarsUrl
+    this.logoUrl = logoUrl
   }
 
   preload() {
     this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
+      // Un avatar o el logo que no cargan son degradables: la oficina sigue con
+      // un avatar por defecto y sin logo. Faltar el mapa o un tileset sí es fatal.
+      if (file.key.startsWith(AVATAR_KEY_PREFIX) || file.key === LOGO_KEY) {
+        console.warn(`[assets] no se pudo cargar ${file.src} (se sigue sin él)`)
+        return
+      }
       this.fail(`No se pudo cargar ${file.src}`)
     })
     this.load.tilemapTiledJSON(MAP_KEY, this.mapUrl)
+    this.load.image(LOGO_KEY, this.logoUrl)
     for (const id of AVATAR_IDS) {
       this.load.spritesheet(textureKey(id), `${this.avatarsUrl}${id}.png`, {
         frameWidth: AVATAR_FRAME.width,

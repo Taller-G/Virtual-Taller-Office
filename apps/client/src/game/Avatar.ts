@@ -1,6 +1,6 @@
 import Phaser from 'phaser'
 import { AVATAR_FRAME, type Direction } from '@vto/shared'
-import { animKey, textureKey, type AnimState } from './avatarAnims'
+import { animKey, resolveLoadedAvatar, textureKey, type AnimState } from './avatarAnims'
 
 /**
  * Cuerpo físico del avatar: los "pies", más chico que el sprite para pasar
@@ -60,7 +60,8 @@ export class Avatar extends Phaser.GameObjects.Container {
   constructor(scene: Phaser.Scene, x: number, y: number, options: AvatarOptions) {
     super(scene, x, y)
     this.isMe = options.isMe
-    this.avatarId = options.avatar
+    // Si la hoja pedida no cargó, se cae a un avatar por defecto válido.
+    this.avatarId = resolveLoadedAvatar(scene.textures, options.avatar)
     this.target = { x, y }
 
     const feetY = BODY.height
@@ -70,7 +71,7 @@ export class Avatar extends Phaser.GameObjects.Container {
     this.ring.lineStyle(1, 0x6ea8ff, 0.9)
     this.ring.strokeEllipse(0, feetY - 2, BODY.width + 6, 8)
     this.ring.setVisible(false)
-    this.sprite = scene.add.sprite(0, feetY, textureKey(options.avatar)).setOrigin(0.5, 1)
+    this.sprite = scene.add.sprite(0, feetY, textureKey(this.avatarId)).setOrigin(0.5, 1)
     this.label = scene.add
       .text(0, feetY - AVATAR_FRAME.height - 1, options.name, {
         fontFamily: 'system-ui, sans-serif',
@@ -145,9 +146,10 @@ export class Avatar extends Phaser.GameObjects.Container {
   }
 
   setAvatar(avatar: string) {
-    if (avatar === this.avatarId) return
-    this.avatarId = avatar
-    this.sprite.setTexture(textureKey(avatar))
+    const resolved = resolveLoadedAvatar(this.scene.textures, avatar)
+    if (resolved === this.avatarId) return
+    this.avatarId = resolved
+    this.sprite.setTexture(textureKey(resolved))
     this.playAnim(this.moving ? 'walk' : 'idle', this.dir, true)
   }
 

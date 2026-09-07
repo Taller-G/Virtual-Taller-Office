@@ -72,7 +72,7 @@ export class OfficeScene extends Phaser.Scene {
   create() {
     this.map = buildOfficeMap(this)
     if (this.debug) drawCollisionDebug(this, this.map)
-    createAvatarAnims(this.anims)
+    createAvatarAnims(this)
 
     const camera = this.cameras.main
     camera.setBounds(0, 0, this.map.bounds.width, this.map.bounds.height)

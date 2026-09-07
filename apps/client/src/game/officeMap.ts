@@ -14,7 +14,17 @@ import {
   type TiledObject,
   type TiledObjectLayer,
 } from '@vto/shared'
-import { MAP_KEY } from './BootScene'
+import { LOGO_KEY, MAP_KEY } from './BootScene'
+
+/** Nombre de la zona (en el mapa Tiled) donde se ancla el logo de Taller. */
+const LOGO_ZONE = 'Recepción'
+/**
+ * Posición del logo dentro de la zona de recepción, como fracción de su ancho
+ * y desde su borde superior en px. Elegido para caer en la pared de ladrillo
+ * libre a la izquierda del monitor, sin tapar muebles.
+ */
+const LOGO_ZONE_FRAC_X = 0.28
+const LOGO_ZONE_OFFSET_Y = 64
 
 /** Bits de volteo que Tiled guarda en el gid de un objeto. */
 const FLIP_H = 0x80000000
@@ -23,6 +33,8 @@ const GID_MASK = 0x1fffffff
 
 /** Profundidad de las capas de tiles: siempre debajo de muebles y avatares. */
 const TILE_LAYER_DEPTH_BASE = -1000
+/** El logo va como calcomanía de piso: sobre los tiles pero debajo de muebles y avatares. */
+const LOGO_DEPTH = TILE_LAYER_DEPTH_BASE + 100
 /** Las etiquetas de zona van por encima de todo lo que camina por el mapa. */
 export const OVERLAY_DEPTH = 100_000
 
@@ -86,6 +98,8 @@ export function buildOfficeMap(scene: Phaser.Scene): BuiltMap {
       addObjects(scene, raw, layer, solids)
     }
   }
+
+  addReceptionLogo(scene, raw)
 
   const spawn = findSpawnPoints(raw)[0]
   return {
@@ -152,6 +166,23 @@ function addTileObject(
     if (collides) (sprite as Phaser.Physics.Arcade.Sprite).refreshBody()
   }
   sprite.setDepth(obj.y)
+}
+
+/**
+ * Coloca el logo de Taller como decoración de la recepción: un sprite sin
+ * cuerpo físico (no bloquea el paso ni toca las interacciones) anclado a la
+ * zona `Recepción` del mapa. Si el logo no cargó o no hay recepción, no dibuja
+ * nada (la oficina sigue funcionando igual). La profundidad usa su borde
+ * inferior, como los muebles, para que los avatares pasen por delante.
+ */
+function addReceptionLogo(scene: Phaser.Scene, raw: TiledMap) {
+  if (!scene.textures.exists(LOGO_KEY)) return
+  const zone = getZones(raw).find((z) => z.name === LOGO_ZONE)
+  if (!zone) return
+  const { height } = scene.textures.get(LOGO_KEY).getSourceImage()
+  const x = Math.round(zone.x + zone.width * LOGO_ZONE_FRAC_X)
+  const y = Math.round(zone.y + LOGO_ZONE_OFFSET_Y + height / 2)
+  scene.add.image(x, y, LOGO_KEY).setDepth(LOGO_DEPTH)
 }
 
 function addZoneLabel(scene: Phaser.Scene, obj: TiledObject) {
