@@ -355,6 +355,89 @@ input {
   color: var(--muted);
 }
 
+/* ---- Tabs de avatar ------------------------------------------------------- */
+
+.entry__tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.6rem;
+}
+
+.entry__tab {
+  flex: 1;
+  padding: 0.45rem;
+  border: 1px solid #fff2;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.entry__tab[aria-selected='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ---- Editor de apariencia ------------------------------------------------- */
+
+.appearance-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.appearance-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.appearance-row__label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.appearance-row__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.appearance-opt {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid #fff2;
+  border-radius: 0.35rem;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.appearance-opt:hover {
+  background: #3a4256;
+}
+
+.appearance-opt[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--text);
+  background: #1b6ef322;
+}
+
+.color-swatch {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  border: 1px solid #fff3;
+}
+
 /* ---- Avisos --------------------------------------------------------------- */
 
 .toasts {

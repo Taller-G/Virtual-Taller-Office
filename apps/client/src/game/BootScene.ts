@@ -1,6 +1,14 @@
 import Phaser from 'phaser'
-import { AVATAR_FRAME, AVATAR_IDS, type TiledMap } from '@vto/shared'
-import { textureKey } from './avatarAnims'
+import {
+  APPEARANCE_BASES,
+  AVATAR_FRAME,
+  AVATAR_IDS,
+  GLASSES_OPTIONS,
+  HAT_OPTIONS,
+  SKIN_TONES,
+  type TiledMap,
+} from '@vto/shared'
+import { layerTextureKey, textureKey } from './avatarAnims'
 
 /** Clave con la que el mapa queda en la caché de Phaser. */
 export const MAP_KEY = 'office-map'
@@ -9,6 +17,8 @@ export const LOGO_KEY = 'logo-taller'
 
 /** Prefijo de las claves de textura de avatar (ver `textureKey`). */
 const AVATAR_KEY_PREFIX = 'avatar-'
+/** Prefijo de las claves de textura de capas de avatar. */
+const LAYER_KEY_PREFIX = 'layer-'
 
 /**
  * Carga el mapa Tiled JSON y, leyendo sus tilesets, encola las imágenes que
@@ -33,7 +43,11 @@ export class BootScene extends Phaser.Scene {
     this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
       // Un avatar o el logo que no cargan son degradables: la oficina sigue con
       // un avatar por defecto y sin logo. Faltar el mapa o un tileset sí es fatal.
-      if (file.key.startsWith(AVATAR_KEY_PREFIX) || file.key === LOGO_KEY) {
+      if (
+        file.key.startsWith(AVATAR_KEY_PREFIX) ||
+        file.key.startsWith(LAYER_KEY_PREFIX) ||
+        file.key === LOGO_KEY
+      ) {
         console.warn(`[assets] no se pudo cargar ${file.src} (se sigue sin él)`)
         return
       }
@@ -43,6 +57,31 @@ export class BootScene extends Phaser.Scene {
     this.load.image(LOGO_KEY, this.logoUrl)
     for (const id of AVATAR_IDS) {
       this.load.spritesheet(textureKey(id), `${this.avatarsUrl}${id}.png`, {
+        frameWidth: AVATAR_FRAME.width,
+        frameHeight: AVATAR_FRAME.height,
+      })
+    }
+
+    // Capas para avatares compuestos: body (por tono de piel), hair, top, accesorios.
+    const layersUrl = `${this.avatarsUrl}layers/`
+    for (const base of APPEARANCE_BASES) {
+      for (const tone of SKIN_TONES) {
+        this.load.spritesheet(
+          layerTextureKey(base, 'body', tone),
+          `${layersUrl}${base}/body-${tone}.png`,
+          { frameWidth: AVATAR_FRAME.width, frameHeight: AVATAR_FRAME.height },
+        )
+      }
+      for (const part of ['hair', 'top'] as const) {
+        this.load.spritesheet(layerTextureKey(base, part), `${layersUrl}${base}/${part}.png`, {
+          frameWidth: AVATAR_FRAME.width,
+          frameHeight: AVATAR_FRAME.height,
+        })
+      }
+    }
+    for (const acc of [...HAT_OPTIONS, ...GLASSES_OPTIONS]) {
+      if (acc === 'none') continue
+      this.load.spritesheet(layerTextureKey('acc', acc), `${layersUrl}accessories/${acc}.png`, {
         frameWidth: AVATAR_FRAME.width,
         frameHeight: AVATAR_FRAME.height,
       })

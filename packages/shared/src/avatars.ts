@@ -57,3 +57,144 @@ export function isAvatarId(value: unknown): value is string {
 export function isDirection(value: unknown): value is Direction {
   return typeof value === 'string' && (DIRECTIONS as readonly string[]).includes(value)
 }
+
+// ---------------------------------------------------------------------------
+// Composable appearance (layered avatars)
+// ---------------------------------------------------------------------------
+
+/** Bases disponibles para avatares compuestos (los 4 originales de LimeZu). */
+export const APPEARANCE_BASES = ['adam', 'ash', 'lucy', 'nancy'] as const
+export type AppearanceBase = (typeof APPEARANCE_BASES)[number]
+
+export const SKIN_TONES = ['default', 'light', 'medium', 'tan', 'dark'] as const
+export type SkinTone = (typeof SKIN_TONES)[number]
+
+export const HAT_OPTIONS = ['none', 'cap', 'beanie'] as const
+export type HatOption = (typeof HAT_OPTIONS)[number]
+
+export const GLASSES_OPTIONS = ['none', 'glasses-round', 'glasses-square'] as const
+export type GlassesOption = (typeof GLASSES_OPTIONS)[number]
+
+/**
+ * Paleta de colores nombrados para pelo y ropa.  Cada entrada es un tint hex
+ * que Phaser aplica sobre la capa en escala de grises con `setTint()`.
+ *
+ * 0xFFFFFF = sin teñir (conserva el gris original como color neutro).
+ */
+export const HAIR_COLORS = {
+  black: 0x3a3a4a,
+  brown: 0x8b6040,
+  auburn: 0xa04830,
+  blonde: 0xe8c860,
+  red: 0xd04040,
+  blue: 0x4080d0,
+  green: 0x40a060,
+  pink: 0xd060a0,
+  white: 0xe0e0e8,
+  purple: 0x9060c0,
+} as const
+
+export const HAIR_COLOR_IDS = Object.keys(HAIR_COLORS) as readonly HairColorId[]
+export type HairColorId = keyof typeof HAIR_COLORS
+
+export const TOP_COLORS = {
+  white: 0xf0f0f0,
+  black: 0x3a3a4a,
+  red: 0xd04040,
+  blue: 0x4080d0,
+  green: 0x40a060,
+  yellow: 0xe0c840,
+  purple: 0x9060c0,
+  orange: 0xd08030,
+  pink: 0xd060a0,
+  gray: 0x909098,
+} as const
+
+export const TOP_COLOR_IDS = Object.keys(TOP_COLORS) as readonly TopColorId[]
+export type TopColorId = keyof typeof TOP_COLORS
+
+/**
+ * Aspecto compuesto de un avatar: describe completamente cómo se ve un
+ * personaje a partir de capas que se superponen.
+ */
+export interface Appearance {
+  base: AppearanceBase
+  skinTone: SkinTone
+  hairColor: HairColorId
+  topColor: TopColorId
+  hat: HatOption
+  glasses: GlassesOption
+}
+
+export const DEFAULT_APPEARANCE: Appearance = {
+  base: 'adam',
+  skinTone: 'default',
+  hairColor: 'brown',
+  topColor: 'green',
+  hat: 'none',
+  glasses: 'none',
+}
+
+/** Serializa un Appearance a JSON string para el campo del schema. */
+export function serializeAppearance(a: Appearance): string {
+  return JSON.stringify(a)
+}
+
+/** Deserializa un JSON string a Appearance, o devuelve null si es inválido. */
+export function parseAppearance(raw: string): Appearance | null {
+  if (!raw) return null
+  try {
+    const obj = JSON.parse(raw) as Record<string, unknown>
+    if (
+      typeof obj !== 'object' ||
+      obj === null ||
+      !isAppearanceBase(obj.base) ||
+      !isSkinTone(obj.skinTone) ||
+      !isHairColorId(obj.hairColor) ||
+      !isTopColorId(obj.topColor) ||
+      !isHatOption(obj.hat) ||
+      !isGlassesOption(obj.glasses)
+    ) {
+      return null
+    }
+    return {
+      base: obj.base,
+      skinTone: obj.skinTone,
+      hairColor: obj.hairColor,
+      topColor: obj.topColor,
+      hat: obj.hat,
+      glasses: obj.glasses,
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Valida y normaliza un string de apariencia.  Si es inválido devuelve string
+ * vacío (= usar avatar preset en vez de compuesto).
+ */
+export function sanitizeAppearance(raw: unknown): string {
+  if (typeof raw !== 'string' || !raw) return ''
+  return parseAppearance(raw) !== null ? raw : ''
+}
+
+// Guardas de tipo
+function isAppearanceBase(v: unknown): v is AppearanceBase {
+  return typeof v === 'string' && (APPEARANCE_BASES as readonly string[]).includes(v)
+}
+function isSkinTone(v: unknown): v is SkinTone {
+  return typeof v === 'string' && (SKIN_TONES as readonly string[]).includes(v)
+}
+function isHairColorId(v: unknown): v is HairColorId {
+  return typeof v === 'string' && v in HAIR_COLORS
+}
+function isTopColorId(v: unknown): v is TopColorId {
+  return typeof v === 'string' && v in TOP_COLORS
+}
+function isHatOption(v: unknown): v is HatOption {
+  return typeof v === 'string' && (HAT_OPTIONS as readonly string[]).includes(v)
+}
+function isGlassesOption(v: unknown): v is GlassesOption {
+  return typeof v === 'string' && (GLASSES_OPTIONS as readonly string[]).includes(v)
+}

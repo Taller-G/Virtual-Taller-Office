@@ -164,6 +164,7 @@ export class OfficeScene extends Phaser.Scene {
           $.listen(player, 'away', (away) => avatar.setAway(away)),
           $.listen(player, 'name', (name) => avatar.setLabel(name)),
           $.listen(player, 'avatar', (id) => avatar.setAvatar(id)),
+          $.listen(player, 'appearance', (raw) => avatar.setAppearance(raw)),
           $.listen(player, 'bubbleId', () => this.refreshBubbles()),
         )
         // La posición y animación propias las manda este cliente: no se pisan con el eco.
@@ -246,6 +247,7 @@ export class OfficeScene extends Phaser.Scene {
     this.removeAvatar(sessionId)
     const avatar = new Avatar(this, player.x, player.y, {
       avatar: player.avatar,
+      appearance: player.appearance,
       name: player.name,
       isMe,
     })

@@ -6,6 +6,8 @@ export const NAME_MAX_LENGTH = 20
 export interface JoinOptions {
   name?: string
   avatar?: string
+  /** JSON de `Appearance` (aspecto compuesto).  Vacío o ausente = usar preset. */
+  appearance?: string
 }
 
 /**

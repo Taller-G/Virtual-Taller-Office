@@ -13,8 +13,14 @@ export const Player = schema(
     sessionId: t.string(),
     /** Nombre visible, elegido por el usuario (o `Invitado-xxxx`). */
     name: t.string(),
-    /** Id del avatar (ver `AVATARS`). */
+    /** Id del avatar preset (ver `AVATARS`), usado cuando `appearance` está vacío. */
     avatar: t.string(),
+    /**
+     * Aspecto compuesto (JSON de `Appearance`).  Vacío = usar el preset
+     * indicado por `avatar`.  Cuando tiene valor, el cliente lo interpreta
+     * como capas superpuestas (body, hair, top, accesorios).
+     */
+    appearance: t.string().default(''),
     x: t.number().default(0),
     y: t.number().default(0),
     /** Hacia dónde mira: 'down' | 'up' | 'left' | 'right'. */
