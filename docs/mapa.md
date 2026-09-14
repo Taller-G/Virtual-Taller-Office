@@ -102,9 +102,9 @@ cuanto los pies entran en el área, el jugador sale de este mundo y aparece en e
 ### Ambiente (opcional)
 
 Propiedad del **mapa** (no de una capa) `ambient`, de tipo color (`#AARRGGBB`): el cliente pinta ese
-color encima de todo el mundo. Es lo que hace que la Chiron Office se sienta oscura sin necesidad de
-dibujar tiles nuevos. La opacidad es la parte `AA`: con `#66070a18` se ve oscuro pero todo sigue
-siendo legible; subirla mucho apaga también a los avatares.
+color encima de todo el mundo. La opacidad es la parte `AA`. En la Chiron Office está bajo
+(`#4d080d1a`) a propósito: lo oscuro son los tiles, no el velo, y el velo solo apaga los muebles,
+que vienen de packs claros. Subirlo mucho apaga también a los avatares.
 
 ### Zonas (recomendado)
 
@@ -113,7 +113,10 @@ siendo legible; subirla mucho apaga también a los avatares.
   muestra el nombre como etiqueta en la esquina superior izquierda de cada zona.
 - Las pruebas del servidor exigen que existan al menos esas cuatro zonas, más las tres salas del
   ala sur, y que se llegue caminando desde el spawn a **todas** las zonas: una sala sin puerta
-  transitable hace fallar las pruebas.
+  transitable hace fallar las pruebas. En la Chiron Office exigen lo mismo (todas sus zonas
+  alcanzables, con nombre y sin repetir) más que exista el `Vestíbulo`.
+- La etiqueta es blanca sobre una placa `#1b1f2acc`, así que se lee igual sobre un piso claro que
+  sobre uno oscuro; no hace falta tocar nada al hacer un mundo oscuro.
 
 ### Tilesets
 
@@ -152,11 +155,55 @@ Si un mapa no cumple el contrato, `npm run dev` falla al arrancar el servidor co
 una imagen de tileset. Si una puerta no cierra, el mensaje es
 `Hay puertas que no llevan a ninguna parte: …` con el nombre de la puerta y lo que falta.
 
+## Los mundos que hay hoy
+
+| Mundo           | Archivo               | Zonas                                                                                   |
+| --------------- | --------------------- | --------------------------------------------------------------------------------------- |
+| `first-office`  | `oficina-taller.json` | Recepción, Cocina y descanso, Escritorios, Sala de reunión (+ Sur, Este) y Sala de foco |
+| `chiron-office` | `chiron-office.json`  | Vestíbulo, Los Monitores, Archivo, Galería, El Pozo, Sala de mando y Café nocturno      |
+
+Están conectados por **un par de puertas**, una en cada punta:
+
+| Desde           | Puerta (tile) | Lleva a         | Punto de llegada (tile)       |
+| --------------- | ------------- | --------------- | ----------------------------- |
+| `first-office`  | (25, 3)       | `chiron-office` | `desde-first-office` — (5, 4) |
+| `chiron-office` | (5, 2)        | `first-office`  | `desde-chiron` — (25, 4)      |
+
+Las dos están en la **recepción / vestíbulo** de su mundo, contra el muro norte, y las dos tienen
+encima un **vano** (dos tiles del tileset `ChironDark`, dibujados como mueble decorativo sobre la
+pared) para que se vea que ahí se sale a otro lado: en la First Office es un hueco oscuro recortado
+en la pared clara; en Chiron, el mismo hueco visto desde adentro.
+
+### La Chiron Office
+
+Es el segundo mundo: oscuro, frío y de planta abierta. El plano no se parece al de la First Office
+a propósito — allá hay salas cerradas colgadas de un pasillo vertical en un lienzo cuadrado de
+40×40; acá el lienzo es apaisado (34×24) y todo da a una **galería** este-oeste, con alcobas
+separadas por tabiques cortos y columnas, sin puertas interiores.
+
+Lo oscuro **está en los tiles**, no en un velo: la Chiron Office se pinta con su propio tileset,
+`ChironDark.png`, que se genera con `python3 tools/make-chiron-tileset.py`. Ese script toma de
+`FloorAndGround` los mismos tiles con los que está armada la First Office (así las paredes encastran
+igual) y los pasa por un duotono frío, y dibuja además unos tiles de luz: charcos cenitales, una
+tira LED al pie del muro norte y el vano de la puerta. El mapa tiene una capa `Luces` entre el piso
+y las paredes con esos tiles; no bloquean el paso.
+
+Para rehacer el mundo entero desde cero:
+
+```bash
+python3 tools/make-chiron-tileset.py   # el tileset oscuro
+python3 tools/make-chiron-map.py       # el mapa, que lo usa
+```
+
+El vocabulario de tiles (qué tile es qué, de dónde sale y con qué paleta) está en
+`tools/chiron_tiles.py`, compartido por los dos scripts. Después el mapa se edita en Tiled como
+cualquier otro; volver a correr los scripts pisa esas ediciones.
+
 ## Agregar un mundo
 
 1. **Hacé el mapa.** Un Tiled JSON nuevo en `apps/client/public/assets/map/`, con sus tilesets
-   embebidos, su spawn de entrada y las zonas que quieras. (La Chiron Office se genera con
-   `python3 tools/make-chiron-map.py` y después se edita en Tiled como cualquier otro.)
+   embebidos, su spawn de entrada y las zonas que quieras. (Si querés un mundo con otro clima,
+   mirá cómo se hace el tileset propio de la Chiron Office, más arriba.)
 2. **Registrá el mundo** en `packages/shared/src/worlds.ts`: un id estable (`chiron-office`), el
    nombre visible (`Chiron Office`) y el archivo del mapa. Cliente y servidor leen ese registro: el
    servidor levanta una sala por mundo y el cliente carga el mapa cuando alguien cruza su puerta.
@@ -173,4 +220,9 @@ para la oficina de Taller: recepción con spawn, cocina y descanso con mostrador
 expendedora, sala de reunión con mesa y pizarra, y sala de escritorios con puestos adicionales.
 El ala sur (filas 25-39) se agregó después colgando del pasillo vertical: `Sala de reunión Sur`,
 `Sala de reunión Este` y `Sala de foco`, cada una con su puerta al pasillo.
+
+El plano de la Chiron Office es propio (ver `tools/make-chiron-map.py`); sus muebles salen de los
+mismos packs y algunas piezas ya armadas —la mesa de reunión, el escritorio con PC— se copian de la
+First Office por rectángulo, para no volver a resolver cómo encastran.
+
 Los gráficos son de LimeZu; ver `docs/licencias-assets.md`.

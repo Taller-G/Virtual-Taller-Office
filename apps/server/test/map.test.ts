@@ -13,14 +13,19 @@ import {
   objectCollides,
   objectLayers,
   PROP_COLLIDES,
+  tileCollides,
   tileLayers,
   tilesetForGid,
   validateMap,
   WORLDS,
+  type SpawnPoint,
   type TiledMap,
   type Zone,
 } from '@vto/shared'
 import { DEFAULT_MAP_FILE, loadOfficeMap, loadWorldMaps } from '../src/map'
+
+/** Tileset propio de la Chiron Office (ver `tools/make-chiron-tileset.py`). */
+const DARK_TILESET = 'ChironDark'
 
 /**
  * Estas pruebas corren contra el mapa REAL que se despliega. Si alguien lo
@@ -236,8 +241,11 @@ describe('Mundos (archivos reales)', () => {
     expect(doorAt(chiron, arrival.x, arrival.y)).toBeUndefined()
     const back = findSpawnPoint(first, 'desde-chiron')
     expect(doorAt(first, back.x, back.y)).toBeUndefined()
-    expect(back.dir).toBe('down')
-    expect(arrival.dir).toBe('up')
+
+    // Y se llega de espaldas al vano por el que se entró, no mirándolo: si no,
+    // el primer paso hacia adelante es volver por donde se vino.
+    expect(facingAwayFromDoor(chiron, arrival), 'llegada a Chiron').toBe(true)
+    expect(facingAwayFromDoor(first, back), 'vuelta a la First Office').toBe(true)
   })
 
   it('ningún spawn ni puerta cae sobre una pared o un mueble sólido', () => {
@@ -258,6 +266,25 @@ describe('Mundos (archivos reales)', () => {
     }
   })
 
+  it('ningún mundo se puede abandonar caminando: las paredes lo cierran', () => {
+    for (const [id, world] of worlds) {
+      const map = world.data
+      const alcanzables = reachableTiles(map, {
+        col: Math.floor(world.spawn.x / map.tilewidth),
+        row: Math.floor(world.spawn.y / map.tileheight),
+      })
+      // `reachableTiles` ya trata el afuera del mapa como bloqueado, así que
+      // el síntoma de un agujero en el muro es llegar caminando a su borde.
+      for (const key of alcanzables) {
+        const [col, row] = key.split(',').map(Number)
+        expect(
+          col > 0 && row > 0 && col < map.width - 1 && row < map.height - 1,
+          `${id}: se camina hasta el borde del mapa en (${col},${row}): falta pared`,
+        ).toBe(true)
+      }
+    }
+  })
+
   it('a la puerta de cada mundo se llega caminando desde su entrada', () => {
     for (const [id, world] of worlds) {
       const map = world.data
@@ -273,6 +300,85 @@ describe('Mundos (archivos reales)', () => {
           `${id}: no se llega caminando a la puerta "${door.name}"`,
         ).toBe(true)
       }
+    }
+  })
+})
+
+/**
+ * El mapa de la Chiron Office: el segundo mundo, oscuro y de planta abierta.
+ * Lo que se chequea acá es lo que lo hace habitable (que se llegue caminando a
+ * todas sus zonas, que la llegada caiga en el vestíbulo) y lo que lo hace
+ * *otro lugar*: que esté pintado con su propio tileset oscuro.
+ */
+describe('Chiron Office (archivo real)', () => {
+  const chiron = loadWorldMaps().get('chiron-office')!
+  const map = chiron.data
+
+  it('tiene un vestíbulo de llegada y varias zonas más, todas con nombre', () => {
+    const zones = getZones(map)
+    const names = zones.map((z) => z.name)
+    expect(names).toContain('Vestíbulo')
+    expect(names.length).toBeGreaterThanOrEqual(3)
+    for (const zone of zones) expect(zone.name.trim(), 'zona sin nombre').not.toBe('')
+    // Sin nombres repetidos: dos etiquetas iguales en el mapa no se entienden.
+    expect(new Set(names).size).toBe(names.length)
+  })
+
+  it('se llega caminando desde la entrada a todas sus zonas', () => {
+    const alcanzables = reachableTiles(map, {
+      col: Math.floor(chiron.spawn.x / map.tilewidth),
+      row: Math.floor(chiron.spawn.y / map.tileheight),
+    })
+    for (const zone of getZones(map)) {
+      expect(
+        tilesOf(map, zone).some(({ col, row }) => alcanzables.has(`${col},${row}`)),
+        `no se llega caminando a la zona "${zone.name}"`,
+      ).toBe(true)
+    }
+  })
+
+  it('se llega desde la First Office al vestíbulo, no a cualquier lado', () => {
+    const arrival = findSpawnPoint(map, 'desde-first-office')
+    const zone = getZones(map).find(
+      (z) =>
+        arrival.x >= z.x &&
+        arrival.x < z.x + z.width &&
+        arrival.y >= z.y &&
+        arrival.y < z.y + z.height,
+    )
+    expect(zone?.name).toBe('Vestíbulo')
+  })
+
+  it('está pintado con su propio tileset oscuro, no con el de la First Office', () => {
+    const dark = map.tilesets.find((ts) => ts.name === DARK_TILESET)
+    expect(dark, `falta el tileset ${DARK_TILESET}`).toBeDefined()
+    expect(existsSync(resolve(dirname(chiron.file), dark!.image))).toBe(true)
+
+    // Todos los tiles dibujados salen de ahí: si alguno viniera del pack claro
+    // se vería un parche iluminado en el medio de la oficina.
+    const ajenos = new Set<string>()
+    for (const layer of tileLayers(map)) {
+      for (const gid of layer.data) {
+        if (!gid) continue
+        const ts = tilesetForGid(map, gid)
+        if (ts && ts.name !== DARK_TILESET) ajenos.add(ts.name)
+      }
+    }
+    expect([...ajenos]).toEqual([])
+  })
+
+  it('tiene su capa de luces, que no bloquea el paso', () => {
+    const layers = tileLayers(map)
+    expect(layers.length).toBeGreaterThanOrEqual(3)
+    // Las luces se dibujan sobre el piso; ninguna puede volver sólido un tile
+    // por el que ya se caminaba.
+    const luces = layers.find((l) => l.name === 'Luces')
+    expect(luces, 'falta la capa "Luces"').toBeDefined()
+    for (const [i, gid] of luces!.data.entries()) {
+      if (!gid) continue
+      const col = i % luces!.width
+      const row = Math.floor(i / luces!.width)
+      expect(tileCollides(map, gid), `la luz en (${col},${row}) bloquea el paso`).toBe(false)
     }
   })
 })
@@ -323,6 +429,31 @@ function tilesBlockedByFurniture(map: TiledMap): Set<string> {
     }
   }
   return blocked
+}
+
+/**
+ * ¿El punto de llegada queda de espaldas a la puerta por la que se entró? Se
+ * mide contra la puerta más cercana del mismo mapa, que es la que le
+ * corresponde: `dir` tiene que apuntar hacia adentro, lejos de ella.
+ */
+function facingAwayFromDoor(map: TiledMap, spawn: SpawnPoint): boolean {
+  const doors = findDoors(map)
+  expect(doors.length, 'el mapa no tiene puertas').toBeGreaterThan(0)
+  const nearest = doors
+    .map((d) => ({ x: d.x + d.width / 2, y: d.y + d.height / 2 }))
+    .reduce((best, c) =>
+      Math.hypot(c.x - spawn.x, c.y - spawn.y) < Math.hypot(best.x - spawn.x, best.y - spawn.y)
+        ? c
+        : best,
+    )
+  const away = { x: spawn.x - nearest.x, y: spawn.y - nearest.y }
+  const facing = {
+    up: { x: 0, y: -1 },
+    down: { x: 0, y: 1 },
+    left: { x: -1, y: 0 },
+    right: { x: 1, y: 0 },
+  }[spawn.dir]
+  return facing.x * away.x + facing.y * away.y > 0
 }
 
 /**
