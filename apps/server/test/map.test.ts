@@ -11,8 +11,10 @@ import {
   objectLayers,
   PROP_COLLIDES,
   tileLayers,
+  tilesetForGid,
   validateMap,
   type TiledMap,
+  type Zone,
 } from '@vto/shared'
 import { DEFAULT_MAP_FILE, loadOfficeMap } from '../src/map'
 
@@ -78,6 +80,26 @@ describe('Mapa de la oficina (archivo real)', () => {
     expect(names.some((n) => n.includes('escritorio'))).toBe(true)
     expect(names.some((n) => n.includes('reuni'))).toBe(true)
     expect(names.some((n) => n.includes('cocina'))).toBe(true)
+  })
+
+  it('tiene las salas del ala sur: dos de reunión más y una de foco', () => {
+    const names = getZones(map).map((z) => z.name)
+    expect(names.filter((n) => n.toLowerCase().includes('reuni')).length).toBeGreaterThanOrEqual(3)
+    expect(names).toContain('Sala de foco')
+  })
+
+  it('no hay ninguna sala que atrape: se llega caminando a todas las zonas', () => {
+    const spawn = findSpawnPoint(map)
+    const alcanzables = reachableTiles(map, {
+      col: Math.floor(spawn.x / map.tilewidth),
+      row: Math.floor(spawn.y / map.tileheight),
+    })
+    for (const zone of getZones(map)) {
+      expect(
+        tilesOf(map, zone).some(({ col, row }) => alcanzables.has(`${col},${row}`)),
+        `no se llega caminando a la zona "${zone.name}"`,
+      ).toBe(true)
+    }
   })
 
   it('la colisión de los objetos está en el mapa, no en código', () => {
@@ -177,3 +199,84 @@ describe('loadOfficeMap: mapas inválidos fallan con mensaje claro', () => {
     expect(() => loadOfficeMap(write('ext.json', external))).toThrow(/no está embebido/)
   })
 })
+
+/** Tiles que ocupa una zona. */
+function tilesOf(map: TiledMap, zone: Zone) {
+  const out: { col: number; row: number }[] = []
+  for (
+    let row = Math.floor(zone.y / map.tileheight);
+    row * map.tileheight < zone.y + zone.height;
+    row++
+  )
+    for (
+      let col = Math.floor(zone.x / map.tilewidth);
+      col * map.tilewidth < zone.x + zone.width;
+      col++
+    )
+      out.push({ col, row })
+  return out
+}
+
+/** Tiles bloqueados por un mueble con colisión (los tiles los cubre `isSolidAt`). */
+function tilesBlockedByFurniture(map: TiledMap): Set<string> {
+  const blocked = new Set<string>()
+  for (const layer of objectLayers(map)) {
+    for (const obj of layer.objects) {
+      if (!obj.gid || !objectCollides(layer, obj)) continue
+      const tileset = tilesetForGid(map, obj.gid)
+      const width = obj.width ?? tileset?.tilewidth ?? map.tilewidth
+      const height = obj.height ?? tileset?.tileheight ?? map.tileheight
+      // En Tiled la `y` de un objeto-tile es su borde inferior.
+      for (
+        let row = Math.floor((obj.y - height) / map.tileheight);
+        row * map.tileheight < obj.y;
+        row++
+      )
+        for (
+          let col = Math.floor(obj.x / map.tilewidth);
+          col * map.tilewidth < obj.x + width;
+          col++
+        )
+          blocked.add(`${col},${row}`)
+    }
+  }
+  return blocked
+}
+
+/**
+ * Tiles a los que se llega caminando desde `start`, con la misma noción de
+ * "bloqueado" que usa el juego: tiles con `collides` y muebles con colisión.
+ */
+function reachableTiles(map: TiledMap, start: { col: number; row: number }): Set<string> {
+  const furniture = tilesBlockedByFurniture(map)
+  const blocked = (col: number, row: number) =>
+    col < 0 ||
+    row < 0 ||
+    col >= map.width ||
+    row >= map.height ||
+    furniture.has(`${col},${row}`) ||
+    isSolidAt(
+      map,
+      col * map.tilewidth + map.tilewidth / 2,
+      row * map.tileheight + map.tileheight / 2,
+    )
+
+  const seen = new Set<string>([`${start.col},${start.row}`])
+  const pending = [start]
+  while (pending.length > 0) {
+    const { col, row } = pending.pop()!
+    for (const [dc, dr] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ]) {
+      const next = { col: col + dc, row: row + dr }
+      const key = `${next.col},${next.row}`
+      if (seen.has(key) || blocked(next.col, next.row)) continue
+      seen.add(key)
+      pending.push(next)
+    }
+  }
+  return seen
+}

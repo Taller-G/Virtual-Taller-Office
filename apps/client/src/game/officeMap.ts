@@ -20,10 +20,12 @@ import { LOGO_KEY, MAP_KEY } from './BootScene'
 const LOGO_ZONE = 'Recepción'
 /**
  * Posición del logo dentro de la zona de recepción, como fracción de su ancho
- * y desde su borde superior en px. Elegido para caer en la pared de ladrillo
- * libre a la izquierda del monitor, sin tapar muebles.
+ * y desde su borde superior en px. Elegido para caer en el piso libre que
+ * queda entre el banco de espera y el mostrador, debajo del monitor: es el
+ * tramo despejado más a la derecha donde el logo (160 px de ancho) entra
+ * entero sin tapar ningún mueble ni salirse de la recepción.
  */
-const LOGO_ZONE_FRAC_X = 0.28
+const LOGO_ZONE_FRAC_X = 0.5
 const LOGO_ZONE_OFFSET_Y = 64
 
 /** Bits de volteo que Tiled guarda en el gid de un objeto. */

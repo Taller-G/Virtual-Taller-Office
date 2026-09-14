@@ -66,9 +66,11 @@ Los muebles son **objetos-tile** (herramienta "Insert Tile" de Tiled) en capas d
 ### Zonas (recomendado)
 
 - Rectángulos con clase `zone` y un nombre (`Recepción`, `Escritorios`, `Sala de reunión`,
-  `Cocina y descanso`…). La app muestra el nombre como etiqueta en la esquina superior izquierda
-  de cada zona.
-- Las pruebas del servidor exigen que existan al menos esas cuatro zonas.
+  `Cocina y descanso`, `Sala de reunión Sur`, `Sala de reunión Este`, `Sala de foco`…). La app
+  muestra el nombre como etiqueta en la esquina superior izquierda de cada zona.
+- Las pruebas del servidor exigen que existan al menos esas cuatro zonas, más las tres salas del
+  ala sur, y que se llegue caminando desde el spawn a **todas** las zonas: una sala sin puerta
+  transitable hace fallar las pruebas.
 
 ### Tilesets
 
@@ -114,4 +116,6 @@ una imagen de tileset.
 El plano parte del mapa de [SkyOffice](https://github.com/kevinshen56714/SkyOffice) (MIT), retocado
 para la oficina de Taller: recepción con spawn, cocina y descanso con mostrador, bacha, heladera y
 expendedora, sala de reunión con mesa y pizarra, y sala de escritorios con puestos adicionales.
+El ala sur (filas 25-39) se agregó después colgando del pasillo vertical: `Sala de reunión Sur`,
+`Sala de reunión Este` y `Sala de foco`, cada una con su puerta al pasillo.
 Los gráficos son de LimeZu; ver `docs/licencias-assets.md`.

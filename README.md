@@ -4,7 +4,7 @@ Oficina virtual 2D de Taller, estilo Gather: avatares en una sala compartida en 
 Este repositorio contiene la **fundación**: cliente web, servidor en tiempo real y la sala única
 **"Oficina Taller"** a la que todo el mundo entra automáticamente, con un ciclo de conexión sólido
 (entrar, salir, refrescar, perder la red, caída del servidor); el **mapa 2D de la oficina**
-(recepción, escritorios, sala de reunión, cocina) con paredes y muebles que bloquean el paso; la
+(recepción, escritorios, salas de reunión, sala de foco, cocina) con paredes y muebles que bloquean el paso; la
 **presencia en tiempo real**: cada persona elige nombre y avatar, se mueve con flechas o WASD, ve a
 los demás moverse con animación, y un panel muestra quién está y quién está ausente; y las
 **burbujas de conversación por proximidad**: acercarse a alguien abre un grupo que el servidor
@@ -208,7 +208,8 @@ misma burbuja en menos de 300 ms, un tercero entra y los tres ven tres miembros,
 y los otros siguen, al quedar uno desaparece, el jugador N+1 no entra en una burbuja llena, y una
 posición falsa del cliente no crea ni rompe burbujas distintas a las que calcula el servidor).
 Además validan el **mapa real** (`test/map.test.ts`):
-spawn único sobre piso transitable, cuatro zonas, tilesets embebidos con imágenes presentes y
+spawn único sobre piso transitable, las zonas de la oficina (incluidas las tres salas del ala sur),
+que se llegue caminando desde el spawn a todas ellas, tilesets embebidos con imágenes presentes y
 colisiones declaradas en el mapa; y el **catálogo de avatares** y la normalización de nombres
 (`test/identity.test.ts`).
 
