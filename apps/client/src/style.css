@@ -88,7 +88,7 @@ input {
   color: var(--muted);
 }
 
-/* ---- Layout: juego + panel ------------------------------------------------ */
+/* ---- Layout: game + panel -------------------------------------------------- */
 
 .layout {
   display: flex;
@@ -107,7 +107,7 @@ input {
   display: block;
 }
 
-/* ---- Panel de presencia --------------------------------------------------- */
+/* ---- Presence panel -------------------------------------------------------- */
 
 .presence {
   width: 15rem;
@@ -239,7 +239,7 @@ input {
   outline-offset: 1px;
 }
 
-/* ---- Botones -------------------------------------------------------------- */
+/* ---- Buttons --------------------------------------------------------------- */
 
 .button {
   padding: 0.55rem 0.9rem;
@@ -268,7 +268,7 @@ input {
   color: var(--warn);
 }
 
-/* ---- Avatares en DOM ------------------------------------------------------ */
+/* ---- Avatars in the DOM ---------------------------------------------------- */
 
 .avatar-thumb {
   display: inline-block;
@@ -307,7 +307,7 @@ input {
   background: #1b6ef322;
 }
 
-/* ---- Pantalla de entrada -------------------------------------------------- */
+/* ---- Entry screen ---------------------------------------------------------- */
 
 .entry {
   position: fixed;
@@ -364,7 +364,7 @@ input {
   color: var(--muted);
 }
 
-/* ---- Tabs de avatar ------------------------------------------------------- */
+/* ---- Avatar tabs ----------------------------------------------------------- */
 
 .entry__tabs {
   display: flex;
@@ -389,7 +389,7 @@ input {
   color: #fff;
 }
 
-/* ---- Editor de apariencia ------------------------------------------------- */
+/* ---- Appearance editor ----------------------------------------------------- */
 
 .appearance-editor {
   display: flex;
@@ -447,7 +447,7 @@ input {
   border: 1px solid #fff3;
 }
 
-/* ---- Avisos --------------------------------------------------------------- */
+/* ---- Notices --------------------------------------------------------------- */
 
 .toasts {
   position: absolute;
@@ -487,7 +487,7 @@ input {
   }
 }
 
-/* ---- Burbuja de conversación ---------------------------------------------- */
+/* ---- Conversation bubble --------------------------------------------------- */
 
 .bubble {
   flex: none;
@@ -552,7 +552,7 @@ input {
   color: var(--warn);
 }
 
-/* ---- Chat de la burbuja --------------------------------------------------- */
+/* ---- Bubble chat ----------------------------------------------------------- */
 
 .chat {
   flex: none;
@@ -577,7 +577,7 @@ input {
   color: var(--text);
 }
 
-/* Resalte al recibir un mensaje con la ventana en segundo plano. */
+/* Highlight when a message arrives with the window in the background. */
 .chat--alert {
   animation: chat-alert 1.2s ease-out 2;
 }
@@ -648,8 +648,8 @@ input {
 .chat__text {
   margin: 0;
   font-size: 0.85rem;
-  /* El texto del mensaje se muestra tal cual: una cadena larga sin espacios
-     se corta en vez de estirar el panel. */
+  /* The message text is shown as it is: a long string without spaces wraps
+     instead of stretching the panel. */
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }

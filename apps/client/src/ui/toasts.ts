@@ -1,7 +1,7 @@
 const TOAST_MS = 4_000
 const MAX_VISIBLE = 4
 
-/** Aviso discreto en la esquina del juego; desaparece solo. */
+/** Discreet notice in the corner of the game; it disappears on its own. */
 export function toast(text: string) {
   const host = document.getElementById('toasts')
   if (!host) return

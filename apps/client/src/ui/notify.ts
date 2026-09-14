@@ -1,28 +1,28 @@
 /**
- * Aviso de mensaje nuevo cuando la ventana no tiene el foco.
+ * Notice of a new message when the window does not have the focus.
  *
- * Dos señales discretas y ninguna intrusiva: un blip corto generado con
- * WebAudio (sin archivo de sonido) y un contador en el título de la pestaña.
- * Las dos se apagan solas en cuanto la ventana vuelve a tener el foco.
+ * Two discreet signals and no intrusive one: a short blip generated with
+ * WebAudio (no sound file) and a counter in the tab's title. Both switch
+ * themselves off as soon as the window has the focus again.
  */
 
 const BASE_TITLE = document.title
-/** Volumen del blip: audible sin sobresaltar. */
+/** Volume of the blip: audible without startling. */
 const VOLUME = 0.05
 
 let unread = 0
 let audio: AudioContext | undefined
 
-/** ¿La ventana está en segundo plano (otra pestaña, otra app, minimizada)? */
+/** Is the window in the background (another tab, another app, minimised)? */
 export function isWindowUnfocused(): boolean {
   return document.hidden || !document.hasFocus()
 }
 
 /**
- * Blip corto de dos tonos. El `AudioContext` se crea recién en el primer
- * aviso: a esa altura el usuario ya interactuó con la página (eligió nombre y
- * avatar), así que el navegador lo deja sonar. Si el audio no está disponible
- * se ignora en silencio: es un adorno, no una función.
+ * A short two-tone blip. The `AudioContext` is only created on the first
+ * notice: by then the user has already interacted with the page (they chose a
+ * name and an avatar), so the browser lets it play. If audio is unavailable it
+ * is ignored silently: it is decoration, not a feature.
  */
 function chime() {
   try {
@@ -42,26 +42,26 @@ function chime() {
     osc.start(now)
     osc.stop(now + 0.2)
   } catch {
-    // Sin audio disponible: el contador del título alcanza como aviso.
+    // No audio available: the title counter is notice enough.
   }
 }
 
-/** Avisa de un mensaje recibido sin foco: suma al contador y suena una vez. */
+/** Announces a message received without focus: bumps the counter and sounds once. */
 export function notifyUnread() {
   unread++
   document.title = `(${unread}) ${BASE_TITLE}`
   chime()
 }
 
-/** Vuelve el título a su forma normal y olvida los pendientes. */
+/** Puts the title back to its normal form and forgets what is pending. */
 export function clearUnread() {
   unread = 0
   document.title = BASE_TITLE
 }
 
 /**
- * Deja que el foco de la ventana limpie el aviso. `extra` se llama junto con
- * la limpieza (lo usa el panel para apagar su resaltado).
+ * Lets the window's focus clear the notice. `extra` is called along with the
+ * clearing (the panel uses it to switch off its highlight).
  */
 export function watchFocus(extra?: () => void) {
   const clear = () => {

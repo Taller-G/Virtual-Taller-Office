@@ -2,27 +2,27 @@ import type { ChatRejection } from './chat'
 import type { Direction } from './avatars'
 
 /**
- * Tipos de mensaje cliente <-> servidor. Se usan como claves en `room.send` /
- * `room.onMessage` en ambos lados, así un typo es error de compilación.
+ * Client <-> server message types. They are used as keys in `room.send` /
+ * `room.onMessage` on both sides, so a typo is a compile error.
  */
 export const Message = {
-  /** Servidor -> cliente, una vez al entrar: metadatos de la sala. */
+  /** Server -> client, once on join: room metadata. */
   ROOM_INFO: 'room_info',
-  /** Cliente -> servidor: posición y animación de mi avatar (px en coordenadas del mapa). */
+  /** Client -> server: position and animation of my avatar (px in map coordinates). */
   MOVE: 'move',
-  /** Cliente -> servidor: cambiar mi nombre visible. */
+  /** Client -> server: change my visible name. */
   SET_NAME: 'set_name',
-  /** Cliente -> servidor: fijar o quitar el estado "ausente" a mano. */
+  /** Client -> server: set or clear the "away" state by hand. */
   SET_AWAY: 'set_away',
-  /** Cliente -> servidor: mandar un mensaje a mi burbuja de conversación. */
+  /** Client -> server: send a message to my conversation bubble. */
   CHAT_SEND: 'chat_send',
   /**
-   * Servidor -> cliente: un mensaje de la burbuja. Solo lo reciben los
-   * miembros que la burbuja del remitente tenía en ese instante, el remitente
-   * incluido: ese eco es el acuse de "enviado" y trae la hora del servidor.
+   * Server -> client: a message from the bubble. Only the members the
+   * sender's bubble had at that instant receive it, the sender included: that
+   * echo is the "sent" acknowledgement and carries the server's timestamp.
    */
   CHAT_MESSAGE: 'chat_message',
-  /** Servidor -> remitente: el mensaje no se aceptó (con el motivo). */
+  /** Server -> sender: the message was not accepted (with the reason). */
   CHAT_ERROR: 'chat_error',
 } as const
 
@@ -30,11 +30,11 @@ export type MessageType = (typeof Message)[keyof typeof Message]
 
 export interface RoomInfoPayload {
   roomId: string
-  /** Id del mundo que hospeda esta sala (ver `worlds.ts`). */
+  /** Id of the world this room hosts (see `worlds.ts`). */
   worldId: string
-  /** Nombre visible del mundo. */
+  /** Visible name of the world. */
   name: string
-  /** Identificador de sesión asignado al cliente que recibe el mensaje. */
+  /** Session identifier assigned to the client receiving the message. */
   sessionId: string
 }
 
@@ -54,21 +54,21 @@ export interface SetAwayPayload {
 }
 
 export interface ChatSendPayload {
-  /** Id que elige el cliente para reconocer el eco de su propio mensaje. */
+  /** Id chosen by the client to recognise the echo of its own message. */
   id: string
   text: string
 }
 
 export interface ChatMessagePayload {
   id: string
-  /** Burbuja en la que se dijo; el cliente descarta lo que no sea la suya. */
+  /** Bubble it was said in; the client discards anything that is not its own. */
   bubbleId: string
-  /** sessionId del autor. */
+  /** sessionId of the author. */
   from: string
-  /** Nombre visible del autor al momento de mandarlo. */
+  /** Visible name of the author at the time of sending. */
   name: string
   text: string
-  /** Hora del servidor (epoch ms): la misma para todos los que lo reciben. */
+  /** Server time (epoch ms): the same for everyone who receives it. */
   at: number
 }
 

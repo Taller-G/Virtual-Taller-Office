@@ -1,36 +1,37 @@
 import { Bubble, type OfficeState, type Player } from '@vto/shared'
 
 /**
- * Burbujas de conversación por proximidad: la semántica de los "groups" de
- * WorkAdventure (`back/src/Model/Group.ts`), decidida íntegramente en el
- * servidor sobre el estado sincronizado. El cliente no puede pedir ni forzar
- * su pertenencia: solo refleja `state.bubbles` y `player.bubbleId`.
+ * Proximity conversation bubbles: the semantics of WorkAdventure's "groups"
+ * (`back/src/Model/Group.ts`), decided entirely on the server over the
+ * synchronised state. The client can neither request nor force its own
+ * membership: it only reflects `state.bubbles` and `player.bubbleId`.
  *
- * Reglas:
- * - Un jugador sin burbuja que queda a menos de `radius` de otro jugador sin
- *   burbuja forma una burbuja con él. Si lo que tiene cerca es el centro de
- *   una burbuja existente que no está llena, se suma a ella. Si hay varias
- *   opciones, gana la más cercana.
- * - La posición de la burbuja es el baricentro de sus miembros y se recalcula
- *   con cada movimiento.
- * - Un miembro que, al moverse, queda a más de `radius` del baricentro sale de
- *   la burbuja. Medir contra el baricentro da histéresis: dos personas se
- *   juntan a `radius` y se sueltan recién a ~`2 * radius`, así no parpadea.
- * - Cuando queda un solo miembro la burbuja se destruye. Los que quedan
- *   libres se reevalúan en el momento: si siguen pegados a alguien libre,
- *   abren una burbuja nueva sin esperar a que alguien camine.
- * - Una burbuja con `maxMembers` miembros no absorbe a nadie más; en cuanto
- *   deja de estar llena, absorbe a los libres que tenga al alcance.
+ * Rules:
+ * - A player without a bubble who comes within `radius` of another player
+ *   without a bubble forms a bubble with them. If what they have nearby is
+ *   the centre of an existing bubble that is not full, they join it. If there
+ *   are several options, the closest one wins.
+ * - The position of the bubble is the centroid of its members and it is
+ *   recomputed with every movement.
+ * - A member who, on moving, ends up further than `radius` from the centroid
+ *   leaves the bubble. Measuring against the centroid gives hysteresis: two
+ *   people join at `radius` and only break apart at ~`2 * radius`, so it does
+ *   not flicker.
+ * - When a single member is left the bubble is destroyed. Those who are freed
+ *   are re-evaluated right away: if they are still next to someone free, they
+ *   open a new bubble without waiting for anyone to walk.
+ * - A bubble with `maxMembers` members absorbs nobody else; as soon as it
+ *   stops being full, it absorbs the free players within reach.
  *
- * Las burbujas se forman al entrar en el radio, sin esperar a que el jugador
- * se detenga (WorkAdventure espera a que frene): el requisito pide que ambos
- * la vean en menos de 300 ms.
+ * Bubbles form on entering the radius, without waiting for the player to stop
+ * (WorkAdventure waits until they halt): the requirement asks that both see
+ * it in under 300 ms.
  */
 
 export interface BubbleSettings {
-  /** Radio en px. */
+  /** Radius in px. */
   radius: number
-  /** Tope de miembros por burbuja. */
+  /** Cap of members per bubble. */
   maxMembers: number
 }
 
@@ -49,8 +50,8 @@ export class BubbleManager {
     readonly settings: BubbleSettings,
     private readonly events: BubbleEvents = {},
   ) {
-    if (!(settings.radius > 0)) throw new Error('El radio de las burbujas debe ser > 0')
-    if (!(settings.maxMembers >= 2)) throw new Error('El tope de miembros debe ser >= 2')
+    if (!(settings.radius > 0)) throw new Error('The bubble radius must be > 0')
+    if (!(settings.maxMembers >= 2)) throw new Error('The member cap must be >= 2')
     state.bubbleRadius = settings.radius
     state.bubbleMaxMembers = settings.maxMembers
   }
@@ -71,11 +72,11 @@ export class BubbleManager {
     return bubble.members.length >= this.settings.maxMembers
   }
 
-  /** Recalcula la pertenencia del jugador tras un cambio de posición. */
+  /** Recomputes the player's membership after a change of position. */
   onPlayerMoved(player: Player) {
     const current = this.bubbleOf(player)
     if (current) {
-      // Si con la nueva posición el jugador queda fuera del baricentro, sale.
+      // If the new position leaves the player outside the centroid, they leave.
       const center = this.barycenter(current)
       if (distance(player, center) > this.settings.radius) {
         this.leave(current, player)
@@ -89,9 +90,10 @@ export class BubbleManager {
   }
 
   /**
-   * El jugador dejó la sala: sale de su burbuja (y la destruye si queda solo).
-   * Se llama **después** de quitarlo de `state.players`, para que los que
-   * queden libres no vuelvan a agruparse con quien ya se fue.
+   * The player left the room: they leave their bubble (and destroy it if they
+   * are the only one left). It is called **after** removing them from
+   * `state.players`, so that those who are freed do not group up again with
+   * someone who has already gone.
    */
   onPlayerLeft(player: Player) {
     const bubble = this.bubbleOf(player)
@@ -100,7 +102,7 @@ export class BubbleManager {
 
   // ---------------------------------------------------------------------------
 
-  /** Busca el jugador libre o la burbuja no llena más cercana dentro del radio. */
+  /** Looks for the closest free player or non-full bubble within the radius. */
   private tryJoin(player: Player) {
     const radius = this.settings.radius
     let best: { kind: 'player'; target: Player } | { kind: 'bubble'; target: Bubble } | undefined
@@ -163,15 +165,15 @@ export class BubbleManager {
       this.destroy(bubble)
     } else {
       this.updatePosition(bubble)
-      // Si estaba llena y ahora entra alguien más, se suma a quien esperaba.
+      // If it was full and now someone else fits, whoever was waiting joins.
       this.absorbNearby(bubble)
     }
   }
 
   /**
-   * Vacía y quita la burbuja. Los miembros que quedan libres se reevalúan: el
-   * que sigue pegado a otra persona libre abre una burbuja nueva ahí mismo,
-   * sin esperar a que alguien dé un paso.
+   * Empties and removes the bubble. The members that are freed are
+   * re-evaluated: whoever is still next to another free person opens a new
+   * bubble right there, without waiting for anyone to take a step.
    */
   private destroy(bubble: Bubble) {
     const freed: Player[] = []
@@ -191,7 +193,7 @@ export class BubbleManager {
     }
   }
 
-  /** Suma a la burbuja a los jugadores libres que estén dentro del radio de su centro. */
+  /** Adds to the bubble the free players that are within the radius of its centre. */
   private absorbNearby(bubble: Bubble) {
     this.state.players.forEach((other) => {
       if (this.isFull(bubble) || other.bubbleId) return

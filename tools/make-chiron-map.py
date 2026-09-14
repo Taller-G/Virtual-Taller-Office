@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 """
-Genera el mapa del mundo "Chiron Office": una oficina oscura, más chica que la
-First Office, conectada con ella por una puerta.
+Generates the map of the "Chiron Office" world: a dark office, smaller than the
+First Office, connected to it by a door.
 
-Solo desarrollo: el resultado se versiona en
-`apps/client/public/assets/map/chiron-office.json` y después se edita en Tiled
-como cualquier otro mapa (ver `docs/mapa.md`). Este script existe para poder
-rehacerlo desde cero de forma reproducible.
+Development only: the result is committed in
+`apps/client/public/assets/map/chiron-office.json` and is then edited in Tiled
+like any other map (see `docs/map.md`). This script exists so it can be remade
+from scratch reproducibly.
 
-Uso:  python3 tools/make-chiron-map.py
+Usage:  python3 tools/make-chiron-map.py
 
-Cómo funciona: toma los tilesets embebidos de la First Office (mismas imágenes
-y mismos firstgid, así los gid significan lo mismo en los dos mapas), dibuja
-una sala rectangular con piso oscuro, copia un par de grupos de muebles de la
-First Office y agrega spawn, puerta de vuelta y zona. Lo oscuro no son tiles
-nuevos: es la propiedad `ambient` del mapa, que el cliente pinta encima.
+How it works: it takes the First Office's embedded tilesets (the same images and
+the same firstgids, so gids mean the same thing in both maps), draws a
+rectangular room with a dark floor, copies a couple of furniture clusters from
+the First Office and adds the spawn, the return door and the zone. The darkness
+is not new tiles: it is the map's `ambient` property, which the client paints
+on top.
 """
 
 from __future__ import annotations
@@ -24,29 +25,29 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MAPS = ROOT / 'apps/client/public/assets/map'
-SOURCE = MAPS / 'oficina-taller.json'
+SOURCE = MAPS / 'first-office.json'
 TARGET = MAPS / 'chiron-office.json'
 
 TILE = 32
 WIDTH, HEIGHT = 28, 20
 
-# Tiles de FloorAndGround usados para la sala (gid = id + 1, firstgid 1).
-FLOOR = 731  # alfombra oscura, sin colisión
+# FloorAndGround tiles used for the room (gid = id + 1, firstgid 1).
+FLOOR = 731  # dark carpet, no collision
 WALL_TOP_LEFT, WALL_TOP, WALL_TOP_RIGHT = 29, 594, 90
-WALL_UNDER_TOP = 658  # segunda fila del muro de arriba
+WALL_UNDER_TOP = 658  # second row of the top wall
 WALL_LEFT, WALL_RIGHT = 92, 154
 WALL_BOTTOM_LEFT, WALL_BOTTOM, WALL_BOTTOM_RIGHT = 216, 217, 218
 
-# Grupos de muebles que se copian de la First Office, con el desplazamiento
-# (en tiles) con el que caen en la sala de Chiron.
+# Furniture clusters copied from the First Office, with the offset (in tiles)
+# at which they land in Chiron's room.
 CLUSTERS = [
-    # La sala de reunión completa (mesa, sillas, pizarra): el corazón del lugar.
+    # The whole meeting room (table, chairs, whiteboard): the heart of the place.
     {'rect': (192, 544, 416, 224), 'offset': (1, -10)},
-    # Un par de escritorios con computadora contra la pared de arriba.
+    # A couple of desks with computers against the top wall.
     {'rect': (928, 480, 320, 128), 'offset': (-22, -11)},
 ]
 
-# Puerta de vuelta a la First Office y punto de llegada desde ella.
+# Return door to the First Office and the arrival point coming from it.
 DOOR_TILE = (13, 17)
 ARRIVAL_TILE = (13, 15)
 ENTRY_TILE = (13, 13)
@@ -57,7 +58,7 @@ def load_source() -> dict:
 
 
 def build_tiles() -> tuple[list[int], list[int]]:
-    """Capa de piso (todo alfombra) y capa de paredes (el marco de la sala)."""
+    """Floor layer (all carpet) and wall layer (the frame of the room)."""
     floor = [0] * (WIDTH * HEIGHT)
     walls = [0] * (WIDTH * HEIGHT)
 
@@ -86,14 +87,14 @@ def build_tiles() -> tuple[list[int], list[int]]:
 
 
 def copy_objects(source: dict) -> tuple[list[dict], list[dict]]:
-    """Muebles de la First Office trasladados a la sala de Chiron."""
+    """Furniture from the First Office moved into Chiron's room."""
     decor: list[dict] = []
     solid: list[dict] = []
     for layer in source['layers']:
         if layer['type'] != 'objectgroup':
             continue
-        target = solid if layer['name'] == 'MueblesColision' else decor
-        if layer['name'] not in ('Muebles', 'MueblesColision'):
+        target = solid if layer['name'] == 'FurnitureCollision' else decor
+        if layer['name'] not in ('Furniture', 'FurnitureCollision'):
             continue
         for obj in layer['objects']:
             if not obj.get('gid'):
@@ -131,7 +132,7 @@ def build() -> dict:
     door_x, door_y = DOOR_TILE[0] * TILE, DOOR_TILE[1] * TILE
     door = {
         'id': next_id,
-        'name': 'Puerta a la First Office',
+        'name': 'Door to the First Office',
         'type': 'door',
         'x': door_x,
         'y': door_y,
@@ -141,7 +142,7 @@ def build() -> dict:
         'visible': True,
         'properties': [
             {'name': 'world', 'type': 'string', 'value': 'first-office'},
-            {'name': 'spawn', 'type': 'string', 'value': 'desde-chiron'},
+            {'name': 'spawn', 'type': 'string', 'value': 'from-chiron'},
         ],
     }
     next_id += 1
@@ -162,7 +163,7 @@ def build() -> dict:
         },
         {
             'id': next_id + 1,
-            'name': 'desde-first-office',
+            'name': 'from-first-office',
             'type': 'spawn',
             'point': True,
             'x': ARRIVAL_TILE[0] * TILE + TILE / 2,
@@ -171,7 +172,7 @@ def build() -> dict:
             'height': 0,
             'rotation': 0,
             'visible': True,
-            # Se llega mirando hacia adentro de la sala, de espaldas a la puerta.
+            # You arrive facing into the room, with your back to the door.
             'properties': [
                 {'name': 'radius', 'type': 'int', 'value': 8},
                 {'name': 'dir', 'type': 'string', 'value': 'up'},
@@ -210,8 +211,8 @@ def build() -> dict:
         'nextobjectid': next_id,
         'properties': [
             {'name': 'name', 'type': 'string', 'value': 'Chiron Office'},
-            # Color ambiente (#AARRGGBB): el cliente lo pinta encima de todo el
-            # mundo. Es lo que hace que Chiron se sienta oscura.
+            # Ambient colour (#AARRGGBB): the client paints it over the whole
+            # world. It is what makes Chiron feel dark.
             {'name': 'ambient', 'type': 'color', 'value': '#66070a18'},
         ],
         'tilesets': source['tilesets'],
@@ -219,7 +220,7 @@ def build() -> dict:
             {
                 'type': 'tilelayer',
                 'id': 1,
-                'name': 'Piso',
+                'name': 'Floor',
                 'x': 0,
                 'y': 0,
                 'width': WIDTH,
@@ -231,7 +232,7 @@ def build() -> dict:
             {
                 'type': 'tilelayer',
                 'id': 2,
-                'name': 'Paredes',
+                'name': 'Walls',
                 'x': 0,
                 'y': 0,
                 'width': WIDTH,
@@ -243,7 +244,7 @@ def build() -> dict:
             {
                 'type': 'objectgroup',
                 'id': 3,
-                'name': 'Muebles',
+                'name': 'Furniture',
                 'draworder': 'topdown',
                 'opacity': 1,
                 'visible': True,
@@ -255,7 +256,7 @@ def build() -> dict:
             {
                 'type': 'objectgroup',
                 'id': 4,
-                'name': 'MueblesColision',
+                'name': 'FurnitureCollision',
                 'draworder': 'topdown',
                 'opacity': 1,
                 'visible': True,
@@ -267,7 +268,7 @@ def build() -> dict:
             {
                 'type': 'objectgroup',
                 'id': 5,
-                'name': 'Zonas',
+                'name': 'Zones',
                 'draworder': 'topdown',
                 'opacity': 1,
                 'visible': True,
@@ -278,7 +279,7 @@ def build() -> dict:
             {
                 'type': 'objectgroup',
                 'id': 6,
-                'name': 'Puertas',
+                'name': 'Doors',
                 'draworder': 'topdown',
                 'opacity': 1,
                 'visible': True,
@@ -302,12 +303,12 @@ def build() -> dict:
 
 
 def main() -> None:
-    # Una sola línea, como guarda Tiled y como está la First Office: así los
-    # diffs del mapa se leen por lo que cambió, no por el formato.
+    # A single line, the way Tiled saves it and the way the First Office is:
+    # that way the map's diffs read by what changed, not by the formatting.
     TARGET.write_text(
         json.dumps(build(), ensure_ascii=False, separators=(',', ':')), encoding='utf-8'
     )
-    print(f'escrito {TARGET.relative_to(ROOT)}')
+    print(f'written {TARGET.relative_to(ROOT)}')
 
 
 if __name__ == '__main__':

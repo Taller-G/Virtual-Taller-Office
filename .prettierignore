@@ -4,5 +4,5 @@ build
 coverage
 package-lock.json
 
-# Mapas Tiled: los genera el editor, no se formatean a mano
+# Tiled maps: the editor generates them, they are not formatted by hand
 apps/client/public/assets/map/*.json

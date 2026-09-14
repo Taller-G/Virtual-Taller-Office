@@ -1,4 +1,4 @@
-# Construir desde la RAÍZ del monorepo:
+# Build from the ROOT of the monorepo:
 #   docker build -f apps/server/Dockerfile -t vto-server .
 #   docker run -p 2567:2567 -e PORT=2567 vto-server
 FROM node:22-alpine AS build
@@ -19,7 +19,7 @@ WORKDIR /repo
 COPY --from=build /repo/node_modules ./node_modules
 COPY --from=build /repo/apps/server/build ./apps/server/build
 COPY --from=build /repo/apps/server/package.json ./apps/server/package.json
-# El servidor lee el mismo mapa Tiled que sirve el cliente (spawn y límites).
+# The server reads the same Tiled maps the client serves (spawns and bounds).
 COPY apps/client/public/assets/map ./apps/client/public/assets/map
 EXPOSE 2567
 CMD ["node", "apps/server/build/index.mjs"]

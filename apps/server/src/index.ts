@@ -6,9 +6,9 @@ import { config } from './config'
 import { worldMaps } from './map'
 
 /**
- * Deja viva la sala de cada mundo desde el arranque. Así dos clientes que
- * entran a la vez no pueden crear dos instancias del mismo mundo en paralelo,
- * y una puerta siempre encuentra su destino en pie.
+ * Keeps every world's room alive from boot. That way two clients joining at
+ * the same time cannot create two instances of the same world in parallel,
+ * and a door always finds its destination standing.
  */
 async function ensureWorldRooms() {
   for (const world of WORLDS) {
@@ -16,12 +16,12 @@ async function ensureWorldRooms() {
     const existing = await matchMaker.query({ name })
     if (existing.length > 0) continue
     const room = await matchMaker.createRoom(name, {})
-    console.log(`[servidor] mundo "${world.name}" listo (sala ${name}, roomId=${room.roomId})`)
+    console.log(`[server] world "${world.name}" ready (room ${name}, roomId=${room.roomId})`)
   }
 }
 
-// Los mapas de todos los mundos se leen y validan antes de escuchar: una
-// puerta rota o un mapa inválido tienen que fallar acá, no con gente adentro.
+// The maps of every world are read and validated before listening: a broken
+// door or an invalid map has to fail here, not with people inside.
 worldMaps()
 
 await listen(app, config.port)

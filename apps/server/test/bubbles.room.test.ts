@@ -8,21 +8,21 @@ import type { WorldRoom } from '../src/rooms/WorldRoom'
 
 type TestClient = SdkRoom<WorldRoom, OfficeState>
 
-/** Espera hasta que `predicate` sea verdadera o venza `timeoutMs`; devuelve los ms que tardó. */
+/** Waits until `predicate` is true or `timeoutMs` expires; returns how many ms it took. */
 async function waitFor(predicate: () => boolean, timeoutMs: number, label: string) {
   const started = Date.now()
   while (!predicate()) {
-    if (Date.now() - started > timeoutMs) throw new Error(`Timeout esperando: ${label}`)
+    if (Date.now() - started > timeoutMs) throw new Error(`Timed out waiting for: ${label}`)
     await new Promise((resolve) => setTimeout(resolve, 5))
   }
   return Date.now() - started
 }
 
 /**
- * Todo lo que define "quién está en qué burbuja", en forma comparable: las
- * burbujas con sus miembros y el `bubbleId` de cada jugador. Sirve igual para
- * el estado del servidor y para el de cualquier cliente, así se puede exigir
- * que coincidan exactamente.
+ * Everything that defines "who is in which bubble", in comparable form: the
+ * bubbles with their members and each player's `bubbleId`. It works the same
+ * for the server's state and for any client's, so they can be required to
+ * match exactly.
  */
 function snapshot(state: OfficeState) {
   return JSON.stringify({
@@ -35,13 +35,13 @@ function snapshot(state: OfficeState) {
   })
 }
 
-describe('Sala de un mundo: burbujas de conversación por proximidad', () => {
+describe('A world\'s room: proximity conversation bubbles', () => {
   let colyseus: ColyseusTestServer
   let room: WorldRoom
   const clients: TestClient[] = []
-  /** BUBBLE_RADIUS_PX en vitest.config.ts (2 tiles de 32 px). */
+  /** BUBBLE_RADIUS_PX in vitest.config.ts (2 tiles of 32 px). */
   const RADIUS = 64
-  /** Lejos del spawn del mapa (848, 208) y de las posiciones de prueba. */
+  /** Far from the map's spawn (848, 208) and from the test positions. */
   const FAR = { x: 300, y: 700 }
 
   async function connect(name: string, x: number, y: number) {
@@ -50,12 +50,12 @@ describe('Sala de un mundo: burbujas de conversación por proximidad', () => {
     client.onMessage(Message.ROOM_INFO, () => {})
     clients.push(client)
     await client.waitForInitialState()
-    // Cada jugador arranca en un lugar controlado, no en el spawn del mapa.
+    // Each player starts at a controlled place, not at the map's spawn.
     await moveTo(client, x, y)
     return client
   }
 
-  /** Manda la posición y espera a que el servidor la haya aplicado (x **e** y). */
+  /** Sends the position and waits until the server has applied it (x **and** y). */
   function moveTo(client: TestClient, x: number, y: number) {
     client.send(Message.MOVE, { x, y, dir: 'down', moving: false })
     return waitFor(
@@ -64,18 +64,18 @@ describe('Sala de un mundo: burbujas de conversación por proximidad', () => {
         return player?.x === x && player?.y === y
       },
       1_000,
-      `el servidor mueve a "${client.sessionId}" a (${x}, ${y})`,
+      `the server moves "${client.sessionId}" to (${x}, ${y})`,
     )
   }
 
-  /** Espera a que todos los clientes vean exactamente las burbujas del servidor. */
+  /** Waits until every client sees exactly the server's bubbles. */
   async function waitConverged(timeoutMs = 1_000) {
     const expected = snapshot(room.state)
     for (const client of clients) {
       await waitFor(
         () => snapshot(client.state) === expected,
         timeoutMs,
-        `"${client.sessionId}" converge con el servidor`,
+        `"${client.sessionId}" converges with the server`,
       )
     }
     return expected
@@ -105,7 +105,7 @@ describe('Sala de un mundo: burbujas de conversación por proximidad', () => {
     room = await colyseus.createRoom<WorldRoom>(roomNameFor(DEFAULT_WORLD_ID), {})
   }
 
-  it('radio y tope salen de la configuración y se replican a los clientes', async () => {
+  it('radius and cap come from the configuration and are replicated to the clients', async () => {
     await createRoom()
     expect(room.bubbles.radius).toBe(RADIUS)
     expect(room.bubbles.maxMembers).toBe(config.bubbleMaxMembers)
@@ -114,7 +114,7 @@ describe('Sala de un mundo: burbujas de conversación por proximidad', () => {
     expect(a.state.bubbleMaxMembers).toBe(config.bubbleMaxMembers)
   })
 
-  it('1. dos jugadores que se acercan ven la misma burbuja en ambos clientes en menos de 300 ms', async () => {
+  it('1. two players approaching each other see the same bubble on both clients in under 300 ms', async () => {
     await createRoom()
     const a = await connect('a', 100, 100)
     const b = await connect('b', FAR.x, FAR.y)
@@ -122,11 +122,11 @@ describe('Sala de un mundo: burbujas de conversación por proximidad', () => {
 
     const started = Date.now()
     b.send(Message.MOVE, { x: 100 + RADIUS, y: 100, dir: 'left', moving: true })
-    // Que ambos vean una burbuja es un cambio de 0 a 1: no puede dar falso positivo.
+    // Both seeing a bubble is a change from 0 to 1: it cannot give a false positive.
     await waitFor(
       () => a.state.bubbles.size === 1 && b.state.bubbles.size === 1,
       300,
-      'ambos la ven',
+      'both see it',
     )
     const elapsed = Date.now() - started
     expect(elapsed).toBeLessThan(300)
@@ -139,23 +139,23 @@ describe('Sala de un mundo: burbujas de conversación por proximidad', () => {
       expect([...seen.members].sort()).toEqual([a.sessionId, b.sessionId].sort())
       expect(client.state.players.get(a.sessionId)?.bubbleId).toBe(bubble.id)
       expect(client.state.players.get(b.sessionId)?.bubbleId).toBe(bubble.id)
-      // El centro es el baricentro de los dos.
+      // The centre is the centroid of the two.
       expect(seen.x).toBe(100 + RADIUS / 2)
       expect(seen.y).toBe(100)
     }
   })
 
-  it('2. un tercero que se acerca entra en la misma burbuja y los tres ven tres miembros', async () => {
+  it('2. a third one approaching joins the same bubble and all three see three members', async () => {
     await createRoom()
     const a = await connect('a', 100, 100)
     const b = await connect('b', 140, 100)
-    await waitFor(() => room.state.bubbles.size === 1, 1_000, 'burbuja de a y b')
+    await waitFor(() => room.state.bubbles.size === 1, 1_000, 'bubble of a and b')
     const [bubble] = [...room.state.bubbles.values()]
     const c = await connect('c', FAR.x, FAR.y)
     expect(room.state.players.get(c.sessionId)?.bubbleId).toBe('')
 
     await moveTo(c, 120, 100 + RADIUS)
-    await waitFor(() => bubble.members.length === 3, 1_000, 'el servidor suma a c')
+    await waitFor(() => bubble.members.length === 3, 1_000, 'the server adds c')
     await waitConverged()
 
     for (const client of [a, b, c]) {
@@ -167,20 +167,20 @@ describe('Sala de un mundo: burbujas de conversación por proximidad', () => {
     expect(room.state.bubbles.size).toBe(1)
   })
 
-  it('3. al alejarse uno, sale de la burbuja; los otros dos siguen adentro', async () => {
+  it('3. when one walks away they leave the bubble; the other two stay inside', async () => {
     await createRoom()
     const a = await connect('a', 100, 100)
     const b = await connect('b', 140, 100)
     const c = await connect('c', 120, 140)
-    await waitFor(() => room.state.bubbles.size === 1, 1_000, 'una burbuja')
+    await waitFor(() => room.state.bubbles.size === 1, 1_000, 'one bubble')
     const [bubble] = [...room.state.bubbles.values()]
-    await waitFor(() => bubble.members.length === 3, 1_000, 'burbuja de tres')
+    await waitFor(() => bubble.members.length === 3, 1_000, 'bubble of three')
 
     await moveTo(c, 120, 500)
     await waitFor(
       () => room.state.players.get(c.sessionId)?.bubbleId === '',
       1_000,
-      'el servidor saca a c',
+      'the server removes c',
     )
     await waitConverged()
 
@@ -190,20 +190,20 @@ describe('Sala de un mundo: burbujas de conversación por proximidad', () => {
       expect(client.state.players.get(a.sessionId)?.bubbleId).toBe(bubble.id)
       expect(client.state.players.get(b.sessionId)?.bubbleId).toBe(bubble.id)
       expect(client.state.players.get(c.sessionId)?.bubbleId).toBe('')
-      // El centro vuelve a ser el de los dos que quedaron.
+      // The centre goes back to that of the two that are left.
       expect(seen.x).toBe(120)
       expect(seen.y).toBe(100)
     }
   })
 
-  it('4. cuando queda uno solo, la burbuja desaparece para él', async () => {
+  it('4. when a single one is left, the bubble disappears for them', async () => {
     await createRoom()
     const a = await connect('a', 100, 100)
     const b = await connect('b', 140, 100)
-    await waitFor(() => room.state.bubbles.size === 1, 1_000, 'burbuja de dos')
+    await waitFor(() => room.state.bubbles.size === 1, 1_000, 'bubble of two')
 
     await moveTo(b, FAR.x, FAR.y)
-    await waitFor(() => room.state.bubbles.size === 0, 1_000, 'el servidor la destruye')
+    await waitFor(() => room.state.bubbles.size === 0, 1_000, 'the server destroys it')
     await waitConverged()
     for (const client of [a, b]) {
       expect(client.state.bubbles.size).toBe(0)
@@ -211,23 +211,23 @@ describe('Sala de un mundo: burbujas de conversación por proximidad', () => {
       expect(client.state.players.get(b.sessionId)?.bubbleId).toBe('')
     }
 
-    // Lo mismo si el otro se va de la sala en vez de alejarse.
+    // The same if the other one leaves the room instead of walking away.
     const c = await connect('c', 140, 100)
-    await waitFor(() => room.state.bubbles.size === 1, 1_000, 'burbuja con c')
+    await waitFor(() => room.state.bubbles.size === 1, 1_000, 'bubble with c')
     await c.leave(true)
     clients.splice(clients.indexOf(c), 1)
-    await waitFor(() => room.state.bubbles.size === 0, 1_000, 'se destruye al irse c')
+    await waitFor(() => room.state.bubbles.size === 0, 1_000, 'it is destroyed when c leaves')
     await waitConverged()
     expect(a.state.bubbles.size).toBe(0)
     expect(a.state.players.get(a.sessionId)?.bubbleId).toBe('')
   })
 
-  it('5. con el tope en N, el jugador N+1 que se acerca no entra y ve la burbuja llena', async () => {
+  it('5. with the cap at N, the N+1th player who approaches does not join and sees the bubble full', async () => {
     await createRoom()
     const n = config.bubbleMaxMembers
     const members: TestClient[] = []
     for (let i = 0; i < n; i++) {
-      // En un círculo chico alrededor de (100, 100): todos dentro del radio.
+      // On a small circle around (100, 100): all within the radius.
       const angle = (i / n) * Math.PI * 2
       members.push(
         await connect(
@@ -237,9 +237,9 @@ describe('Sala de un mundo: burbujas de conversación por proximidad', () => {
         ),
       )
     }
-    await waitFor(() => room.state.bubbles.size === 1, 1_000, 'una burbuja')
+    await waitFor(() => room.state.bubbles.size === 1, 1_000, 'one bubble')
     const [bubble] = [...room.state.bubbles.values()]
-    await waitFor(() => bubble.members.length === n, 1_000, `burbuja llena (${n})`)
+    await waitFor(() => bubble.members.length === n, 1_000, `full bubble (${n})`)
 
     const extra = await connect('extra', FAR.x, FAR.y)
     await moveTo(extra, 104, 104)
@@ -249,18 +249,18 @@ describe('Sala de un mundo: burbujas de conversación por proximidad', () => {
     expect(room.state.bubbles.size).toBe(1)
     await waitConverged()
 
-    // Lo que el cliente usa para mostrar "burbuja llena": no tengo burbuja, y la
-    // que tengo al alcance está al tope, con el mismo radio y tope del servidor.
+    // What the client uses to show "bubble full": I have no bubble, and the
+    // one within my reach is at the cap, with the server's own radius and cap.
     const me = extra.state.players.get(extra.sessionId)!
     const seen = extra.state.bubbles.get(bubble.id)!
     expect(me.bubbleId).toBe('')
     expect(Math.hypot(me.x - seen.x, me.y - seen.y)).toBeLessThanOrEqual(extra.state.bubbleRadius)
     expect(seen.members.length).toBe(extra.state.bubbleMaxMembers)
 
-    // Dos que sobran arman su propia burbuja en vez de entrar a la llena.
-    const other = await connect('otro', FAR.x, FAR.y)
+    // Two left over form their own bubble instead of joining the full one.
+    const other = await connect('other', FAR.x, FAR.y)
     await moveTo(other, 108, 108)
-    await waitFor(() => room.state.bubbles.size === 2, 1_000, 'segunda burbuja')
+    await waitFor(() => room.state.bubbles.size === 2, 1_000, 'second bubble')
     await waitConverged()
     const mine = room.state.players.get(extra.sessionId)?.bubbleId
     expect(mine).not.toBe('')
@@ -269,18 +269,18 @@ describe('Sala de un mundo: burbujas de conversación por proximidad', () => {
     expect(bubble.members.length).toBe(n)
   })
 
-  it('cuando alguien se va de la sala, los que quedan cerca se reagrupan sin caminar', async () => {
+  it('when someone leaves the room, those left nearby regroup without walking', async () => {
     await createRoom()
     const n = config.bubbleMaxMembers
     const inside: TestClient[] = []
     for (let i = 0; i < n; i++) inside.push(await connect(`m${i}`, 100 + i * 10, 100))
-    const waiting = await connect('espera', 100 + n * 10, 100)
-    await waitFor(() => room.state.bubbles.size === 1, 1_000, 'una burbuja llena')
+    const waiting = await connect('waiting', 100 + n * 10, 100)
+    await waitFor(() => room.state.bubbles.size === 1, 1_000, 'one full bubble')
     const [bubble] = [...room.state.bubbles.values()]
     expect(bubble.members.length).toBe(n)
     expect(room.state.players.get(waiting.sessionId)?.bubbleId).toBe('')
 
-    // Se va uno de la burbuja: nadie camina, pero el que esperaba entra.
+    // One leaves the bubble: nobody walks, but whoever was waiting joins.
     const leaving = inside[0]
     const leavingSessionId = leaving.sessionId
     await leaving.leave(true)
@@ -288,58 +288,59 @@ describe('Sala de un mundo: burbujas de conversación por proximidad', () => {
     await waitFor(
       () => room.state.players.get(waiting.sessionId)?.bubbleId !== '',
       1_000,
-      'el que esperaba entra',
+      'whoever was waiting joins',
     )
     expect(room.state.players.has(leavingSessionId)).toBe(false)
     expect(room.state.bubbles.size).toBe(1)
     expect([...room.state.bubbles.values()][0].members.length).toBe(n)
-    // Y el que se fue no quedó dentro de ninguna burbuja.
+    // And whoever left is not inside any bubble.
     for (const [, bb] of room.state.bubbles.entries()) {
       expect([...bb.members]).not.toContain(leavingSessionId)
     }
     await waitConverged()
   })
 
-  it('6. una posición falsa del cliente no crea ni rompe burbujas distintas a las que calcula el servidor', async () => {
+  it('6. a fake position from the client neither creates nor breaks bubbles other than the ones the server computes', async () => {
     await createRoom()
     const a = await connect('a', 100, 100)
     const b = await connect('b', 140, 100)
-    await waitFor(() => room.state.bubbles.size === 1, 1_000, 'burbuja de dos')
+    await waitFor(() => room.state.bubbles.size === 1, 1_000, 'bubble of two')
     const [bubble] = [...room.state.bubbles.values()]
     const before = await waitConverged()
 
-    // El protocolo no tiene ningún mensaje de burbujas: la membresía no se pide.
+    // The protocol has no bubble message at all: membership is not requested.
     expect(Object.values(Message).some((type) => type.includes('bubble'))).toBe(false)
 
-    // Coordenadas no numéricas: se ignoran, la burbuja no se mueve ni se rompe.
-    b.send(Message.MOVE, { x: 'lejos', y: NaN })
+    // Non-numeric coordinates: they are ignored, the bubble neither moves nor breaks.
+    b.send(Message.MOVE, { x: 'far', y: NaN })
     await room.waitForNextPatch().catch(() => {})
     expect(snapshot(room.state)).toBe(before)
     expect(room.state.bubbles.get(bubble.id)?.x).toBe(120)
 
-    // Una posición fuera del mapa se acota ANTES de decidir la burbuja: manda
-    // la posición acotada por el servidor, no la que inventó el cliente.
+    // A position outside the map is clamped BEFORE deciding the bubble: what
+    // counts is the position clamped by the server, not the one the client
+    // made up.
     const c = await connect('c', FAR.x, FAR.y)
     c.send(Message.MOVE, { x: -5_000, y: -5_000, dir: 'up', moving: false })
     await waitFor(
       () => room.state.players.get(c.sessionId)?.x === 0,
       1_000,
-      'el servidor acota a (0, 0)',
+      'the server clamps to (0, 0)',
     )
     expect(room.state.players.get(c.sessionId)?.bubbleId).toBe('')
     expect(room.state.bubbles.size).toBe(1)
 
-    // Y si el recorte lo deja pegado a otro, la burbuja sale igual del servidor.
+    // And if the clamping leaves them next to another, the bubble still comes from the server.
     await moveTo(a, 0, 0)
     await waitFor(
       () => room.state.players.get(c.sessionId)?.bubbleId !== '',
       1_000,
-      'c queda en burbuja con a en (0, 0)',
+      'c ends up in a bubble with a at (0, 0)',
     )
     expect(room.state.players.get(c.sessionId)?.bubbleId).toBe(
       room.state.players.get(a.sessionId)?.bubbleId,
     )
-    // Todos los clientes ven exactamente lo que calculó el servidor.
+    // Every client sees exactly what the server computed.
     await waitConverged()
   })
 })

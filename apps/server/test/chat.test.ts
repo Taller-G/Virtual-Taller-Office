@@ -6,9 +6,9 @@ import { ChatRelay } from '../src/chat'
 const RADIUS = 64
 
 /**
- * Arma un estado con los jugadores dados en sus posiciones y deja que el
- * `BubbleManager` real decida las burbujas: así el chat se prueba contra la
- * misma membresía que produce el juego, no contra una inventada.
+ * Builds a state with the given players at their positions and lets the real
+ * `BubbleManager` decide the bubbles: that way the chat is tested against the
+ * same membership the game produces, not against a made-up one.
  */
 function scenario(positions: Record<string, { x: number; y: number }>) {
   const state = new OfficeState()
@@ -34,9 +34,9 @@ function scenario(positions: Record<string, { x: number; y: number }>) {
   return { state, bubbles, chat, moveTo }
 }
 
-describe('ChatRelay: el mensaje solo llega a la burbuja del remitente', () => {
-  it('lo reciben los otros miembros y nadie de afuera', () => {
-    // a, b y c pegados (una burbuja de 3); d lejos, sin burbuja.
+describe('ChatRelay: the message only reaches the sender\'s bubble', () => {
+  it('the other members receive it and nobody outside does', () => {
+    // a, b and c next to each other (a bubble of 3); d far away, no bubble.
     const { chat, state } = scenario({
       a: { x: 100, y: 100 },
       b: { x: 120, y: 100 },
@@ -46,7 +46,7 @@ describe('ChatRelay: el mensaje solo llega a la burbuja del remitente', () => {
     expect(state.players.get('a')!.bubbleId).not.toBe('')
     expect(state.players.get('d')!.bubbleId).toBe('')
 
-    const outcome = chat.submit('a', { id: 'm1', text: 'hola' }, 1_000)
+    const outcome = chat.submit('a', { id: 'm1', text: 'hi' }, 1_000)
     expect(outcome.ok).toBe(true)
     if (!outcome.ok) return
     expect([...outcome.recipients].sort()).toEqual(['a', 'b', 'c'])
@@ -55,44 +55,44 @@ describe('ChatRelay: el mensaje solo llega a la burbuja del remitente', () => {
       id: 'm1',
       from: 'a',
       name: 'A',
-      text: 'hola',
+      text: 'hi',
       at: 1_000,
     })
   })
 
-  it('el que se aleja deja de estar entre los destinatarios', () => {
+  it('whoever walks away stops being among the recipients', () => {
     const { chat, moveTo } = scenario({
       a: { x: 100, y: 100 },
       b: { x: 120, y: 100 },
       c: { x: 110, y: 130 },
     })
     moveTo('c', 800, 800)
-    const outcome = chat.submit('a', { id: 'm2', text: 'seguimos?' }, 1_000)
+    const outcome = chat.submit('a', { id: 'm2', text: 'still there?' }, 1_000)
     expect(outcome.ok && [...outcome.recipients].sort()).toEqual(['a', 'b'])
-    // Y el que se fue tampoco puede escribirle a la burbuja que dejó.
-    const alone = chat.submit('c', { id: 'm3', text: 'me escuchan?' }, 1_100)
+    // And whoever left cannot write to the bubble they left either.
+    const alone = chat.submit('c', { id: 'm3', text: 'can you hear me?' }, 1_100)
     expect(alone).toEqual({ ok: false, error: { id: 'm3', reason: 'no_bubble' } })
   })
 
-  it('sin burbuja el mensaje se rechaza con "no_bubble"', () => {
+  it('without a bubble the message is rejected with "no_bubble"', () => {
     const { chat } = scenario({ a: { x: 100, y: 100 }, b: { x: 600, y: 600 } })
-    expect(chat.submit('a', { id: 'm4', text: 'hola?' }, 1_000)).toEqual({
+    expect(chat.submit('a', { id: 'm4', text: 'hello?' }, 1_000)).toEqual({
       ok: false,
       error: { id: 'm4', reason: 'no_bubble' },
     })
   })
 
-  it('nada del mensaje queda en el estado (son efímeros)', () => {
+  it('nothing from the message is left in the state (they are ephemeral)', () => {
     const { chat, state } = scenario({ a: { x: 100, y: 100 }, b: { x: 120, y: 100 } })
-    chat.submit('a', { id: 'm5', text: 'esto no se guarda' }, 1_000)
-    expect(JSON.stringify(state.toJSON())).not.toContain('esto no se guarda')
+    chat.submit('a', { id: 'm5', text: 'this is not stored' }, 1_000)
+    expect(JSON.stringify(state.toJSON())).not.toContain('this is not stored')
   })
 })
 
-describe('ChatRelay: validación y tope de ritmo', () => {
+describe('ChatRelay: validation and rate limit', () => {
   const together = { a: { x: 100, y: 100 }, b: { x: 120, y: 100 } }
 
-  it('rechaza el mensaje más largo que el límite y el vacío', () => {
+  it('rejects a message longer than the limit and an empty one', () => {
     const { chat } = scenario(together)
     const long = 'x'.repeat(CHAT_MAX_LENGTH + 1)
     expect(chat.submit('a', { id: 'm6', text: long }, 1_000)).toEqual({
@@ -105,36 +105,36 @@ describe('ChatRelay: validación y tope de ritmo', () => {
     })
   })
 
-  it('el texto con HTML viaja tal cual, sin escapar ni recortar', () => {
+  it('text with HTML travels as is, neither escaped nor truncated', () => {
     const { chat } = scenario(together)
-    const html = '<script>alert(1)</script> <b>hola</b>'
+    const html = '<script>alert(1)</script> <b>hi</b>'
     const outcome = chat.submit('a', { id: 'm8', text: html }, 1_000)
     expect(outcome.ok && outcome.message.text).toBe(html)
   })
 
-  it('normaliza saltos de línea, invisibles y espacios repetidos', () => {
-    expect(sanitizeChatText('hola\n\n   mundo​‮')).toBe('hola mundo')
+  it('normalises line breaks, invisible characters and repeated spaces', () => {
+    expect(sanitizeChatText('hello\n\n   world​‮')).toBe('hello world')
     expect(sanitizeChatText(42)).toBe('')
   })
 
-  it('corta al pasar el tope de mensajes por ventana y vuelve a dejar pasar después', () => {
+  it('cuts off past the per-window message cap and lets messages through again afterwards', () => {
     const { chat } = scenario(together)
     for (let i = 0; i < 5; i++) {
       expect(chat.submit('a', { id: `r${i}`, text: `msg ${i}` }, 1_000).ok).toBe(true)
     }
-    expect(chat.submit('a', { id: 'r5', text: 'uno más' }, 1_000)).toEqual({
+    expect(chat.submit('a', { id: 'r5', text: 'one more' }, 1_000)).toEqual({
       ok: false,
       error: { id: 'r5', reason: 'rate_limited' },
     })
-    // El tope es por jugador: el otro sigue pudiendo escribir.
-    expect(chat.submit('b', { id: 'r6', text: 'yo puedo' }, 1_000).ok).toBe(true)
-    // Pasada la ventana, el primero también.
-    expect(chat.submit('a', { id: 'r7', text: 'ya pasó' }, 3_100).ok).toBe(true)
+    // The cap is per player: the other one can still write.
+    expect(chat.submit('b', { id: 'r6', text: 'I can' }, 1_000).ok).toBe(true)
+    // Once the window has passed, so can the first one.
+    expect(chat.submit('a', { id: 'r7', text: 'it passed' }, 3_100).ok).toBe(true)
   })
 
-  it('pone un id propio si el que manda el cliente no sirve', () => {
+  it('assigns its own id when the one the client sends is unusable', () => {
     const { chat } = scenario(together)
-    const outcome = chat.submit('a', { id: '<img src=x>', text: 'hola' }, 1_000)
+    const outcome = chat.submit('a', { id: '<img src=x>', text: 'hi' }, 1_000)
     expect(outcome.ok && outcome.message.id).toMatch(/^[A-Za-z0-9_-]+$/)
   })
 })

@@ -23,21 +23,21 @@ import {
 import { DEFAULT_MAP_FILE, loadOfficeMap, loadWorldMaps } from '../src/map'
 
 /**
- * Estas pruebas corren contra el mapa REAL que se despliega. Si alguien lo
- * edita en Tiled y rompe el contrato (spawn faltante, tileset sin embeber,
- * imagen que no existe), fallan acá antes de llegar a producción.
+ * These tests run against the REAL map that gets deployed. If someone edits
+ * it in Tiled and breaks the contract (missing spawn, tileset not embedded,
+ * image that does not exist), they fail here before reaching production.
  */
-describe('Mapa de la oficina (archivo real)', () => {
+describe('Office map (real file)', () => {
   const office = loadOfficeMap(DEFAULT_MAP_FILE)
   const map = office.data
 
-  it('cumple el contrato mínimo', () => {
+  it('meets the minimum contract', () => {
     expect(validateMap(map)).toEqual([])
     expect(map.tilewidth).toBe(32)
     expect(map.tileheight).toBe(32)
   })
 
-  it('tiene un punto de aparición sobre piso transitable', () => {
+  it('has a spawn point on walkable floor', () => {
     const spawn = findSpawnPoint(map)
     expect(spawn.x).toBeGreaterThan(0)
     expect(spawn.y).toBeGreaterThan(0)
@@ -47,17 +47,17 @@ describe('Mapa de la oficina (archivo real)', () => {
     expect(spawn.radius).toBeGreaterThan(0)
   })
 
-  it('las imágenes de todos los tilesets existen junto al mapa', () => {
+  it('the images of every tileset exist next to the map', () => {
     for (const ts of map.tilesets) {
       const image = resolve(dirname(office.file), ts.image)
-      expect(existsSync(image), `falta ${ts.image} (tileset ${ts.name})`).toBe(true)
+      expect(existsSync(image), `missing ${ts.image} (tileset ${ts.name})`).toBe(true)
     }
   })
 
-  it('tiene capas separadas de piso, paredes, muebles y objetos con colisión', () => {
+  it('has separate layers for floor, walls, furniture and colliding objects', () => {
     const tiles = tileLayers(map)
     expect(tiles.length).toBeGreaterThanOrEqual(2)
-    // Al menos una capa de tiles sin colisiones (piso) y una con (paredes).
+    // At least one tile layer without collisions (floor) and one with them (walls).
     const withSolid = tiles.filter((layer) =>
       layer.data.some(
         (gid, i) =>
@@ -78,49 +78,51 @@ describe('Mapa de la oficina (archivo real)', () => {
     expect(decor.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('define las cuatro zonas mínimas de la oficina', () => {
+  it('defines the four minimum zones of the office', () => {
     const names = getZones(map).map((z) => z.name.toLowerCase())
-    expect(names.some((n) => n.includes('recepci'))).toBe(true)
-    expect(names.some((n) => n.includes('escritorio'))).toBe(true)
-    expect(names.some((n) => n.includes('reuni'))).toBe(true)
-    expect(names.some((n) => n.includes('cocina'))).toBe(true)
+    expect(names.some((n) => n.includes('reception'))).toBe(true)
+    expect(names.some((n) => n.includes('desks'))).toBe(true)
+    expect(names.some((n) => n.includes('meeting'))).toBe(true)
+    expect(names.some((n) => n.includes('kitchen'))).toBe(true)
   })
 
-  it('tiene las salas del ala sur: dos de reunión más y una de foco', () => {
+  it('has the south wing rooms: two more meeting rooms and a focus room', () => {
     const names = getZones(map).map((z) => z.name)
-    expect(names.filter((n) => n.toLowerCase().includes('reuni')).length).toBeGreaterThanOrEqual(3)
-    expect(names).toContain('Sala de foco')
+    expect(
+      names.filter((n) => n.toLowerCase().includes('meeting')).length,
+    ).toBeGreaterThanOrEqual(3)
+    expect(names).toContain('Focus Room')
   })
 
-  it('no hay ninguna sala que atrape: se llega caminando a todas las zonas', () => {
+  it('no room is a trap: every zone is reachable on foot', () => {
     const spawn = findSpawnPoint(map)
-    const alcanzables = reachableTiles(map, {
+    const reachable = reachableTiles(map, {
       col: Math.floor(spawn.x / map.tilewidth),
       row: Math.floor(spawn.y / map.tileheight),
     })
     for (const zone of getZones(map)) {
       expect(
-        tilesOf(map, zone).some(({ col, row }) => alcanzables.has(`${col},${row}`)),
-        `no se llega caminando a la zona "${zone.name}"`,
+        tilesOf(map, zone).some(({ col, row }) => reachable.has(`${col},${row}`)),
+        `the zone "${zone.name}" cannot be reached on foot`,
       ).toBe(true)
     }
   })
 
-  it('la colisión de los objetos está en el mapa, no en código', () => {
-    // Ninguna capa de objetos con muebles depende de su nombre: solo de `collides`.
+  it('the collision of the objects lives in the map, not in code', () => {
+    // No furniture object layer depends on its name: only on `collides`.
     const layers = objectLayers(map).filter((l) => l.objects.some((o) => o.gid))
     for (const layer of layers) {
       const declared = layer.properties?.some((p) => p.name === PROP_COLLIDES)
       const perObject = layer.objects.every((o) =>
         o.properties?.some((p) => p.name === PROP_COLLIDES),
       )
-      expect(declared || perObject, `la capa "${layer.name}" no declara collides`).toBe(true)
+      expect(declared || perObject, `the layer "${layer.name}" does not declare collides`).toBe(true)
     }
     expect(objectLayers(map).some((l) => l.objects.some((o) => o.type === CLASS_ZONE))).toBe(true)
   })
 })
 
-describe('loadOfficeMap: mapas inválidos fallan con mensaje claro', () => {
+describe('loadOfficeMap: invalid maps fail with a clear message', () => {
   const dir = mkdtempSync(join(tmpdir(), 'vto-map-'))
 
   function write(name: string, content: unknown) {
@@ -150,7 +152,7 @@ describe('loadOfficeMap: mapas inválidos fallan con mensaje claro', () => {
       },
     ],
     layers: [
-      { type: 'tilelayer', id: 1, name: 'Piso', width: 2, height: 2, data: [1, 1, 2, 1] },
+      { type: 'tilelayer', id: 1, name: 'Floor', width: 2, height: 2, data: [1, 1, 2, 1] },
       {
         type: 'objectgroup',
         id: 2,
@@ -160,26 +162,26 @@ describe('loadOfficeMap: mapas inválidos fallan con mensaje claro', () => {
     ],
   }
 
-  it('acepta un mapa mínimo válido', () => {
+  it('accepts a minimal valid map', () => {
     const office = loadOfficeMap(write('ok.json', minimal))
     expect(office.spawn).toEqual({ name: 'default', x: 16, y: 16, radius: 32, dir: 'down' })
     expect(office.bounds).toEqual({ width: 64, height: 64 })
   })
 
-  it('archivo inexistente', () => {
-    expect(() => loadOfficeMap(join(dir, 'nope.json'))).toThrow(/No se pudo leer el mapa/)
+  it('file that does not exist', () => {
+    expect(() => loadOfficeMap(join(dir, 'nope.json'))).toThrow(/Could not read the map/)
   })
 
-  it('JSON roto', () => {
-    expect(() => loadOfficeMap(write('bad.json', '{ not json'))).toThrow(/no es JSON válido/)
+  it('broken JSON', () => {
+    expect(() => loadOfficeMap(write('bad.json', '{ not json'))).toThrow(/is not valid JSON/)
   })
 
-  it('sin spawn', () => {
+  it('no spawn', () => {
     const noSpawn = { ...minimal, layers: [minimal.layers[0]] }
-    expect(() => loadOfficeMap(write('nospawn.json', noSpawn))).toThrow(/exactamente un objeto/)
+    expect(() => loadOfficeMap(write('nospawn.json', noSpawn))).toThrow(/exactly one object/)
   })
 
-  it('spawn sobre una pared', () => {
+  it('spawn on a wall', () => {
     const onWall = {
       ...minimal,
       layers: [
@@ -192,97 +194,97 @@ describe('loadOfficeMap: mapas inválidos fallan con mensaje claro', () => {
         },
       ],
     }
-    expect(() => loadOfficeMap(write('wall.json', onWall))).toThrow(/tile que colisiona/)
+    expect(() => loadOfficeMap(write('wall.json', onWall))).toThrow(/colliding tile/)
   })
 
-  it('tileset externo (no embebido)', () => {
+  it('external tileset (not embedded)', () => {
     const external = {
       ...minimal,
       tilesets: [{ firstgid: 1, source: 't.tsx' }],
     }
-    expect(() => loadOfficeMap(write('ext.json', external))).toThrow(/no está embebido/)
+    expect(() => loadOfficeMap(write('ext.json', external))).toThrow(/is not embedded/)
   })
 })
 
 /**
- * Los mapas reales de todos los mundos, cargados como los carga el servidor al
- * arrancar: cada uno válido por su cuenta y las puertas cerrando entre ellos.
+ * The real maps of every world, loaded the way the server loads them at boot:
+ * each one valid on its own and the doors matching up between them.
  */
-describe('Mundos (archivos reales)', () => {
+describe('Worlds (real files)', () => {
   const worlds = loadWorldMaps()
 
-  it('carga un mapa por cada mundo del registro', () => {
+  it('loads one map for each world in the registry', () => {
     expect([...worlds.keys()]).toEqual(WORLDS.map((w) => w.id))
     for (const [id, world] of worlds) {
-      expect(validateMap(world.data), `mapa de ${id}`).toEqual([])
+      expect(validateMap(world.data), `map of ${id}`).toEqual([])
     }
   })
 
-  it('la First Office y la Chiron Office están conectadas en los dos sentidos', () => {
+  it('the First Office and the Chiron Office are connected both ways', () => {
     const first = worlds.get('first-office')!.data
     const chiron = worlds.get('chiron-office')!.data
 
     const toChiron = findDoors(first)
     expect(toChiron).toHaveLength(1)
-    expect(toChiron[0]).toMatchObject({ world: 'chiron-office', spawn: 'desde-first-office' })
+    expect(toChiron[0]).toMatchObject({ world: 'chiron-office', spawn: 'from-first-office' })
 
     const toFirst = findDoors(chiron)
     expect(toFirst).toHaveLength(1)
-    expect(toFirst[0]).toMatchObject({ world: 'first-office', spawn: 'desde-chiron' })
+    expect(toFirst[0]).toMatchObject({ world: 'first-office', spawn: 'from-chiron' })
 
-    // Cada puerta llega a un spawn que existe y que no está sobre la puerta de
-    // vuelta: si no, se volvería al mundo anterior al instante.
-    const arrival = findSpawnPoint(chiron, 'desde-first-office')
+    // Each door arrives at a spawn that exists and that is not on top of the
+    // return door: otherwise you would go straight back to the previous world.
+    const arrival = findSpawnPoint(chiron, 'from-first-office')
     expect(doorAt(chiron, arrival.x, arrival.y)).toBeUndefined()
-    const back = findSpawnPoint(first, 'desde-chiron')
+    const back = findSpawnPoint(first, 'from-chiron')
     expect(doorAt(first, back.x, back.y)).toBeUndefined()
     expect(back.dir).toBe('down')
     expect(arrival.dir).toBe('up')
   })
 
-  it('ningún spawn ni puerta cae sobre una pared o un mueble sólido', () => {
+  it('no spawn or door falls on a wall or a solid piece of furniture', () => {
     for (const [id, world] of worlds) {
       const map = world.data
       const furniture = tilesBlockedByFurniture(map)
-      const libre = (x: number, y: number) =>
+      const free = (x: number, y: number) =>
         !furniture.has(tileKey(map, x, y)) && !isSolidAt(map, x, y)
 
       for (const spawn of findSpawnPoints(map)) {
-        expect(libre(spawn.x, spawn.y), `${id}: spawn "${spawn.name}"`).toBe(true)
+        expect(free(spawn.x, spawn.y), `${id}: spawn "${spawn.name}"`).toBe(true)
       }
       for (const door of findDoors(map)) {
         const x = door.x + door.width / 2
         const y = door.y + door.height / 2
-        expect(libre(x, y), `${id}: puerta "${door.name}"`).toBe(true)
+        expect(free(x, y), `${id}: door "${door.name}"`).toBe(true)
       }
     }
   })
 
-  it('a la puerta de cada mundo se llega caminando desde su entrada', () => {
+  it('every world\'s door is reachable on foot from its entrance', () => {
     for (const [id, world] of worlds) {
       const map = world.data
       const entry = world.spawn
-      const alcanzables = reachableTiles(map, {
+      const reachable = reachableTiles(map, {
         col: Math.floor(entry.x / map.tilewidth),
         row: Math.floor(entry.y / map.tileheight),
       })
       for (const door of findDoors(map)) {
         const key = tileKey(map, door.x + door.width / 2, door.y + door.height / 2)
         expect(
-          alcanzables.has(key),
-          `${id}: no se llega caminando a la puerta "${door.name}"`,
+          reachable.has(key),
+          `${id}: the door "${door.name}" cannot be reached on foot`,
         ).toBe(true)
       }
     }
   })
 })
 
-/** Clave de la celda que contiene el punto. */
+/** Key of the cell that contains the point. */
 function tileKey(map: TiledMap, x: number, y: number): string {
   return `${Math.floor(x / map.tilewidth)},${Math.floor(y / map.tileheight)}`
 }
 
-/** Tiles que ocupa una zona. */
+/** Tiles a zone occupies. */
 function tilesOf(map: TiledMap, zone: Zone) {
   const out: { col: number; row: number }[] = []
   for (
@@ -299,7 +301,7 @@ function tilesOf(map: TiledMap, zone: Zone) {
   return out
 }
 
-/** Tiles bloqueados por un mueble con colisión (los tiles los cubre `isSolidAt`). */
+/** Tiles blocked by a colliding piece of furniture (tiles are covered by `isSolidAt`). */
 function tilesBlockedByFurniture(map: TiledMap): Set<string> {
   const blocked = new Set<string>()
   for (const layer of objectLayers(map)) {
@@ -308,7 +310,7 @@ function tilesBlockedByFurniture(map: TiledMap): Set<string> {
       const tileset = tilesetForGid(map, obj.gid)
       const width = obj.width ?? tileset?.tilewidth ?? map.tilewidth
       const height = obj.height ?? tileset?.tileheight ?? map.tileheight
-      // En Tiled la `y` de un objeto-tile es su borde inferior.
+      // In Tiled the `y` of a tile object is its bottom edge.
       for (
         let row = Math.floor((obj.y - height) / map.tileheight);
         row * map.tileheight < obj.y;
@@ -326,8 +328,8 @@ function tilesBlockedByFurniture(map: TiledMap): Set<string> {
 }
 
 /**
- * Tiles a los que se llega caminando desde `start`, con la misma noción de
- * "bloqueado" que usa el juego: tiles con `collides` y muebles con colisión.
+ * Tiles reachable on foot from `start`, with the same notion of "blocked"
+ * the game uses: tiles with `collides` and colliding furniture.
  */
 function reachableTiles(map: TiledMap, start: { col: number; row: number }): Set<string> {
   const furniture = tilesBlockedByFurniture(map)

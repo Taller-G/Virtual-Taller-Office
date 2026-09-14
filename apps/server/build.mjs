@@ -1,6 +1,6 @@
-// Empaqueta el servidor en un único archivo ESM para Node 22.
-// El código propio (incluido @vto/shared) se incluye en el bundle; el resto de
-// dependencias de node_modules queda externo y se instala en el despliegue.
+// Bundles the server into a single ESM file for Node 22.
+// Our own code (@vto/shared included) goes into the bundle; the rest of the
+// node_modules dependencies stay external and are installed on deployment.
 import { build } from 'esbuild'
 import { rm } from 'node:fs/promises'
 

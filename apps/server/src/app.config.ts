@@ -5,9 +5,10 @@ import { config } from './config'
 import { WorldRoom } from './rooms/WorldRoom'
 
 /**
- * Una sala registrada por mundo: `world_first_office`, `world_chiron_office`…
- * Cada una hospeda el mismo `WorldRoom` con el mapa de su mundo, y la
- * separación entre mundos (gente, burbujas, chat) sale de ahí sin más código.
+ * One registered room per world: `world_first_office`, `world_chiron_office`...
+ * Each one hosts the same `WorldRoom` with its world's map, and the
+ * separation between worlds (people, bubbles, chat) follows from that with no
+ * extra code.
  */
 const rooms: Record<string, RegisteredHandler> = Object.fromEntries(
   WORLDS.map((world) => [roomNameFor(world.id), defineRoom(WorldRoom, { worldId: world.id })]),
@@ -22,8 +23,8 @@ const server = defineServer({
   }),
 
   express: (app) => {
-    // Chequeo de salud para el proveedor de hosting y para operar a mano:
-    // dice qué mundos están vivos y cuánta gente hay en cada uno.
+    // Health check for the hosting provider and for manual operation: it
+    // says which worlds are alive and how many people are in each one.
     app.get('/health', async (_req, res) => {
       const worlds = []
       for (const world of WORLDS) {

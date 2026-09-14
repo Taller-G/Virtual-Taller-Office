@@ -2,7 +2,7 @@
   "name": "@vto/server",
   "version": "0.1.0",
   "private": true,
-  "description": "Servidor en tiempo real (Colyseus) de la Oficina Taller",
+  "description": "Real-time server (Colyseus) for the Taller Office",
   "type": "module",
   "engines": {
     "node": ">= 22.0.0"

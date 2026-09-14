@@ -17,20 +17,20 @@ import {
 } from './avatarAnims'
 
 /**
- * Cuerpo físico del avatar: los "pies", más chico que el sprite para pasar
- * por puertas de un tile. El origen del contenedor es el centro superior del
- * cuerpo; el cuerpo ocupa `[y, y + BODY.height]`.
+ * Physics body of the avatar: the "feet", smaller than the sprite so it fits
+ * through one-tile doorways. The container's origin is the top centre of the
+ * body; the body occupies `[y, y + BODY.height]`.
  */
 export const BODY = { width: 18, height: 12, offsetY: 6 } as const
 
-/** Constante de tiempo del suavizado de los otros avatares (ms). */
+/** Time constant of the smoothing of the other avatars (ms). */
 const LERP_TAU_MS = 80
-/** Si el objetivo está más lejos que esto, se salta directo (teletransporte, spawn). */
+/** If the target is further away than this, it snaps straight there (teleport, spawn). */
 const SNAP_DISTANCE = 160
-/** Si pasó más que esto entre frames (pestaña oculta), se salta al objetivo. */
+/** If more than this passed between frames (hidden tab), it snaps to the target. */
 const SNAP_AFTER_MS = 500
 
-/** Globo de diálogo: cuánto se queda en pantalla y cuánto texto entra. */
+/** Speech balloon: how long it stays on screen and how much text fits. */
 const SAY = {
   baseMs: 2_500,
   perCharMs: 45,
@@ -47,43 +47,43 @@ export interface AvatarOptions {
 }
 
 /**
- * Un jugador en pantalla.
+ * A player on screen.
  *
- * Dos modos de renderizado:
- * - **Preset** (`appearance` vacío): un solo `Phaser.Sprite` con la hoja
- *   completa del avatar seleccionado, igual que antes.
- * - **Compuesto** (`appearance` con JSON válido de `Appearance`): varias
- *   capas (body, top, hair, glasses, hat) superpuestas en el contenedor.
- *   Las capas de hair y top se tiñen con `setTint()` sobre su hoja en escala
- *   de grises; la de body usa una hoja pre-generada por tono de piel.
+ * Two rendering modes:
+ * - **Preset** (empty `appearance`): a single `Phaser.Sprite` with the full
+ *   sheet of the selected avatar, as before.
+ * - **Composed** (`appearance` with valid `Appearance` JSON): several layers
+ *   (body, top, hair, glasses, hat) stacked in the container. The hair and
+ *   top layers are tinted with `setTint()` over their greyscale sheet; the
+ *   body one uses a sheet pre-generated per skin tone.
  *
- * En ambos modos el contenedor lleva además: nombre, badge "ausente",
- * anillo de burbuja y globo de chat.
+ * In both modes the container also carries: name, "away" badge, bubble ring
+ * and chat balloon.
  */
 export class Avatar extends Phaser.GameObjects.Container {
   readonly isMe: boolean
 
   // --- sprite(s) -----------------------------------------------------------
-  /** Sprite único del preset (null si es compuesto). */
+  /** Single sprite of the preset (null when composed). */
   private presetSprite: Phaser.GameObjects.Sprite | null = null
-  /** Capas del avatar compuesto (vacío si es preset). */
+  /** Layers of the composed avatar (empty when a preset). */
   private layers: Phaser.GameObjects.Sprite[] = []
-  /** Claves de textura actuales de cada capa (para playAnim). */
+  /** Current texture keys of each layer (for playAnim). */
   private layerTexKeys: string[] = []
 
-  /** Referencia pública al sprite principal (o la primera capa). */
+  /** Public reference to the main sprite (or the first layer). */
   get sprite(): Phaser.GameObjects.Sprite {
     return this.presetSprite ?? this.layers[0]
   }
 
-  // --- decoraciones --------------------------------------------------------
+  // --- decorations ---------------------------------------------------------
   private label: Phaser.GameObjects.Text
   private badge: Phaser.GameObjects.Text
   private ring: Phaser.GameObjects.Graphics
   private balloon: Phaser.GameObjects.Text
   private balloonTimer?: Phaser.Time.TimerEvent
 
-  // --- estado --------------------------------------------------------------
+  // --- state ---------------------------------------------------------------
   avatarId: string
   private currentAppearance: Appearance | null = null
   dir: Direction = 'down'
@@ -100,7 +100,7 @@ export class Avatar extends Phaser.GameObjects.Container {
 
     const feetY = BODY.height
 
-    // Ring (detrás de todo)
+    // Ring (behind everything)
     this.ring = scene.add.graphics()
     this.ring.fillStyle(0x1b6ef3, 0.28)
     this.ring.fillEllipse(0, feetY - 2, BODY.width + 6, 8)
@@ -122,7 +122,7 @@ export class Avatar extends Phaser.GameObjects.Container {
 
     // Badge "ausente"
     this.badge = scene.add
-      .text(0, this.label.y - this.label.height - 1, 'ausente', {
+      .text(0, this.label.y - this.label.height - 1, 'away', {
         fontFamily: 'system-ui, sans-serif',
         fontSize: '6px',
         color: '#1b1f2a',
@@ -283,7 +283,7 @@ export class Avatar extends Phaser.GameObjects.Container {
     this.setAlpha(!this.connected ? 0.35 : this.away ? 0.6 : 1)
   }
 
-  /** Cambia la animación solo si difiere de la actual (evita reiniciarla cada frame). */
+  /** Changes the animation only if it differs from the current one (avoids restarting it every frame). */
   playAnim(state: AnimState, dir: Direction, force = false) {
     this.dir = dir
     this.moving = state === 'walk'
@@ -306,7 +306,7 @@ export class Avatar extends Phaser.GameObjects.Container {
     }
   }
 
-  /** Profundidad = borde inferior de los pies, como los muebles del mapa. */
+  /** Depth = bottom edge of the feet, like the map's furniture. */
   updateDepth() {
     this.setDepth(this.y + BODY.height)
   }

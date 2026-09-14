@@ -2,50 +2,50 @@ import Phaser from 'phaser'
 import { mapUrlFor, type TiledMap, type WorldDefinition } from '@vto/shared'
 
 /**
- * Carga de los mapas de los mundos.
+ * Loading of the worlds' maps.
  *
- * Cada mundo tiene su propio archivo Tiled y sus tilesets; el mapa entra a la
- * caché con una clave por mundo, así viajar no pisa lo que ya estaba cargado y
- * volver a un mundo visitado es instantáneo. Las imágenes de los tilesets se
- * resuelven relativas al archivo del mapa, igual que en Tiled: agregar un
- * tileset no requiere tocar código.
+ * Each world has its own Tiled file and its tilesets; the map enters the cache
+ * under a per-world key, so travelling does not overwrite what was already
+ * loaded and going back to a world already visited is instant. The tilesets'
+ * images are resolved relative to the map file, just like in Tiled: adding a
+ * tileset does not require touching code.
  */
 
-/** Clave con la que el mapa de un mundo queda en la caché de Phaser. */
+/** Key under which a world's map is kept in Phaser's cache. */
 export function mapKey(worldId: string): string {
   return `map-${worldId}`
 }
 
-/** El mapa ya cargado de un mundo. */
+/** The already-loaded map of a world. */
 export function worldMapData(scene: Phaser.Scene, worldId: string): TiledMap {
   return scene.cache.tilemap.get(mapKey(worldId)).data as TiledMap
 }
 
-/** ¿Están en la caché el mapa del mundo y las imágenes de todos sus tilesets? */
+/** Are the world's map and the images of all its tilesets in the cache? */
 export function isWorldLoaded(scene: Phaser.Scene, worldId: string): boolean {
   const entry = scene.cache.tilemap.get(mapKey(worldId)) as { data?: TiledMap } | undefined
   if (!entry?.data) return false
   return entry.data.tilesets.every((ts) => scene.textures.exists(ts.name))
 }
 
-/** Encola el JSON del mapa de un mundo; el que llama arranca el loader. */
+/** Queues the JSON of a world's map; the caller starts the loader. */
 export function queueWorldMap(scene: Phaser.Scene, world: WorldDefinition) {
   scene.load.tilemapTiledJSON(mapKey(world.id), mapUrlFor(world))
 }
 
 /**
- * Encola las imágenes de los tilesets del mapa ya leído. Devuelve el problema
- * si el mapa no cumple el contrato (tileset sin embeber), o `undefined` si
- * quedó todo encolado.
+ * Queues the images of the tilesets of the map already read. Returns the
+ * problem if the map does not meet the contract (tileset not embedded), or
+ * `undefined` if everything was queued.
  */
 export function queueTilesets(scene: Phaser.Scene, world: WorldDefinition): string | undefined {
   const raw = (scene.cache.tilemap.get(mapKey(world.id)) as { data?: TiledMap } | undefined)?.data
-  if (!raw) return `El mapa de "${world.name}" no tiene datos`
+  if (!raw) return `The map of "${world.name}" has no data`
 
   const base = new URL(mapUrlFor(world), window.location.href)
   for (const tileset of raw.tilesets) {
     if (!tileset.image) {
-      return `El tileset "${tileset.name}" no está embebido en el mapa (usá "Embed in map" en Tiled)`
+      return `The tileset "${tileset.name}" is not embedded in the map (use "Embed in map" in Tiled)`
     }
     if (scene.textures.exists(tileset.name)) continue
     scene.load.spritesheet(tileset.name, new URL(tileset.image, base).toString(), {
@@ -59,9 +59,10 @@ export function queueTilesets(scene: Phaser.Scene, world: WorldDefinition): stri
 }
 
 /**
- * Carga completa (mapa + tilesets) de un mundo con la escena ya andando: es lo
- * que se hace al cruzar una puerta. Si algo falla, rechaza con el motivo y el
- * que llama decide (la oficina sigue jugable en el mundo donde está).
+ * Full load (map + tilesets) of a world with the scene already running: this
+ * is what happens when crossing a door. If something fails, it rejects with
+ * the reason and the caller decides (the office stays playable in the world
+ * it is in).
  */
 export async function loadWorld(scene: Phaser.Scene, world: WorldDefinition): Promise<void> {
   if (isWorldLoaded(scene, world.id)) return
@@ -74,13 +75,13 @@ export async function loadWorld(scene: Phaser.Scene, world: WorldDefinition): Pr
   await runLoader(scene)
 }
 
-/** Arranca el loader de la escena y espera a que termine, con el error si lo hubo. */
+/** Starts the scene's loader and waits for it to finish, with the error if there was one. */
 function runLoader(scene: Phaser.Scene): Promise<void> {
   return new Promise((resolve, reject) => {
     const loader = scene.load
     let failure: string | undefined
     const onError = (file: Phaser.Loader.File) => {
-      failure = `No se pudo cargar ${file.src}`
+      failure = `Could not load ${file.src}`
     }
     loader.on(Phaser.Loader.Events.FILE_LOAD_ERROR, onError)
     loader.once(Phaser.Loader.Events.COMPLETE, () => {

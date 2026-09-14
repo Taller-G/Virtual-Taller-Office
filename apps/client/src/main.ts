@@ -11,7 +11,7 @@ import { mountPresence } from './ui/presence'
 import { mountBubble } from './ui/bubble'
 import { mountChat } from './ui/chat'
 
-/** Mundo por el que se entra a la oficina (la First Office). */
+/** World the office is entered through (the First Office). */
 const startWorld = getWorld(DEFAULT_WORLD_ID)!
 
 const connection = new OfficeConnection(config.serverUrl)
@@ -24,13 +24,14 @@ const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
   backgroundColor: '#1b1f2a',
-  // Pixel art: sin suavizado al escalar y posiciones redondeadas.
+  // Pixel art: no smoothing when scaling and rounded positions.
   pixelArt: true,
-  // El canvas ocupa todo el contenedor y se adapta al tamaño de la ventana.
+  // The canvas fills the whole container and adapts to the window size.
   scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%' },
   physics: { default: 'arcade', arcade: { debug: config.debug } },
-  // En modo debug el bucle usa setTimeout en vez de requestAnimationFrame: así
-  // el juego sigue corriendo con la pestaña en segundo plano (pruebas automatizadas).
+  // In debug mode the loop uses setTimeout instead of requestAnimationFrame:
+  // that way the game keeps running with the tab in the background (automated
+  // tests).
   fps: { forceSetTimeOut: config.debug },
   scene: [
     new BootScene(startWorld, config.avatarsUrl, config.logoUrl),
@@ -38,15 +39,15 @@ const game = new Phaser.Game({
   ],
 })
 
-// Mientras se escribe en un campo de texto, las teclas no llegan al juego.
+// While typing in a text field, key presses do not reach the game.
 game.events.once(Phaser.Core.Events.READY, () => installTypingGuard(game))
 
-// Con `?debug`, juego y conexión quedan accesibles desde la consola del navegador.
+// With `?debug`, game and connection are reachable from the browser console.
 if (config.debug) Object.assign(window, { __vto: { game, connection } })
 
-// Cerrar o refrescar la pestaña: salida consentida para que el servidor nos
-// quite al instante (sin fantasma ni duplicado al volver a entrar).
+// Closing or refreshing the tab: a consented leave so the server removes us
+// instantly (no ghost and no duplicate when joining again).
 window.addEventListener('pagehide', () => connection.leaveForGood())
 
-// Primero se elige nombre y avatar; recién entonces se entra a la sala.
+// Name and avatar are chosen first; only then is the room joined.
 void showEntry().then((identity) => connection.start(identity))

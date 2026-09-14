@@ -24,66 +24,66 @@ import {
 import { LOGO_KEY } from './BootScene'
 import { mapKey } from './worldAssets'
 
-/** Nombre de la zona (en el mapa Tiled) donde se ancla el logo de Taller. */
-const LOGO_ZONE = 'Recepción'
+/** Name of the zone (in the Tiled map) the Taller logo is anchored to. */
+const LOGO_ZONE = 'Reception'
 /**
- * Posición del logo dentro de la zona de recepción, como fracción de su ancho
- * y desde su borde superior en px. Elegido para caer en el piso libre que
- * queda entre el banco de espera y el mostrador, debajo del monitor: es el
- * tramo despejado más a la derecha donde el logo (160 px de ancho) entra
- * entero sin tapar ningún mueble ni salirse de la recepción.
+ * Position of the logo within the reception zone, as a fraction of its width
+ * and from its top edge in px. Chosen so it lands on the free floor left
+ * between the waiting bench and the counter, below the monitor: it is the
+ * rightmost clear stretch where the logo (160 px wide) fits whole without
+ * covering any furniture or spilling out of the reception.
  */
 const LOGO_ZONE_FRAC_X = 0.5
 const LOGO_ZONE_OFFSET_Y = 64
 
-/** Bits de volteo que Tiled guarda en el gid de un objeto. */
+/** Flip bits that Tiled stores in an object's gid. */
 const FLIP_H = 0x80000000
 const FLIP_V = 0x40000000
 const GID_MASK = 0x1fffffff
 
-/** Profundidad de las capas de tiles: siempre debajo de muebles y avatares. */
+/** Depth of the tile layers: always below furniture and avatars. */
 const TILE_LAYER_DEPTH_BASE = -1000
-/** El logo va como calcomanía de piso: sobre los tiles pero debajo de muebles y avatares. */
+/** The logo goes as a floor decal: over the tiles but below furniture and avatars. */
 const LOGO_DEPTH = TILE_LAYER_DEPTH_BASE + 100
-/** Las puertas se pintan como calcomanía de piso: se les camina por encima. */
+/** Doors are painted as a floor decal: you walk over them. */
 const DOOR_DEPTH = TILE_LAYER_DEPTH_BASE + 200
-/** Las etiquetas de zona van por encima de todo lo que camina por el mapa. */
+/** Zone labels go above everything that walks around the map. */
 export const OVERLAY_DEPTH = 100_000
-/** El color ambiente del mundo se pinta sobre todo menos las etiquetas. */
+/** The world's ambient colour is painted over everything except the labels. */
 const AMBIENT_DEPTH = OVERLAY_DEPTH - 10
 
-/** Color de las puertas: el mismo en el mapa y en la vista de depuración. */
+/** Colour of the doors: the same on the map and in the debug view. */
 const DOOR_COLOR = 0xa78bfa
 
 export interface BuiltMap {
-  /** Mundo al que pertenece este mapa. */
+  /** World this map belongs to. */
   worldId: string
   raw: TiledMap
   tilemap: Phaser.Tilemaps.Tilemap
   bounds: { width: number; height: number }
-  /** Capas de tiles con al menos un tile que colisiona. */
+  /** Tile layers with at least one colliding tile. */
   collisionLayers: Phaser.Tilemaps.TilemapLayer[]
-  /** Muebles que bloquean el paso. */
+  /** Furniture that blocks the way. */
   solids: Phaser.Physics.Arcade.StaticGroup
-  /** Puertas a otros mundos: se cruzan caminando (ver `OfficeScene`). */
+  /** Doors to other worlds: crossed by walking (see `OfficeScene`). */
   doors: Door[]
-  /** Todos los puntos de aparición, el de entrada y los de llegada. */
+  /** Every spawn point, the entrance one and the arrival ones. */
   spawns: SpawnPoint[]
   spawn?: { x: number; y: number }
 }
 
 /**
- * Construye la oficina a partir del mapa Tiled, sin depender de nombres de
- * capas: recorre todas en el orden de Tiled y decide por tipo + propiedades.
+ * Builds the office from the Tiled map, without depending on layer names: it
+ * walks every layer in Tiled's order and decides by type + properties.
  *
- * - Capa de tiles → `createLayer`; colisiona todo tile con `collides: true`.
- * - Capa de objetos → un sprite estático por objeto-tile; bloquea el paso si
- *   el objeto (o su capa) tiene `collides: true`. Profundidad = borde
- *   inferior, para que los avatares pasen por delante o por detrás.
- * - Objeto de clase `zone` → etiqueta con el nombre de la zona.
- * - Objeto de clase `spawn` → punto de aparición (lo usa la cámara al inicio).
- * - Objeto de clase `door` → puerta a otro mundo: se marca en el piso y la
- *   escena la usa para viajar cuando alguien la pisa.
+ * - Tile layer -> `createLayer`; every tile with `collides: true` collides.
+ * - Object layer -> one static sprite per tile object; it blocks the way if
+ *   the object (or its layer) has `collides: true`. Depth = bottom edge, so
+ *   that avatars pass in front of it or behind it.
+ * - Object of class `zone` -> label with the name of the zone.
+ * - Object of class `spawn` -> spawn point (the camera uses it at the start).
+ * - Object of class `door` -> door to another world: it is marked on the floor
+ *   and the scene uses it to travel when someone steps on it.
  */
 export function buildOfficeMap(scene: Phaser.Scene, worldId: string): BuiltMap {
   const key = mapKey(worldId)
@@ -101,7 +101,7 @@ export function buildOfficeMap(scene: Phaser.Scene, worldId: string): BuiltMap {
       ts.spacing ?? 0,
     )
     if (tileset) tilesets.push(tileset)
-    else console.warn(`[mapa] no se pudo registrar el tileset "${ts.name}"`)
+    else console.warn(`[map] could not register the tileset "${ts.name}"`)
   }
 
   const collisionLayers: Phaser.Tilemaps.TilemapLayer[] = []
@@ -146,9 +146,9 @@ export function buildOfficeMap(scene: Phaser.Scene, worldId: string): BuiltMap {
 }
 
 /**
- * Marca una puerta en el piso: un rectángulo tenue con el nombre del mundo al
- * que lleva, para que se vea que ahí se pasa a otro lado. No tiene cuerpo
- * físico: cruzarla es caminar sobre ella.
+ * Marks a door on the floor: a faint rectangle with the name of the world it
+ * leads to, so it is visible that this is a way through to somewhere else. It
+ * has no physics body: crossing it is walking over it.
  */
 function addDoorMarker(scene: Phaser.Scene, door: Door) {
   const graphics = scene.add.graphics().setDepth(DOOR_DEPTH)
@@ -172,9 +172,9 @@ function addDoorMarker(scene: Phaser.Scene, door: Door) {
 }
 
 /**
- * Color ambiente del mundo (propiedad `ambient` del mapa): un velo del color y
- * la opacidad que diga el mapa, sobre todo lo que se dibuja. Es lo que hace
- * que un mundo se sienta oscuro sin necesidad de tiles nuevos.
+ * Ambient colour of the world (the map's `ambient` property): a veil of the
+ * colour and opacity the map states, over everything that is drawn. It is what
+ * makes a world feel dark without needing new tiles.
  */
 function addAmbient(scene: Phaser.Scene, raw: TiledMap) {
   const ambient = getAmbient(raw)
@@ -185,7 +185,7 @@ function addAmbient(scene: Phaser.Scene, raw: TiledMap) {
   scene.add.rectangle(0, 0, width, height, color, alpha).setOrigin(0, 0).setDepth(AMBIENT_DEPTH)
 }
 
-/** Color de Tiled (`#AARRGGBB` o `#RRGGBB`) a color + opacidad de Phaser. */
+/** Tiled colour (`#AARRGGBB` or `#RRGGBB`) to Phaser colour + opacity. */
 export function parseTiledColor(value: string): { color: number; alpha: number } {
   const hex = value.replace('#', '')
   if (hex.length === 8) {
@@ -210,7 +210,7 @@ function addObjects(
     if (cls === CLASS_ZONE) {
       addZoneLabel(scene, obj)
     } else if (cls === CLASS_SPAWN || cls === CLASS_DOOR) {
-      // Spawns y puertas no se dibujan acá: son datos, no muebles.
+      // Spawns and doors are not drawn here: they are data, not furniture.
       continue
     } else if (obj.gid) {
       addTileObject(scene, raw, layer, obj, solids)
@@ -228,12 +228,12 @@ function addTileObject(
   const gid = obj.gid! & GID_MASK
   const tileset = tilesetForGid(raw, gid)
   if (!tileset || !scene.textures.exists(tileset.name)) {
-    console.warn(`[mapa] objeto ${obj.id} usa un tileset desconocido (gid ${gid})`)
+    console.warn(`[map] object ${obj.id} uses an unknown tileset (gid ${gid})`)
     return
   }
   const width = obj.width ?? tileset.tilewidth
   const height = obj.height ?? tileset.tileheight
-  // En Tiled la posición de un objeto-tile es su esquina inferior izquierda.
+  // In Tiled the position of a tile object is its bottom-left corner.
   const x = obj.x + width / 2
   const y = obj.y - height / 2
   const frame = gid - tileset.firstgid
@@ -252,11 +252,11 @@ function addTileObject(
 }
 
 /**
- * Coloca el logo de Taller como decoración de la recepción: un sprite sin
- * cuerpo físico (no bloquea el paso ni toca las interacciones) anclado a la
- * zona `Recepción` del mapa. Si el logo no cargó o no hay recepción, no dibuja
- * nada (la oficina sigue funcionando igual). La profundidad usa su borde
- * inferior, como los muebles, para que los avatares pasen por delante.
+ * Places the Taller logo as decoration for the reception: a sprite without a
+ * physics body (it neither blocks the way nor touches the interactions)
+ * anchored to the map's `Reception` zone. If the logo did not load or there is
+ * no reception, it draws nothing (the office keeps working the same). The
+ * depth uses its bottom edge, like the furniture, so avatars pass in front.
  */
 function addReceptionLogo(scene: Phaser.Scene, raw: TiledMap) {
   if (!scene.textures.exists(LOGO_KEY)) return
@@ -284,15 +284,15 @@ function addZoneLabel(scene: Phaser.Scene, obj: TiledObject) {
     .setAlpha(0.9)
 }
 
-/** Zona (si la hay) que contiene el punto. */
+/** Zone (if any) that contains the point. */
 export function zoneAt(raw: TiledMap, x: number, y: number): string | undefined {
   return getZones(raw).find((z) => x >= z.x && x < z.x + z.width && y >= z.y && y < z.y + z.height)
     ?.name
 }
 
 /**
- * Modo `?debug`: cuerpos de colisión de las capas de tiles (amarillo), puntos
- * de aparición (verde) y áreas de las puertas (violeta, con su destino).
+ * `?debug` mode: collision bodies of the tile layers (yellow), spawn points
+ * (green) and door areas (purple, with their destination).
  */
 export function drawCollisionDebug(scene: Phaser.Scene, built: BuiltMap) {
   const graphics = scene.add

@@ -1,18 +1,18 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#1b1f2a" />
-    <meta name="description" content="Oficina virtual 2D de Taller" />
+    <meta name="description" content="Taller's 2D virtual office" />
     <link rel="icon" href="data:," />
-    <title>Oficina Taller</title>
+    <title>Taller Office</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <header id="hud" class="hud" data-status="connecting">
       <span class="hud__dot" aria-hidden="true"></span>
-      <span id="hud-status" class="hud__status">Conectando…</span>
+      <span id="hud-status" class="hud__status">Connecting...</span>
       <span id="hud-world" class="hud__world" hidden></span>
       <span id="hud-players" class="hud__players"></span>
     </header>
@@ -22,20 +22,20 @@
         <div id="toasts" class="toasts" aria-live="polite"></div>
       </main>
 
-      <aside id="presence" class="presence" data-state="out" aria-label="Quién está en la oficina">
+      <aside id="presence" class="presence" data-state="out" aria-label="Who is in the office">
         <h2 class="presence__title">
-          En la oficina <span id="presence-count" class="presence__count"></span>
+          In the office <span id="presence-count" class="presence__count"></span>
         </h2>
         <ul id="presence-list" class="presence__list"></ul>
 
-        <section id="bubble" class="bubble" data-state="none" aria-label="Tu conversación">
-          <h3 id="bubble-title" class="bubble__title">En conversación</h3>
+        <section id="bubble" class="bubble" data-state="none" aria-label="Your conversation">
+          <h3 id="bubble-title" class="bubble__title">In conversation</h3>
           <ul id="bubble-list" class="bubble__list"></ul>
           <p id="bubble-hint" class="bubble__hint"></p>
         </section>
 
-        <section id="chat" class="chat" data-state="none" aria-label="Conversación de tu burbuja">
-          <h3 class="chat__title">Conversación</h3>
+        <section id="chat" class="chat" data-state="none" aria-label="Your bubble's conversation">
+          <h3 class="chat__title">Conversation</h3>
           <ol id="chat-log" class="chat__log" aria-live="polite"></ol>
           <form id="chat-form" class="chat__form" autocomplete="off">
             <input
@@ -43,8 +43,8 @@
               class="chat__input"
               type="text"
               spellcheck="false"
-              placeholder="Acercate a alguien para conversar"
-              aria-label="Mensaje para tu burbuja"
+              placeholder="Walk up to someone to talk"
+              aria-label="Message for your bubble"
               disabled
             />
             <span id="chat-count" class="chat__count" aria-hidden="true"></span>
@@ -53,11 +53,11 @@
         </section>
         <footer class="presence__me">
           <label class="presence__field">
-            <span>Tu nombre</span>
+            <span>Your name</span>
             <input id="my-name" type="text" autocomplete="off" spellcheck="false" />
           </label>
           <button id="away-toggle" type="button" class="button button--ghost" aria-pressed="false">
-            Marcarme ausente
+            Mark me away
           </button>
         </footer>
       </aside>
@@ -65,18 +65,18 @@
 
     <div id="entry" class="entry" hidden>
       <form class="entry__card" autocomplete="off">
-        <h1 class="entry__title">Oficina Taller</h1>
-        <p class="entry__hint">Elegí cómo te van a ver los demás.</p>
+        <h1 class="entry__title">Taller Office</h1>
+        <p class="entry__hint">Choose how everyone else will see you.</p>
         <label class="entry__field">
-          <span>Tu nombre</span>
-          <input id="entry-name" type="text" required placeholder="Nombre visible" />
+          <span>Your name</span>
+          <input id="entry-name" type="text" required placeholder="Visible name" />
         </label>
         <fieldset class="entry__avatars">
-          <legend>Tu avatar</legend>
+          <legend>Your avatar</legend>
           <div id="entry-avatars" class="avatar-grid"></div>
         </fieldset>
-        <button type="submit" class="button">Entrar a la oficina</button>
-        <p class="entry__keys">Te movés con las flechas o con W A S D.</p>
+        <button type="submit" class="button">Enter the office</button>
+        <p class="entry__keys">You move with the arrow keys or with W A S D.</p>
       </form>
     </div>
 

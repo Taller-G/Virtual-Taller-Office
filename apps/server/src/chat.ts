@@ -9,25 +9,25 @@ import {
 } from '@vto/shared'
 
 /**
- * Retransmisión del chat de la burbuja de proximidad.
+ * Relay of the proximity bubble's chat.
  *
- * El servidor es el que decide quién lee un mensaje: toma la burbuja en la que
- * está el remitente **en ese instante** y devuelve sus miembros como únicos
- * destinatarios. El cliente no manda destinatarios ni id de burbuja, así que no
- * puede escribirle a una conversación de la que no forma parte.
+ * The server is the one that decides who reads a message: it takes the bubble
+ * the sender is in **at that instant** and returns its members as the only
+ * recipients. The client sends neither recipients nor a bubble id, so it
+ * cannot write to a conversation it is not part of.
  *
- * Nada se guarda: no hay historial en el estado ni acá. Lo único que se
- * recuerda por jugador son las marcas de tiempo de sus últimos mensajes, para
- * el tope de ritmo.
+ * Nothing is stored: there is no history in the state nor here. The only
+ * thing remembered per player are the timestamps of their latest messages,
+ * for the rate limit.
  *
- * El mensaje se le reenvía también al remitente: ese eco es el acuse de
- * "enviado" y lleva la hora del servidor, la misma para todos.
+ * The message is relayed back to the sender too: that echo is the "sent"
+ * acknowledgement and carries the server's time, the same for everyone.
  */
 
 export interface ChatSettings {
-  /** Máximo de mensajes aceptados por ventana. */
+  /** Maximum number of messages accepted per window. */
   maxPerWindow: number
-  /** Ancho de la ventana del tope de ritmo, en ms. */
+  /** Width of the rate-limit window, in ms. */
   windowMs: number
 }
 
@@ -36,27 +36,27 @@ export type ChatOutcome =
   | { ok: false; error: ChatErrorPayload }
 
 export class ChatRelay {
-  /** Marcas de tiempo (ms) de los últimos mensajes aceptados, por sessionId. */
+  /** Timestamps (ms) of the latest accepted messages, by sessionId. */
   private recent = new Map<string, number[]>()
 
   constructor(
     private readonly state: OfficeState,
     readonly settings: ChatSettings,
   ) {
-    if (!(settings.maxPerWindow >= 1)) throw new Error('El tope de mensajes debe ser >= 1')
-    if (!(settings.windowMs > 0)) throw new Error('La ventana del tope de ritmo debe ser > 0')
+    if (!(settings.maxPerWindow >= 1)) throw new Error('The message cap must be >= 1')
+    if (!(settings.windowMs > 0)) throw new Error('The rate-limit window must be > 0')
   }
 
   /**
-   * Resuelve un envío: valida el texto, exige que el remitente esté en una
-   * burbuja, aplica el tope de ritmo y devuelve el mensaje ya armado junto con
-   * los sessionId que tienen que recibirlo (el del remitente incluido).
+   * Resolves a send: validates the text, requires the sender to be in a
+   * bubble, applies the rate limit and returns the assembled message together
+   * with the sessionIds that have to receive it (the sender's included).
    */
   submit(sessionId: string, payload: ChatSendPayload | undefined, now: number): ChatOutcome {
     const id = sanitizeChatId(payload?.id) || newChatId()
     const player = this.state.players.get(sessionId)
     const bubble = player?.bubbleId ? this.state.bubbles.get(player.bubbleId) : undefined
-    // Sin burbuja no hay a quién hablarle: el mensaje no va a ninguna parte.
+    // Without a bubble there is nobody to talk to: the message goes nowhere.
     if (!player || !bubble) return { ok: false, error: { id, reason: 'no_bubble' } }
 
     const text = validateChatText(payload?.text)
@@ -74,20 +74,20 @@ export class ChatRelay {
         text: text.text,
         at: now,
       },
-      // Los miembros de la burbuja tal como están ahora: quien se fue hace un
-      // instante ya no está en la lista y quien acaba de entrar sí.
+      // The members of the bubble as they are right now: whoever left an
+      // instant ago is no longer in the list, and whoever just joined is.
       recipients: [...bubble.members],
     }
   }
 
-  /** El jugador se fue de la sala: se olvida su historial de ritmo. */
+  /** The player left the room: their rate history is forgotten. */
   forget(sessionId: string) {
     this.recent.delete(sessionId)
   }
 
   /**
-   * Tope de ritmo por jugador: ventana deslizante sobre los mensajes ya
-   * aceptados. Evita que un cliente inunde a los demás con el relay.
+   * Per-player rate limit: a sliding window over the messages already
+   * accepted. Keeps a client from flooding the others through the relay.
    */
   private allow(sessionId: string, now: number): boolean {
     const { maxPerWindow, windowMs } = this.settings

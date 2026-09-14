@@ -8,28 +8,28 @@ interface Member {
   avatar: string
 }
 
-/** Lo que hay que mostrar sobre mi burbuja, derivado del estado del servidor. */
+/** What has to be shown about my bubble, derived from the server's state. */
 interface BubbleView {
-  /** Id de mi burbuja, o `''` si no estoy en ninguna. */
+  /** Id of my bubble, or `''` if I am in none. */
   bubbleId: string
-  /** Miembros de mi burbuja: yo primero, después el resto por nombre. */
+  /** Members of my bubble: me first, then the rest by name. */
   members: Member[]
-  /** Tengo al alcance una burbuja que ya está en el tope y no me deja entrar. */
+  /** There is a bubble within my reach that is at the cap and will not let me in. */
   fullNearby: boolean
-  /** Tope de miembros que informa el servidor. */
+  /** Member cap reported by the server. */
   maxMembers: number
 }
 
 const EMPTY: BubbleView = { bubbleId: '', members: [], fullNearby: false, maxMembers: 0 }
 
 /**
- * Panel "En conversación" + avisos de burbuja.
+ * The "In conversation" panel + bubble notices.
  *
- * Todo se deriva de `state.bubbles` y de `player.bubbleId`: el cliente no
- * decide ni recuerda quién está en su burbuja, solo dibuja lo que dice el
- * servidor. Se recalcula con cada patch (`onStateChange`) y los avisos salen
- * de comparar la vista nueva con la anterior, así entrar, salir, sumarse
- * alguien o irse alguien se avisan una sola vez.
+ * Everything is derived from `state.bubbles` and `player.bubbleId`: the client
+ * neither decides nor remembers who is in its bubble, it only draws what the
+ * server says. It is recomputed with every patch (`onStateChange`) and the
+ * notices come from comparing the new view with the previous one, so joining,
+ * leaving, someone joining and someone leaving are each announced once.
  */
 export function mountBubble(connection: OfficeConnection) {
   const panel = document.getElementById('bubble')!
@@ -48,7 +48,7 @@ export function mountBubble(connection: OfficeConnection) {
 
     const bubble = me.bubbleId ? state.bubbles.get(me.bubbleId) : undefined
     if (!bubble) {
-      // Sin burbuja: ¿hay alguna al alcance que esté llena?
+      // No bubble: is there one within reach that is full?
       let fullNearby = false
       state.bubbles.forEach((other) => {
         const full = other.members.length >= maxMembers
@@ -67,7 +67,7 @@ export function mountBubble(connection: OfficeConnection) {
     members.sort((a, b) => {
       if (a.sessionId === room.sessionId) return -1
       if (b.sessionId === room.sessionId) return 1
-      return a.name.localeCompare(b.name, 'es')
+      return a.name.localeCompare(b.name, 'en')
     })
     return { bubbleId: me.bubbleId, members, fullNearby: false, maxMembers }
   }
@@ -76,15 +76,15 @@ export function mountBubble(connection: OfficeConnection) {
     const others = next.members.filter((m) => m.sessionId !== mySessionId)
     panel.dataset.state = next.bubbleId ? 'in' : next.fullNearby ? 'full' : 'none'
     titleEl.textContent = next.bubbleId
-      ? `En conversación · ${next.members.length}`
-      : 'En conversación'
+      ? `In conversation - ${next.members.length}`
+      : 'In conversation'
     hintEl.textContent = next.bubbleId
       ? others.length === 0
-        ? 'Esperando a alguien más…'
+        ? 'Waiting for someone else...'
         : ''
       : next.fullNearby
-        ? `Esa burbuja está llena (tope ${next.maxMembers}).`
-        : 'Acercate a alguien para abrir una burbuja.'
+        ? `That bubble is full (cap ${next.maxMembers}).`
+        : 'Walk up to someone to open a bubble.'
     listEl.replaceChildren(
       ...next.members.map((member) => {
         const li = document.createElement('li')
@@ -96,7 +96,7 @@ export function mountBubble(connection: OfficeConnection) {
         if (member.sessionId === mySessionId) {
           const you = document.createElement('span')
           you.className = 'presence__you'
-          you.textContent = 'vos'
+          you.textContent = 'you'
           name.append(' ', you)
         }
         li.append(avatarThumb(member.avatar, 1), name)
@@ -105,7 +105,7 @@ export function mountBubble(connection: OfficeConnection) {
     )
   }
 
-  /** Avisos: entrar, salir, y quién se suma o se va de mi burbuja. */
+  /** Notices: joining, leaving, and who joins or leaves my bubble. */
   function announce(next: BubbleView, mySessionId: string, room: OfficeRoom) {
     const names = (members: Member[]) =>
       members
@@ -117,15 +117,15 @@ export function mountBubble(connection: OfficeConnection) {
       if (next.bubbleId) {
         const withWhom = names(next.members)
         toast(
-          withWhom ? `Entraste en una conversación con ${withWhom}` : 'Abriste una conversación',
+          withWhom ? `You joined a conversation with ${withWhom}` : 'You opened a conversation',
         )
       } else if (previous.bubbleId) {
-        // Si la burbuja ya no existe, se cerró (quedó una sola persona);
-        // si sigue existiendo, el que salió fui yo.
+        // If the bubble no longer exists, it closed (a single person was
+        // left); if it still exists, the one who left was me.
         toast(
           room.state.bubbles.has(previous.bubbleId)
-            ? 'Saliste de la conversación'
-            : 'Se cerró la conversación',
+            ? 'You left the conversation'
+            : 'The conversation closed',
         )
       }
     } else if (next.bubbleId) {
@@ -133,18 +133,18 @@ export function mountBubble(connection: OfficeConnection) {
       const after = new Set(next.members.map((m) => m.sessionId))
       for (const member of next.members) {
         if (member.sessionId !== mySessionId && !before.has(member.sessionId)) {
-          toast(`${member.name} se sumó a la conversación`)
+          toast(`${member.name} joined the conversation`)
         }
       }
       for (const member of previous.members) {
         if (member.sessionId !== mySessionId && !after.has(member.sessionId)) {
-          toast(`${member.name} se fue de la conversación`)
+          toast(`${member.name} left the conversation`)
         }
       }
     }
 
     if (next.fullNearby && !previous.fullNearby) {
-      toast(`Esa burbuja está llena (tope ${next.maxMembers}): no podés entrar`)
+      toast(`That bubble is full (cap ${next.maxMembers}): you cannot join`)
     }
   }
 

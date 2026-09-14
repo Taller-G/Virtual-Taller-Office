@@ -28,83 +28,86 @@ import { ChatRelay } from '../chat'
 import { config, DEFAULT_BUBBLE_RADIUS_TILES } from '../config'
 import { worldMap, type WorldMap } from '../map'
 
-/** Lo que `defineRoom` le pasa a la sala de cada mundo (ver `app.config.ts`). */
+/** What `defineRoom` passes to each world's room (see `app.config.ts`). */
 export interface WorldRoomOptions {
   worldId?: string
 }
 
-/** Cada cuánto se revisa quién lleva demasiado tiempo sin actividad. */
+/** How often it is checked who has gone too long without activity. */
 const AWAY_CHECK_INTERVAL_MS = 1_000
 
 /**
- * Sala persistente de **un mundo**: la First Office, la Chiron Office o
- * cualquier otro del registro de `@vto/shared`. El servidor registra una sala
- * por mundo (ver `app.config.ts`), así que cada mundo tiene su mapa, su gente,
- * sus burbujas y su chat sin compartir nada con los demás.
+ * Persistent room of **one world**: the First Office, the Chiron Office or any
+ * other one in the `@vto/shared` registry. The server registers one room per
+ * world (see `app.config.ts`), so each world has its map, its people, its
+ * bubbles and its chat without sharing anything with the others.
  *
- * Reglas de conexión:
- * - `onJoin`: se agrega un `Player` al estado bajo `client.sessionId`, con el
- *   nombre y avatar que eligió el usuario (validados; con fallback).
- * - `onDrop` (cierre NO consentido: red caída, pestaña colgada): se marca al
- *   jugador como desconectado y se sostiene su asiento `reconnectGraceSeconds`.
- *   Si reconecta a tiempo conserva la sesión; si no, cae en `onLeave`.
- * - `onLeave` (cierre consentido o gracia vencida): se quita al jugador y el
- *   patch de estado avisa al resto.
+ * Connection rules:
+ * - `onJoin`: a `Player` is added to the state under `client.sessionId`, with
+ *   the name and avatar the user chose (validated; with a fallback).
+ * - `onDrop` (NON-consented close: network down, hung tab): the player is
+ *   marked as disconnected and their seat is held for
+ *   `reconnectGraceSeconds`. If they reconnect in time they keep the session;
+ *   if not, they fall through to `onLeave`.
+ * - `onLeave` (consented close or expired grace): the player is removed and
+ *   the state patch tells everyone else.
  *
- * Presencia:
- * - Cada `MOVE` (o cambio de nombre) cuenta como actividad. Un jugador sin
- *   actividad durante `awayAfterSeconds` pasa a `away = true`; al volver a
- *   moverse vuelve a activo.
- * - `SET_AWAY` fija el ausente a mano (`awayManual`): moverse no lo quita,
- *   solo otro `SET_AWAY { away: false }`.
+ * Presence:
+ * - Every `MOVE` (or name change) counts as activity. A player without
+ *   activity for `awayAfterSeconds` becomes `away = true`; on moving again
+ *   they go back to active.
+ * - `SET_AWAY` sets the away state by hand (`awayManual`): moving does not
+ *   clear it, only another `SET_AWAY { away: false }`.
  *
- * Burbujas de conversación (ver `bubbles.ts`): tras cada `MOVE` acotado y en
- * cada salida se recalcula la pertenencia. El cliente no tiene mensaje para
- * pedir ni forzar una burbuja: solo refleja `state.bubbles` y `player.bubbleId`.
+ * Conversation bubbles (see `bubbles.ts`): membership is recomputed after
+ * every clamped `MOVE` and on every departure. The client has no message to
+ * request or force a bubble: it only reflects `state.bubbles` and
+ * `player.bubbleId`.
  *
- * Chat de la burbuja (ver `chat.ts`): `CHAT_SEND` se retransmite únicamente a
- * los miembros que la burbuja del remitente tiene en ese momento (el remitente
- * incluido, como acuse). Los mensajes son efímeros: no entran al estado ni se
- * guardan en ningún lado, así que quien llega después no ve nada de antes.
+ * Bubble chat (see `chat.ts`): `CHAT_SEND` is relayed only to the members the
+ * sender's bubble has at that moment (the sender included, as an
+ * acknowledgement). Messages are ephemeral: they do not enter the state nor
+ * get stored anywhere, so whoever arrives later sees nothing from before.
  *
- * El servidor es la fuente de verdad de la lista de jugadores y de las
- * burbujas: el cliente solo refleja `state.players` y `state.bubbles`.
+ * The server is the source of truth for the list of players and the bubbles:
+ * the client only reflects `state.players` and `state.bubbles`.
  *
- * Mapa: al crearse, la sala toma el mapa de su mundo (el mismo archivo Tiled
- * que dibuja el cliente) y de ahí los puntos de aparición y los límites. Los
- * mapas de todos los mundos se leen y validan juntos al arrancar —puertas
- * incluidas—: si alguno no es válido, el servidor no arranca.
+ * Map: on creation, the room takes its world's map (the same Tiled file the
+ * client draws) and from it the spawn points and the bounds. The maps of
+ * every world are read and validated together at boot -- doors included: if
+ * any of them is invalid, the server does not start.
  *
- * Puertas: viajar es salir de esta sala y entrar a la del mundo destino. La
- * sala destino recibe en `options.spawn` el nombre del punto de llegada que
- * nombra la puerta, y en `options.away` el estado de presencia del que viaja.
+ * Doors: travelling is leaving this room and joining the destination world's
+ * one. The destination room receives in `options.spawn` the name of the
+ * arrival point the door names, and in `options.away` the presence state of
+ * whoever travels.
  */
 export class WorldRoom extends Room<{ state: OfficeState }> {
-  /** La sala vive aunque no haya nadie: todos los de ese mundo entran a la misma. */
+  /** The room lives even with nobody in it: everyone in that world joins the same one. */
   autoDispose = false
   maxClients = config.maxClients
   state = new OfficeState()
-  /** El mundo que hospeda esta sala. */
+  /** The world this room hosts. */
   world!: WorldDefinition
   map!: WorldMap
   bubbles!: BubbleManager
   chat!: ChatRelay
-  /** Último instante (ms, reloj de la sala) con actividad por sessionId. */
+  /** Latest instant (ms, room clock) with activity, by sessionId. */
   private lastActivity = new Map<string, number>()
 
   async onCreate(options?: WorldRoomOptions) {
-    // El mundo sale del nombre con el que se registró la sala; las opciones
-    // de `defineRoom` son el respaldo (y lo que usan las pruebas).
+    // The world comes from the name the room was registered under; the
+    // `defineRoom` options are the fallback (and what the tests use).
     const world = worldForRoomName(this.roomName) ?? getWorld(options?.worldId ?? '')
     if (!world) {
       throw new MapError(
-        `La sala "${this.roomName}" no corresponde a ningún mundo configurado (ver WORLDS en @vto/shared)`,
+        `The room "${this.roomName}" does not match any configured world (see WORLDS in @vto/shared)`,
       )
     }
     this.world = world
     this.map = worldMap(world.id)
     console.log(
-      `[mundo ${world.id}] mapa ${this.map.file} (${this.map.bounds.width}x${this.map.bounds.height} px, entrada ${this.map.spawn.x},${this.map.spawn.y})`,
+      `[world ${world.id}] map ${this.map.file} (${this.map.bounds.width}x${this.map.bounds.height} px, entrance ${this.map.spawn.x},${this.map.spawn.y})`,
     )
 
     this.bubbles = new BubbleManager(this.state, {
@@ -112,7 +115,7 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
       maxMembers: config.bubbleMaxMembers,
     })
     console.log(
-      `[mundo ${world.id}] burbujas: radio ${this.bubbles.radius} px, tope ${this.bubbles.maxMembers} miembros`,
+      `[world ${world.id}] bubbles: radius ${this.bubbles.radius} px, cap ${this.bubbles.maxMembers} members`,
     )
 
     this.chat = new ChatRelay(this.state, {
@@ -134,12 +137,12 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
     this.clock.setInterval(() => this.checkAway(), AWAY_CHECK_INTERVAL_MS)
 
     await this.setMetadata({ name: world.name, worldId: world.id })
-    console.log(`[mundo ${world.id}] "${world.name}" listo (roomId=${this.roomId})`)
+    console.log(`[world ${world.id}] "${world.name}" ready (roomId=${this.roomId})`)
   }
 
   onJoin(client: Client, options?: JoinOptions) {
-    // Quien llega por una puerta lo hace en el spawn que esa puerta nombra, y
-    // mirando hacia donde ese spawn diga: de espaldas a la puerta de vuelta.
+    // Whoever arrives through a door does so at the spawn that door names,
+    // facing wherever that spawn says: with their back to the return door.
     const spawn = this.spawnFor(options?.spawn)
     const { x, y } = randomSpawnPosition(spawn, this.map.bounds)
     const away = options?.away === true
@@ -152,14 +155,14 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
       y,
       dir: spawn.dir,
       moving: false,
-      // Viajar no cambia el estado de presencia: se llega como se salió.
+      // Travelling does not change the presence state: you arrive as you left.
       away,
       awayManual: away && options?.awayManual === true,
       connected: true,
     })
     this.state.players.set(client.sessionId, player)
     this.touch(client.sessionId)
-    // Aparecer al lado de alguien también cuenta como estar cerca.
+    // Appearing next to someone also counts as being close.
     this.bubbles.onPlayerMoved(player)
 
     const info: RoomInfoPayload = {
@@ -170,15 +173,15 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
     }
     client.send(Message.ROOM_INFO, info)
     console.log(
-      `[mundo ${this.world.id}] entra ${client.sessionId} como "${player.name}" (${player.avatar}; spawn "${spawn.name}"; ${this.state.players.size} presentes)`,
+      `[world ${this.world.id}] ${client.sessionId} joins as "${player.name}" (${player.avatar}; spawn "${spawn.name}"; ${this.state.players.size} present)`,
     )
   }
 
   /**
-   * El spawn por el que entra alguien: el que nombra la puerta que cruzó o,
-   * si no nombra ninguno (o nombra uno que este mapa no tiene), la entrada del
-   * mundo. La validación cruzada al arrancar ya garantiza que las puertas
-   * reales apunten a spawns que existen; esto cubre a un cliente inventivo.
+   * The spawn someone enters through: the one the door they crossed names or,
+   * if it names none (or names one this map does not have), the entrance to
+   * the world. The cross-validation at boot already guarantees that real
+   * doors point at spawns that exist; this covers an inventive client.
    */
   private spawnFor(name?: string): SpawnPoint {
     const wanted = typeof name === 'string' ? name.trim() : ''
@@ -186,15 +189,15 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
     try {
       return findSpawnPoint(this.map.data, wanted)
     } catch {
-      console.warn(`[mundo ${this.world.id}] spawn "${wanted}" desconocido; se usa la entrada`)
+      console.warn(`[world ${this.world.id}] unknown spawn "${wanted}"; using the entrance`)
       return this.map.spawn
     }
   }
 
   /**
-   * El cliente manda su posición ya resuelta contra las colisiones del mapa;
-   * el servidor la acota a los límites y la replica junto con la animación.
-   * (Validar colisiones del lado del servidor queda para más adelante.)
+   * The client sends its position already resolved against the map's
+   * collisions; the server clamps it to the bounds and replicates it along
+   * with the animation. (Validating collisions server-side is left for later.)
    */
   private onMove(client: Client, payload: MovePayload) {
     const player = this.state.players.get(client.sessionId)
@@ -207,7 +210,7 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
     if (isDirection(payload.dir)) player.dir = payload.dir
     player.moving = payload.moving === true
     this.markActive(player)
-    // La pertenencia a burbujas se decide acá, con la posición ya acotada.
+    // Bubble membership is decided here, with the position already clamped.
     this.bubbles.onPlayerMoved(player)
   }
 
@@ -233,9 +236,10 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
   }
 
   /**
-   * Mensaje de chat: lo resuelve `ChatRelay` (valida, exige burbuja y acota el
-   * ritmo) y el servidor lo manda solo a los clientes de esa burbuja. Si no se
-   * acepta, el motivo vuelve únicamente al remitente. Nada se guarda.
+   * Chat message: `ChatRelay` resolves it (validates, requires a bubble and
+   * limits the rate) and the server sends it only to the clients in that
+   * bubble. If it is not accepted, the reason goes back to the sender alone.
+   * Nothing is stored.
    */
   private onChatSend(client: Client, payload: ChatSendPayload) {
     const outcome = this.chat.submit(client.sessionId, payload, Date.now())
@@ -246,12 +250,12 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
     for (const sessionId of outcome.recipients) {
       this.clients.getById(sessionId)?.send(Message.CHAT_MESSAGE, outcome.message)
     }
-    // Escribir también es actividad: no te marca ausente mientras conversás.
+    // Typing is activity too: it does not mark you away while you chat.
     const player = this.state.players.get(client.sessionId)
     if (player) this.markActive(player)
   }
 
-  /** Registra actividad; el ausente automático se levanta, el manual no. */
+  /** Records activity; the automatic away state lifts, the manual one does not. */
   private markActive(player: Player) {
     this.touch(player.sessionId)
     if (player.away && !player.awayManual) player.away = false
@@ -272,41 +276,43 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
   }
 
   onDrop(client: Client, code?: number) {
-    // Si el servidor se está apagando no tiene sentido sostener el asiento:
-    // sin allowReconnection el framework pasa directo a onLeave().
+    // If the server is shutting down there is no point in holding the seat:
+    // without allowReconnection the framework goes straight to onLeave().
     if (code === CloseCode.SERVER_SHUTDOWN) return
 
     const player = this.state.players.get(client.sessionId)
     if (player) player.connected = false
     console.log(
-      `[mundo ${this.world.id}] se cortó ${client.sessionId} (code=${code}); se sostiene el asiento ${config.reconnectGraceSeconds}s`,
+      `[world ${this.world.id}] ${client.sessionId} dropped (code=${code}); holding the seat for ${config.reconnectGraceSeconds}s`,
     )
-    // No se espera el resultado: el framework enruta a onReconnect() u onLeave().
-    // El catch evita un "unhandled rejection" cuando la sala se está cerrando.
+    // The result is not awaited: the framework routes to onReconnect() or
+    // onLeave(). The catch avoids an "unhandled rejection" while the room is
+    // closing.
     this.allowReconnection(client, config.reconnectGraceSeconds).catch(() => {})
   }
 
   onReconnect(client: Client) {
     const player = this.state.players.get(client.sessionId)
     if (player) player.connected = true
-    console.log(`[mundo ${this.world.id}] reconectó ${client.sessionId}`)
+    console.log(`[world ${this.world.id}] ${client.sessionId} reconnected`)
   }
 
   onLeave(client: Client, code?: number) {
     const player = this.state.players.get(client.sessionId)
-    // Primero se lo quita del estado y después se recalculan las burbujas: así
-    // los que queden libres no vuelven a agruparse con quien ya se fue.
+    // They are removed from the state first and the bubbles are recomputed
+    // afterwards: that way those who are freed do not group up again with
+    // someone who has already gone.
     this.state.players.delete(client.sessionId)
     if (player) this.bubbles.onPlayerLeft(player)
     this.lastActivity.delete(client.sessionId)
     this.chat.forget(client.sessionId)
-    const reason = code === CloseCode.CONSENTED ? 'salida consentida' : `code=${code}`
+    const reason = code === CloseCode.CONSENTED ? 'consented leave' : `code=${code}`
     console.log(
-      `[mundo ${this.world.id}] sale ${client.sessionId} (${reason}; ${this.state.players.size} presentes)`,
+      `[world ${this.world.id}] ${client.sessionId} leaves (${reason}; ${this.state.players.size} present)`,
     )
   }
 
   onDispose() {
-    console.log(`[mundo ${this.world.id}] "${this.world.name}" cerrado (roomId=${this.roomId})`)
+    console.log(`[world ${this.world.id}] "${this.world.name}" closed (roomId=${this.roomId})`)
   }
 }
