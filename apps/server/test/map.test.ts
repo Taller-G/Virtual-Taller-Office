@@ -4,7 +4,10 @@ import { dirname, join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   CLASS_ZONE,
+  doorAt,
+  findDoors,
   findSpawnPoint,
+  findSpawnPoints,
   getZones,
   isSolidAt,
   objectCollides,
@@ -12,9 +15,10 @@ import {
   PROP_COLLIDES,
   tileLayers,
   validateMap,
+  WORLDS,
   type TiledMap,
 } from '@vto/shared'
-import { DEFAULT_MAP_FILE, loadOfficeMap } from '../src/map'
+import { DEFAULT_MAP_FILE, loadOfficeMap, loadWorldMaps } from '../src/map'
 
 /**
  * Estas pruebas corren contra el mapa REAL que se despliega. Si alguien lo
@@ -136,7 +140,7 @@ describe('loadOfficeMap: mapas inválidos fallan con mensaje claro', () => {
 
   it('acepta un mapa mínimo válido', () => {
     const office = loadOfficeMap(write('ok.json', minimal))
-    expect(office.spawn).toEqual({ x: 16, y: 16, radius: 32 })
+    expect(office.spawn).toEqual({ name: 'default', x: 16, y: 16, radius: 32, dir: 'down' })
     expect(office.bounds).toEqual({ width: 64, height: 64 })
   })
 
@@ -177,3 +181,86 @@ describe('loadOfficeMap: mapas inválidos fallan con mensaje claro', () => {
     expect(() => loadOfficeMap(write('ext.json', external))).toThrow(/no está embebido/)
   })
 })
+
+/**
+ * Los mapas reales de todos los mundos, cargados como los carga el servidor al
+ * arrancar: cada uno válido por su cuenta y las puertas cerrando entre ellos.
+ */
+describe('Mundos (archivos reales)', () => {
+  const worlds = loadWorldMaps()
+
+  it('carga un mapa por cada mundo del registro', () => {
+    expect([...worlds.keys()]).toEqual(WORLDS.map((w) => w.id))
+    for (const [id, world] of worlds) {
+      expect(validateMap(world.data), `mapa de ${id}`).toEqual([])
+    }
+  })
+
+  it('la First Office y la Chiron Office están conectadas en los dos sentidos', () => {
+    const first = worlds.get('first-office')!.data
+    const chiron = worlds.get('chiron-office')!.data
+
+    const toChiron = findDoors(first)
+    expect(toChiron).toHaveLength(1)
+    expect(toChiron[0]).toMatchObject({ world: 'chiron-office', spawn: 'desde-first-office' })
+
+    const toFirst = findDoors(chiron)
+    expect(toFirst).toHaveLength(1)
+    expect(toFirst[0]).toMatchObject({ world: 'first-office', spawn: 'desde-chiron' })
+
+    // Cada puerta llega a un spawn que existe y que no está sobre la puerta de
+    // vuelta: si no, se volvería al mundo anterior al instante.
+    const arrival = findSpawnPoint(chiron, 'desde-first-office')
+    expect(doorAt(chiron, arrival.x, arrival.y)).toBeUndefined()
+    const back = findSpawnPoint(first, 'desde-chiron')
+    expect(doorAt(first, back.x, back.y)).toBeUndefined()
+    expect(back.dir).toBe('down')
+    expect(arrival.dir).toBe('up')
+  })
+
+  it('ningún spawn ni puerta cae sobre una pared o un mueble sólido', () => {
+    for (const [id, world] of worlds) {
+      const blocked = solidTiles(world.data)
+      for (const spawn of findSpawnPoints(world.data)) {
+        expect(
+          blocked.has(tileKey(world.data, spawn.x, spawn.y)),
+          `${id}: spawn ${spawn.name}`,
+        ).toBe(false)
+      }
+      for (const door of findDoors(world.data)) {
+        const x = door.x + door.width / 2
+        const y = door.y + door.height / 2
+        expect(blocked.has(tileKey(world.data, x, y)), `${id}: puerta ${door.name}`).toBe(false)
+      }
+    }
+  })
+})
+
+/** Clave de la celda que contiene el punto. */
+function tileKey(map: TiledMap, x: number, y: number): string {
+  return `${Math.floor(x / map.tilewidth)},${Math.floor(y / map.tileheight)}`
+}
+
+/** Celdas ocupadas por un tile que colisiona o por un mueble sólido. */
+function solidTiles(map: TiledMap): Set<string> {
+  const blocked = new Set<string>()
+  for (let row = 0; row < map.height; row++) {
+    for (let col = 0; col < map.width; col++) {
+      if (isSolidAt(map, col * map.tilewidth, row * map.tileheight)) blocked.add(`${col},${row}`)
+    }
+  }
+  for (const layer of objectLayers(map)) {
+    for (const obj of layer.objects) {
+      if (!obj.gid || !objectCollides(layer, obj)) continue
+      const width = obj.width ?? map.tilewidth
+      const height = obj.height ?? map.tileheight
+      // En Tiled un objeto-tile se ancla en su esquina inferior izquierda.
+      for (let y = obj.y - height; y < obj.y; y += map.tileheight) {
+        for (let x = obj.x; x < obj.x + width; x += map.tilewidth) {
+          blocked.add(tileKey(map, x, y))
+        }
+      }
+    }
+  }
+  return blocked
+}

@@ -3,15 +3,16 @@ import { boot, type ColyseusTestServer } from '@colyseus/testing'
 import { CloseCode, type Room as SdkRoom } from '@colyseus/sdk'
 import {
   DEFAULT_AVATAR,
+  DEFAULT_WORLD_ID,
   Message,
   NAME_MAX_LENGTH,
-  ROOM_NAME,
+  roomNameFor,
   type JoinOptions,
   type OfficeState,
 } from '@vto/shared'
 import app from '../src/app.config'
 import { config } from '../src/config'
-import type { OficinaTallerRoom } from '../src/rooms/OficinaTallerRoom'
+import type { WorldRoom } from '../src/rooms/WorldRoom'
 
 /** Espera hasta que `predicate` sea verdadera o venza `timeoutMs`. */
 async function waitFor(predicate: () => boolean, timeoutMs: number, label: string) {
@@ -23,10 +24,10 @@ async function waitFor(predicate: () => boolean, timeoutMs: number, label: strin
   return Date.now() - started
 }
 
-describe('Sala "Oficina Taller": ciclo conectar / desconectar', () => {
+describe('Sala de un mundo: ciclo conectar / desconectar', () => {
   let colyseus: ColyseusTestServer
-  let room: OficinaTallerRoom
-  const clients: SdkRoom<OficinaTallerRoom, OfficeState>[] = []
+  let room: WorldRoom
+  const clients: SdkRoom<WorldRoom, OfficeState>[] = []
 
   async function connect(options?: JoinOptions) {
     const client = await colyseus.connectTo(room, options)
@@ -39,7 +40,7 @@ describe('Sala "Oficina Taller": ciclo conectar / desconectar', () => {
   }
 
   /** Salida consentida con tope: un cliente ya cerrado nunca resolvería `leave()`. */
-  async function leaveQuietly(client: SdkRoom<OficinaTallerRoom, OfficeState>) {
+  async function leaveQuietly(client: SdkRoom<WorldRoom, OfficeState>) {
     await Promise.race([
       client.leave(true).catch(() => undefined),
       new Promise((resolve) => setTimeout(resolve, 500)),
@@ -60,7 +61,7 @@ describe('Sala "Oficina Taller": ciclo conectar / desconectar', () => {
   })
 
   async function createRoom() {
-    room = await colyseus.createRoom<OficinaTallerRoom>(ROOM_NAME, {})
+    room = await colyseus.createRoom<WorldRoom>(roomNameFor(DEFAULT_WORLD_ID), {})
   }
 
   it('al entrar recibe su sessionId y el estado con su propio jugador', async () => {
@@ -139,7 +140,7 @@ describe('Sala "Oficina Taller": ciclo conectar / desconectar', () => {
     await b.leave(false)
     await waitFor(() => room.state.players.get(sessionId)?.connected === false, 1_000, 'marcado')
 
-    const again = await colyseus.sdk.reconnect<OficinaTallerRoom>(token)
+    const again = await colyseus.sdk.reconnect<WorldRoom>(token)
     again.reconnection.enabled = false
     clients.push(again)
 

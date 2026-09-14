@@ -23,8 +23,7 @@ export const DEFAULT_BUBBLE_RADIUS_TILES = 2
 
 export const config = {
   port: integer('PORT', 2567),
-  /** Ruta al mapa Tiled JSON. Vacío = el mapa que sirve el cliente (ver map.ts). */
-  mapFile: process.env.MAP_FILE || undefined,
+  /** Máximo de jugadores simultáneos **por mundo**. */
   maxClients: integer('MAX_CLIENTS', 50),
   reconnectGraceSeconds: integer('RECONNECT_GRACE_SECONDS', 2),
   /** Segundos sin actividad tras los cuales un jugador pasa a "ausente". */

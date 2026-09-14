@@ -1,17 +1,18 @@
 # Virtual Taller Office
 
-Oficina virtual 2D de Taller, estilo Gather: avatares en una sala compartida en tiempo real.
-Este repositorio contiene la **fundación**: cliente web, servidor en tiempo real y la sala única
-**"Oficina Taller"** a la que todo el mundo entra automáticamente, con un ciclo de conexión sólido
-(entrar, salir, refrescar, perder la red, caída del servidor); el **mapa 2D de la oficina**
+Oficina virtual 2D de Taller, estilo Gather: avatares en mundos compartidos en tiempo real.
+Este repositorio contiene la **fundación**: cliente web, servidor en tiempo real y los **mundos**
+—la **First Office**, donde todo el mundo entra, y la **Chiron Office**, oscura, a la que se llega
+cruzando una puerta— con un ciclo de conexión sólido (entrar, salir, refrescar, perder la red,
+caída del servidor); el **mapa 2D de cada mundo**
 (recepción, escritorios, sala de reunión, cocina) con paredes y muebles que bloquean el paso; la
 **presencia en tiempo real**: cada persona elige nombre y avatar, se mueve con flechas o WASD, ve a
 los demás moverse con animación, y un panel muestra quién está y quién está ausente; y las
 **burbujas de conversación por proximidad**: acercarse a alguien abre un grupo que el servidor
 calcula por radio, igual para todos.
 
-El mapa es un archivo [Tiled](https://www.mapeditor.org/) editable por cualquiera del equipo, sin
-tocar código: ver [`docs/mapa.md`](docs/mapa.md).
+Cada mundo es un archivo [Tiled](https://www.mapeditor.org/) editable por cualquiera del equipo, sin
+tocar código —puertas incluidas—: ver [`docs/mapa.md`](docs/mapa.md).
 
 Stack: [Phaser 3](https://phaser.io/) + [Colyseus 0.18](https://colyseus.io/) + [Vite](https://vite.dev/),
 todo en TypeScript.
@@ -21,17 +22,18 @@ todo en TypeScript.
 ```
 apps/
   client/        Cliente web (Vite + Phaser 3 + @colyseus/sdk). Se despliega como sitio estático.
-    public/assets/map/       Mapa Tiled de la oficina (oficina-taller.json)
+    public/assets/map/       Mapas Tiled de los mundos (oficina-taller.json, chiron-office.json)
     public/assets/tilesets/  Imágenes de los tilesets que usa el mapa
     public/assets/avatars/   Hojas de sprites de los 8 avatares (<id>.png)
   server/        Servidor Node (Colyseus). Se despliega aparte, como servicio independiente.
 packages/
-  shared/        Contratos compartidos: sala, mensajes, esquema del estado, mapa, catálogo de avatares e identidad.
+  shared/        Contratos compartidos: mundos, mensajes, esquema del estado, mapa, catálogo de avatares e identidad.
 tools/
   recolor-avatars.py   Genera las 4 variantes recoloreadas de los avatares (solo desarrollo, Python + Pillow).
   person-avatars.py    Genera los 3 avatares del equipo (persona1/2/3) desde los sprites base (solo desarrollo).
+  make-chiron-map.py   Genera el mapa de la Chiron Office desde los tilesets de la First Office (solo desarrollo).
 docs/
-  mapa.md              Cómo editar el mapa en Tiled y qué capas/propiedades espera la app
+  mapa.md              Cómo editar los mapas en Tiled, el contrato (puertas incluidas) y cómo agregar un mundo
   licencias-assets.md  Origen y licencia de cada asset gráfico
   assets-pixel-art.md  Logo y avatares del equipo: dimensiones y organización de los sprite sheets
 ```
@@ -63,7 +65,9 @@ npm run dev
 | Cliente  | `http://localhost:5173` | Vite HMR                         |
 
 Abrí `http://localhost:5173` en dos navegadores distintos: cada uno elige un nombre y un avatar y
-ambos aparecen en la misma sala. `http://localhost:2567/health` devuelve el estado del servidor y cuántos jugadores hay.
+ambos aparecen en la First Office. Caminando hasta la puerta del fondo de la recepción se pasa a la
+Chiron Office. `http://localhost:2567/health` devuelve el estado del servidor, qué mundos están
+levantados y cuánta gente hay en cada uno.
 
 Para correr una sola parte: `npm run dev -w apps/server` o `npm run dev -w apps/client`.
 
@@ -74,46 +78,54 @@ No hay valores hardcodeados: puerto y URL del servidor salen del entorno. Cada a
 
 ### Servidor (`apps/server`)
 
-| Variable                  | Default          | Qué hace                                                                               |
-| ------------------------- | ---------------- | -------------------------------------------------------------------------------------- |
-| `PORT`                    | `2567`           | Puerto HTTP + WebSocket.                                                               |
-| `MAX_CLIENTS`             | `50`             | Máximo de jugadores simultáneos en la sala.                                            |
-| `RECONNECT_GRACE_SECONDS` | `2`              | Segundos que se sostiene el asiento de un jugador cuya red se cortó antes de quitarlo. |
-| `AWAY_AFTER_SECONDS`      | `300`            | Segundos sin moverse tras los cuales el avatar aparece como "ausente" para los demás.  |
-| `PING_INTERVAL_MS`        | `2000`           | Cada cuánto se hace ping a cada socket.                                                |
-| `PING_MAX_RETRIES`        | `2`              | Pings sin respuesta antes de dar la conexión por muerta.                               |
-| `MAP_FILE`                | mapa del cliente | Ruta al mapa Tiled JSON del que se toman el punto de aparición y los límites.          |
-| `BUBBLE_RADIUS_PX`        | 2 tiles (64 px)  | Radio de una burbuja de conversación. Vacío = 2 tiles del mapa cargado.                |
-| `BUBBLE_MAX_MEMBERS`      | `6`              | Máximo de personas en una misma burbuja.                                               |
+| Variable                  | Default         | Qué hace                                                                               |
+| ------------------------- | --------------- | -------------------------------------------------------------------------------------- |
+| `PORT`                    | `2567`          | Puerto HTTP + WebSocket.                                                               |
+| `MAX_CLIENTS`             | `50`            | Máximo de jugadores simultáneos **por mundo**.                                         |
+| `RECONNECT_GRACE_SECONDS` | `2`             | Segundos que se sostiene el asiento de un jugador cuya red se cortó antes de quitarlo. |
+| `AWAY_AFTER_SECONDS`      | `300`           | Segundos sin moverse tras los cuales el avatar aparece como "ausente" para los demás.  |
+| `PING_INTERVAL_MS`        | `2000`          | Cada cuánto se hace ping a cada socket.                                                |
+| `PING_MAX_RETRIES`        | `2`             | Pings sin respuesta antes de dar la conexión por muerta.                               |
+| `BUBBLE_RADIUS_PX`        | 2 tiles (64 px) | Radio de una burbuja de conversación. Vacío = 2 tiles del mapa cargado.                |
+| `BUBBLE_MAX_MEMBERS`      | `6`             | Máximo de personas en una misma burbuja.                                               |
 
 `@colyseus/tools` carga automáticamente `.env.development` o `.env.production` según `NODE_ENV`.
 En producción lo habitual es definir las variables en el proveedor de hosting.
 
 ### Cliente (`apps/client`)
 
-| Variable          | Default (dev)                     | Qué hace                                                        |
-| ----------------- | --------------------------------- | --------------------------------------------------------------- |
-| `VITE_SERVER_URL` | `ws://localhost:2567`             | URL pública del servidor Colyseus. `wss://` en producción.      |
-| `VITE_PORT`       | `5173`                            | Puerto del servidor de desarrollo de Vite.                      |
-| `VITE_MAP_URL`    | `/assets/map/oficina-taller.json` | URL del mapa Tiled. Las imágenes se resuelven relativas a ella. |
+| Variable          | Default (dev)         | Qué hace                                                   |
+| ----------------- | --------------------- | ---------------------------------------------------------- |
+| `VITE_SERVER_URL` | `ws://localhost:2567` | URL pública del servidor Colyseus. `wss://` en producción. |
+| `VITE_PORT`       | `5173`                | Puerto del servidor de desarrollo de Vite.                 |
 
 Vite inyecta `VITE_SERVER_URL` **en tiempo de build**: para apuntar el sitio estático a otro
 servidor hay que volver a construirlo. Si falta, el cliente falla al arrancar con un mensaje claro.
 
-## El mapa y el movimiento
+## Los mundos, el mapa y el movimiento
 
+- **Un mundo, un mapa, una sala.** Los mundos se declaran en `packages/shared/src/worlds.ts` (id
+  estable, nombre visible y archivo de mapa). El servidor registra y levanta **una sala por mundo**,
+  así cada uno tiene su gente, sus burbujas y su chat sin compartir nada con los demás.
+- **Puertas.** Un objeto de clase `door` en el mapa nombra el mundo y el punto de llegada a los que
+  lleva. Se cruza **caminando**: al pisarla, la pantalla funde a negro, el cliente entra a la sala
+  del destino y recién ahí sale de la de origen, y aparece en el spawn que la puerta nombra mirando
+  hacia adentro. Si el destino no está disponible, se queda donde estaba con un aviso. Al arrancar,
+  el servidor valida todas las puertas de todos los mundos.
 - **El mapa es datos.** `apps/client/public/assets/map/oficina-taller.json` es un mapa Tiled con
-  capas de piso, paredes, muebles decorativos y muebles con colisión, más el punto de aparición y las
-  zonas con nombre. Reemplazarlo por otro válido cambia la oficina sin tocar código. El contrato
-  completo está en [`docs/mapa.md`](docs/mapa.md).
+  capas de piso, paredes, muebles decorativos y muebles con colisión, más los puntos de aparición,
+  las puertas y las zonas con nombre. Reemplazarlo por otro válido cambia la oficina sin tocar
+  código. El contrato completo está en [`docs/mapa.md`](docs/mapa.md).
 - **Colisiones desde el mapa.** Un tile bloquea si su tileset lo marca con `collides: true`; un
   mueble bloquea si él o su capa tienen `collides: true`. El código no conoce nombres de capas.
-- **Spawn desde el mapa.** El servidor lee el mismo archivo al arrancar (`MAP_FILE`), toma el objeto
-  de clase `spawn` y coloca a cada jugador al azar dentro de su radio. Si el mapa no es válido, el
-  servidor no arranca y explica por qué.
+- **Spawn desde el mapa.** El servidor lee los mismos archivos que dibuja el cliente al arrancar,
+  toma el objeto de clase `spawn` sin nombre (la entrada del mundo) y coloca a cada jugador al azar
+  dentro de su radio; quien llega por una puerta aparece en el spawn con nombre que esa puerta
+  menciona. Si un mapa no es válido, el servidor no arranca y explica por qué.
 - **Movimiento.** Flechas o WASD mueven el avatar propio con física Arcade contra paredes y
   muebles. La cámara sigue al jugador con zoom 2 y `pixelArt` para que el pixel art se vea nítido.
-- **Debug.** `http://localhost:5173/?debug` dibuja los cuerpos de colisión y expone `window.__vto`.
+- **Debug.** `http://localhost:5173/?debug` dibuja los cuerpos de colisión, los puntos de aparición
+  con su radio y las áreas de las puertas con su destino, y expone `window.__vto`.
 
 ## Avatares, movimiento y presencia
 
@@ -169,9 +181,13 @@ grupos por radio de [WorkAdventure](https://github.com/workadventure/workadventu
 
 ## Cómo funciona la conexión
 
-- **Sala única.** El servidor registra la sala `oficina_taller` con `autoDispose = false` y la crea
-  al arrancar; el cliente hace `joinOrCreate` y siempre cae en esa instancia. No hay lobby, salas
-  custom ni contraseñas.
+- **Una sala persistente por mundo.** El servidor registra `world_<id>` para cada mundo del registro
+  (`world_first_office`, `world_chiron_office`) con `autoDispose = false` y las crea al arrancar; el
+  cliente hace `joinOrCreate` sobre la del mundo inicial y siempre cae en esa instancia. No hay
+  lobby, salas custom ni contraseñas.
+- **Viajar.** Cruzar una puerta es entrar a la sala del mundo destino (con `join`: si ese mundo no
+  está levantado, el viaje falla en vez de crear uno) y recién entonces salir de la de origen, así
+  nadie queda a medio camino ni de fantasma en los dos lados.
 - **Entrar.** Al entrar, el servidor agrega un `Player` al estado con la clave `sessionId` y le
   manda al cliente su identificador y los metadatos de la sala. El SDK sincroniza el estado
   completo y luego solo los cambios.
@@ -207,10 +223,16 @@ y el comportamiento contra la sala real en `test/bubbles.room.test.ts` (los dos 
 misma burbuja en menos de 300 ms, un tercero entra y los tres ven tres miembros, quien se aleja sale
 y los otros siguen, al quedar uno desaparece, el jugador N+1 no entra en una burbuja llena, y una
 posición falsa del cliente no crea ni rompe burbujas distintas a las que calcula el servidor).
-Además validan el **mapa real** (`test/map.test.ts`):
-spawn único sobre piso transitable, cuatro zonas, tilesets embebidos con imágenes presentes y
-colisiones declaradas en el mapa; y el **catálogo de avatares** y la normalización de nombres
-(`test/identity.test.ts`).
+Además validan los **mapas reales** de todos los mundos (`test/map.test.ts`): entrada única sobre
+piso transitable, cuatro zonas, tilesets embebidos con imágenes presentes, colisiones declaradas en
+el mapa, y las puertas de la First Office y la Chiron Office cerrando en los dos sentidos sin caer
+sobre paredes ni muebles. El **contrato de las puertas** tiene sus pruebas en `test/doors.test.ts`
+(spawns con nombre, puerta sin destino, puerta a un mundo o a un spawn que no existe: el servidor no
+arranca y nombra la puerta y lo que falta) y **viajar entre mundos** en `test/travel.room.test.ts`
+(se llega al spawn que nombra la puerta mirando hacia adentro, el ausente viaja con el jugador, los
+que se quedan dejan de verlo y los del destino lo ven llegar, el chat de un mundo no llega al otro y
+un mundo apagado no se levanta al cruzar su puerta). El **catálogo de avatares** y la normalización
+de nombres están en `test/identity.test.ts`.
 
 ## Despliegue
 

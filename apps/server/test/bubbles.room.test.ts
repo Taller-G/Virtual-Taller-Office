@@ -1,12 +1,12 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { boot, type ColyseusTestServer } from '@colyseus/testing'
 import type { Room as SdkRoom } from '@colyseus/sdk'
-import { Message, ROOM_NAME, type OfficeState } from '@vto/shared'
+import { DEFAULT_WORLD_ID, Message, roomNameFor, type OfficeState } from '@vto/shared'
 import app from '../src/app.config'
 import { config } from '../src/config'
-import type { OficinaTallerRoom } from '../src/rooms/OficinaTallerRoom'
+import type { WorldRoom } from '../src/rooms/WorldRoom'
 
-type TestClient = SdkRoom<OficinaTallerRoom, OfficeState>
+type TestClient = SdkRoom<WorldRoom, OfficeState>
 
 /** Espera hasta que `predicate` sea verdadera o venza `timeoutMs`; devuelve los ms que tardó. */
 async function waitFor(predicate: () => boolean, timeoutMs: number, label: string) {
@@ -35,9 +35,9 @@ function snapshot(state: OfficeState) {
   })
 }
 
-describe('Sala "Oficina Taller": burbujas de conversación por proximidad', () => {
+describe('Sala de un mundo: burbujas de conversación por proximidad', () => {
   let colyseus: ColyseusTestServer
-  let room: OficinaTallerRoom
+  let room: WorldRoom
   const clients: TestClient[] = []
   /** BUBBLE_RADIUS_PX en vitest.config.ts (2 tiles de 32 px). */
   const RADIUS = 64
@@ -102,7 +102,7 @@ describe('Sala "Oficina Taller": burbujas de conversación por proximidad', () =
   })
 
   async function createRoom() {
-    room = await colyseus.createRoom<OficinaTallerRoom>(ROOM_NAME, {})
+    room = await colyseus.createRoom<WorldRoom>(roomNameFor(DEFAULT_WORLD_ID), {})
   }
 
   it('radio y tope salen de la configuración y se replican a los clientes', async () => {

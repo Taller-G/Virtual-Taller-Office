@@ -1,13 +1,20 @@
-import { defineServer, defineRoom, matchMaker } from 'colyseus'
+import { defineServer, defineRoom, matchMaker, type RegisteredHandler } from 'colyseus'
 import { WebSocketTransport } from '@colyseus/ws-transport'
-import { ROOM_NAME, ROOM_DISPLAY_NAME } from '@vto/shared'
+import { roomNameFor, WORLDS } from '@vto/shared'
 import { config } from './config'
-import { OficinaTallerRoom } from './rooms/OficinaTallerRoom'
+import { WorldRoom } from './rooms/WorldRoom'
+
+/**
+ * Una sala registrada por mundo: `world_first_office`, `world_chiron_office`…
+ * Cada una hospeda el mismo `WorldRoom` con el mapa de su mundo, y la
+ * separación entre mundos (gente, burbujas, chat) sale de ahí sin más código.
+ */
+const rooms: Record<string, RegisteredHandler> = Object.fromEntries(
+  WORLDS.map((world) => [roomNameFor(world.id), defineRoom(WorldRoom, { worldId: world.id })]),
+)
 
 const server = defineServer({
-  rooms: {
-    [ROOM_NAME]: defineRoom(OficinaTallerRoom),
-  },
+  rooms,
 
   transport: new WebSocketTransport({
     pingInterval: config.pingIntervalMs,
@@ -15,14 +22,23 @@ const server = defineServer({
   }),
 
   express: (app) => {
-    // Chequeo de salud para el proveedor de hosting y para operar a mano.
+    // Chequeo de salud para el proveedor de hosting y para operar a mano:
+    // dice qué mundos están vivos y cuánta gente hay en cada uno.
     app.get('/health', async (_req, res) => {
-      const rooms = await matchMaker.query({ name: ROOM_NAME })
+      const worlds = []
+      for (const world of WORLDS) {
+        const rooms = await matchMaker.query({ name: roomNameFor(world.id) })
+        worlds.push({
+          id: world.id,
+          name: world.name,
+          rooms: rooms.length,
+          players: rooms.reduce((total, room) => total + room.clients, 0),
+        })
+      }
       res.json({
         status: 'ok',
-        room: ROOM_DISPLAY_NAME,
-        rooms: rooms.length,
-        players: rooms.reduce((total, room) => total + room.clients, 0),
+        worlds,
+        players: worlds.reduce((total, world) => total + world.players, 0),
       })
     })
   },

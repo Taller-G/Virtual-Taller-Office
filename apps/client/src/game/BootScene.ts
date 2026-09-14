@@ -6,12 +6,11 @@ import {
   GLASSES_OPTIONS,
   HAT_OPTIONS,
   SKIN_TONES,
-  type TiledMap,
+  type WorldDefinition,
 } from '@vto/shared'
 import { layerTextureKey, textureKey } from './avatarAnims'
+import { queueTilesets, queueWorldMap } from './worldAssets'
 
-/** Clave con la que el mapa queda en la caché de Phaser. */
-export const MAP_KEY = 'office-map'
 /** Clave de la textura del logo de Taller (decoración de la recepción). */
 export const LOGO_KEY = 'logo-taller'
 
@@ -21,20 +20,22 @@ const AVATAR_KEY_PREFIX = 'avatar-'
 const LAYER_KEY_PREFIX = 'layer-'
 
 /**
- * Carga el mapa Tiled JSON y, leyendo sus tilesets, encola las imágenes que
- * ese mapa necesita. Así agregar un tileset en Tiled no requiere tocar código:
- * la imagen se resuelve relativa al archivo del mapa, igual que en Tiled.
- * También carga las hojas de sprites de los avatares del catálogo.
+ * Carga el mapa del mundo inicial y, leyendo sus tilesets, encola las imágenes
+ * que ese mapa necesita. Así agregar un tileset en Tiled no requiere tocar
+ * código: la imagen se resuelve relativa al archivo del mapa, igual que en
+ * Tiled. También carga las hojas de sprites de los avatares del catálogo, que
+ * son las mismas en todos los mundos. Los mapas de los demás mundos se cargan
+ * al cruzar su puerta (ver `worldAssets.ts`).
  */
 export class BootScene extends Phaser.Scene {
-  private mapUrl: string
+  private world: WorldDefinition
   private avatarsUrl: string
   private logoUrl: string
   private failed = false
 
-  constructor(mapUrl: string, avatarsUrl: string, logoUrl: string) {
+  constructor(world: WorldDefinition, avatarsUrl: string, logoUrl: string) {
     super('boot')
-    this.mapUrl = mapUrl
+    this.world = world
     this.avatarsUrl = avatarsUrl
     this.logoUrl = logoUrl
   }
@@ -53,7 +54,7 @@ export class BootScene extends Phaser.Scene {
       }
       this.fail(`No se pudo cargar ${file.src}`)
     })
-    this.load.tilemapTiledJSON(MAP_KEY, this.mapUrl)
+    queueWorldMap(this, this.world)
     this.load.image(LOGO_KEY, this.logoUrl)
     for (const id of AVATAR_IDS) {
       this.load.spritesheet(textureKey(id), `${this.avatarsUrl}${id}.png`, {
@@ -90,26 +91,11 @@ export class BootScene extends Phaser.Scene {
 
   create() {
     if (this.failed) return
-    const raw = this.cache.tilemap.get(MAP_KEY)?.data as TiledMap | undefined
-    if (!raw) return this.fail(`El mapa ${this.mapUrl} no tiene datos`)
-
-    const mapBase = new URL(this.mapUrl, window.location.href)
-    for (const tileset of raw.tilesets) {
-      if (!tileset.image) {
-        return this.fail(
-          `El tileset "${tileset.name}" no está embebido en el mapa (usá "Embed in map" en Tiled)`,
-        )
-      }
-      this.load.spritesheet(tileset.name, new URL(tileset.image, mapBase).toString(), {
-        frameWidth: tileset.tilewidth,
-        frameHeight: tileset.tileheight,
-        margin: tileset.margin ?? 0,
-        spacing: tileset.spacing ?? 0,
-      })
-    }
+    const problem = queueTilesets(this, this.world)
+    if (problem) return this.fail(problem)
 
     this.load.once(Phaser.Loader.Events.COMPLETE, () => {
-      if (!this.failed) this.scene.start('office')
+      if (!this.failed) this.scene.start('office', { worldId: this.world.id })
     })
     this.load.start()
   }

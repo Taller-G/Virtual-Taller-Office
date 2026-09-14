@@ -1,4 +1,4 @@
-export * from './room'
+export * from './worlds'
 export * from './messages'
 export * from './schema'
 export * from './map'

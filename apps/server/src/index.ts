@@ -1,20 +1,28 @@
 import { listen } from '@colyseus/tools'
 import { matchMaker } from 'colyseus'
-import { ROOM_NAME, ROOM_DISPLAY_NAME } from '@vto/shared'
+import { roomNameFor, WORLDS } from '@vto/shared'
 import app from './app.config'
 import { config } from './config'
+import { worldMaps } from './map'
 
 /**
- * Garantiza que la sala única exista desde el arranque. Así dos clientes que
- * entran a la vez no pueden crear dos instancias en paralelo: `joinOrCreate`
- * siempre encuentra la que ya está viva.
+ * Deja viva la sala de cada mundo desde el arranque. Así dos clientes que
+ * entran a la vez no pueden crear dos instancias del mismo mundo en paralelo,
+ * y una puerta siempre encuentra su destino en pie.
  */
-async function ensureSingleRoom() {
-  const existing = await matchMaker.query({ name: ROOM_NAME })
-  if (existing.length > 0) return
-  const room = await matchMaker.createRoom(ROOM_NAME, {})
-  console.log(`[servidor] sala "${ROOM_DISPLAY_NAME}" lista (roomId=${room.roomId})`)
+async function ensureWorldRooms() {
+  for (const world of WORLDS) {
+    const name = roomNameFor(world.id)
+    const existing = await matchMaker.query({ name })
+    if (existing.length > 0) continue
+    const room = await matchMaker.createRoom(name, {})
+    console.log(`[servidor] mundo "${world.name}" listo (sala ${name}, roomId=${room.roomId})`)
+  }
 }
 
+// Los mapas de todos los mundos se leen y validan antes de escuchar: una
+// puerta rota o un mapa inválido tienen que fallar acá, no con gente adentro.
+worldMaps()
+
 await listen(app, config.port)
-await ensureSingleRoom()
+await ensureWorldRooms()

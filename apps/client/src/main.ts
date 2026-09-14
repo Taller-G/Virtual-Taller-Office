@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import { DEFAULT_WORLD_ID, getWorld } from '@vto/shared'
 import { config } from './config'
 import { OfficeConnection } from './network/connection'
 import { BootScene } from './game/BootScene'
@@ -9,6 +10,9 @@ import { mountHud } from './ui/hud'
 import { mountPresence } from './ui/presence'
 import { mountBubble } from './ui/bubble'
 import { mountChat } from './ui/chat'
+
+/** Mundo por el que se entra a la oficina (la First Office). */
+const startWorld = getWorld(DEFAULT_WORLD_ID)!
 
 const connection = new OfficeConnection(config.serverUrl)
 mountHud(connection)
@@ -29,7 +33,7 @@ const game = new Phaser.Game({
   // el juego sigue corriendo con la pestaña en segundo plano (pruebas automatizadas).
   fps: { forceSetTimeOut: config.debug },
   scene: [
-    new BootScene(config.mapUrl, config.avatarsUrl, config.logoUrl),
+    new BootScene(startWorld, config.avatarsUrl, config.logoUrl),
     new OfficeScene(connection, { debug: config.debug }),
   ],
 })

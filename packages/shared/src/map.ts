@@ -7,9 +7,15 @@
  * otro válido sin tocar código. Ver `docs/mapa.md`.
  */
 
+import { isDirection, type Direction } from './avatars'
+
 /** Propiedad booleana que marca colisión: en tiles del tileset, en capas de objetos o en objetos. */
 export const PROP_COLLIDES = 'collides'
-/** Clase (campo "type"/"class" en Tiled) del punto de aparición. Debe haber exactamente uno. */
+/**
+ * Clase (campo "type"/"class" en Tiled) de los puntos de aparición. El que no
+ * tiene nombre es la entrada al mundo (uno por mapa); los demás se nombran y
+ * son destino de las puertas de otros mundos.
+ */
 export const CLASS_SPAWN = 'spawn'
 /** Clase de los rectángulos que nombran zonas de la oficina (recepción, cocina…). */
 export const CLASS_ZONE = 'zone'
@@ -17,6 +23,32 @@ export const CLASS_ZONE = 'zone'
 export const PROP_SPAWN_RADIUS = 'radius'
 /** Radio por defecto si el spawn no define `radius`. */
 export const DEFAULT_SPAWN_RADIUS = 32
+/** Propiedad opcional del spawn: hacia dónde mira quien aparece ahí. */
+export const PROP_SPAWN_DIR = 'dir'
+/** Dirección por defecto si el spawn no define `dir`. */
+export const DEFAULT_SPAWN_DIR: Direction = 'down'
+/**
+ * Nombre del spawn por el que se entra a un mundo. Un objeto `spawn` sin
+ * nombre en Tiled cuenta como este; los demás son puntos de llegada de puertas.
+ */
+export const DEFAULT_SPAWN_NAME = 'default'
+
+/**
+ * Clase de los rectángulos que llevan a otro mundo. Se cruzan caminando: no
+ * hay tecla ni confirmación. Ver `docs/mapa.md`.
+ */
+export const CLASS_DOOR = 'door'
+/** Propiedad obligatoria de una puerta: id del mundo destino. */
+export const PROP_DOOR_WORLD = 'world'
+/** Propiedad obligatoria de una puerta: nombre del spawn de llegada en ese mundo. */
+export const PROP_DOOR_SPAWN = 'spawn'
+
+/**
+ * Propiedad opcional del mapa: color ambiente (`#AARRGGBB` de Tiled) con el
+ * que el cliente tiñe el mundo entero. Así un mundo puede verse oscuro sin
+ * dibujar tiles nuevos.
+ */
+export const PROP_AMBIENT = 'ambient'
 
 // ---------------------------------------------------------------------------
 // Subconjunto del formato Tiled JSON (https://doc.mapeditor.org/en/stable/reference/json-map-format/)
@@ -121,9 +153,33 @@ export interface TiledMap {
 // ---------------------------------------------------------------------------
 
 export interface SpawnPoint {
+  /** Nombre del objeto en Tiled; `default` si no tiene. Único dentro del mapa. */
+  name: string
   x: number
   y: number
   radius: number
+  /** Hacia dónde queda mirando quien aparece acá. */
+  dir: Direction
+}
+
+/**
+ * Puerta a otro mundo: un rectángulo que, al pisarlo, manda al jugador al
+ * mundo `world`, al spawn llamado `spawn`. La validación cruzada entre mapas
+ * (`validateWorldDoors`) garantiza que ese destino exista.
+ */
+export interface Door {
+  /** Id del objeto en Tiled: identifica la puerta en los mensajes de error. */
+  id: number
+  /** Nombre del objeto en Tiled (opcional); vacío si no tiene. */
+  name: string
+  /** Id del mundo destino. */
+  world: string
+  /** Nombre del spawn de llegada en el mundo destino. */
+  spawn: string
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 export interface Zone {
@@ -221,23 +277,74 @@ export function isSolidAt(map: TiledMap, x: number, y: number): boolean {
 export function findSpawnPoints(map: TiledMap): SpawnPoint[] {
   return allObjects(map)
     .filter((o) => objectClass(o) === CLASS_SPAWN)
-    .map((o) => ({
-      // Para un rectángulo tomamos su centro; un punto tiene ancho/alto 0.
-      x: o.x + (o.width ?? 0) / 2,
-      y: o.y + (o.height ?? 0) / 2,
-      radius: Number(getProperty(o.properties, PROP_SPAWN_RADIUS) ?? DEFAULT_SPAWN_RADIUS),
-    }))
+    .map((o) => {
+      const dir = getProperty(o.properties, PROP_SPAWN_DIR)
+      return {
+        name: spawnName(o),
+        // Para un rectángulo tomamos su centro; un punto tiene ancho/alto 0.
+        x: o.x + (o.width ?? 0) / 2,
+        y: o.y + (o.height ?? 0) / 2,
+        radius: Number(getProperty(o.properties, PROP_SPAWN_RADIUS) ?? DEFAULT_SPAWN_RADIUS),
+        dir: isDirection(dir) ? dir : DEFAULT_SPAWN_DIR,
+      }
+    })
 }
 
-/** El punto de aparición del mapa. Lanza si no hay exactamente uno. */
-export function findSpawnPoint(map: TiledMap): SpawnPoint {
-  const spawns = findSpawnPoints(map)
+/**
+ * Nombre del spawn: el del objeto en Tiled, o `default` si no tiene. El objeto
+ * de la oficina de hoy se llama "spawn"; también cuenta como el por defecto,
+ * así los mapas viejos siguen valiendo.
+ */
+function spawnName(obj: TiledObject): string {
+  const name = (obj.name ?? '').trim()
+  return name === '' || name === CLASS_SPAWN ? DEFAULT_SPAWN_NAME : name
+}
+
+/**
+ * El punto de aparición llamado `name` (el por defecto si no se pide otro).
+ * Lanza si no hay exactamente uno: mejor fallar al cargar el mapa que dejar a
+ * alguien apareciendo en cualquier lado.
+ */
+export function findSpawnPoint(map: TiledMap, name = DEFAULT_SPAWN_NAME): SpawnPoint {
+  const spawns = findSpawnPoints(map).filter((s) => s.name === name)
   if (spawns.length !== 1) {
     throw new MapError(
-      `El mapa debe tener exactamente un objeto de clase "${CLASS_SPAWN}" (tiene ${spawns.length})`,
+      `El mapa debe tener exactamente un objeto de clase "${CLASS_SPAWN}" llamado "${name}" (tiene ${spawns.length})`,
     )
   }
   return spawns[0]
+}
+
+/** Las puertas del mapa, en el orden en que están en Tiled. */
+export function findDoors(map: TiledMap): Door[] {
+  return allObjects(map)
+    .filter((o) => objectClass(o) === CLASS_DOOR)
+    .map((o) => ({
+      id: o.id,
+      name: (o.name ?? '').trim(),
+      world: String(getProperty(o.properties, PROP_DOOR_WORLD) ?? '').trim(),
+      spawn: String(getProperty(o.properties, PROP_DOOR_SPAWN) ?? '').trim(),
+      x: o.x,
+      y: o.y,
+      width: o.width ?? 0,
+      height: o.height ?? 0,
+    }))
+}
+
+/** La puerta (si la hay) que contiene el punto. */
+export function doorAt(map: TiledMap, x: number, y: number): Door | undefined {
+  return findDoors(map).find((d) => x >= d.x && x < d.x + d.width && y >= d.y && y < d.y + d.height)
+}
+
+/** Cómo se nombra una puerta en los mensajes de error. */
+export function doorLabel(door: Door): string {
+  return door.name ? `"${door.name}" (objeto ${door.id})` : `objeto ${door.id}`
+}
+
+/** Color ambiente del mapa (`#AARRGGBB`), si lo define. */
+export function getAmbient(map: TiledMap): string | undefined {
+  const value = getProperty(map.properties, PROP_AMBIENT)
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 }
 
 export function getZones(map: TiledMap): Zone[] {
@@ -298,12 +405,67 @@ export function validateMap(map: TiledMap): string[] {
   if (tileLayers(map).length === 0) problems.push('El mapa no tiene capas de tiles')
 
   const spawns = findSpawnPoints(map)
-  if (spawns.length !== 1) {
+  const entries = spawns.filter((s) => s.name === DEFAULT_SPAWN_NAME)
+  if (entries.length !== 1) {
     problems.push(
-      `Debe haber exactamente un objeto de clase "${CLASS_SPAWN}" (hay ${spawns.length})`,
+      `Debe haber exactamente un objeto de clase "${CLASS_SPAWN}" sin nombre (la entrada al mundo); hay ${entries.length}`,
     )
-  } else if (isSolidAt(map, spawns[0].x, spawns[0].y)) {
-    problems.push('El punto de aparición cae sobre un tile que colisiona')
+  }
+  const seen = new Set<string>()
+  for (const spawn of spawns) {
+    if (seen.has(spawn.name)) problems.push(`Hay más de un spawn llamado "${spawn.name}"`)
+    seen.add(spawn.name)
+    if (isSolidAt(map, spawn.x, spawn.y)) {
+      problems.push(`El spawn "${spawn.name}" cae sobre un tile que colisiona`)
+    }
+  }
+
+  for (const door of findDoors(map)) {
+    const label = doorLabel(door)
+    if (!(door.width > 0 && door.height > 0)) {
+      problems.push(`La puerta ${label} no tiene área: tiene que ser un rectángulo`)
+    }
+    if (!door.world) {
+      problems.push(
+        `La puerta ${label} no declara la propiedad "${PROP_DOOR_WORLD}" (mundo destino)`,
+      )
+    }
+    if (!door.spawn) {
+      problems.push(
+        `La puerta ${label} no declara la propiedad "${PROP_DOOR_SPAWN}" (spawn de llegada)`,
+      )
+    }
+  }
+  return problems
+}
+
+/**
+ * Validación cruzada entre los mapas de todos los mundos: cada puerta tiene
+ * que llevar a un mundo que exista y a un spawn que ese mundo defina. Se corre
+ * al arrancar el servidor y en las pruebas: una puerta rota es un mundo del
+ * que no se sale o al que se llega a ninguna parte.
+ */
+export function validateWorldDoors(maps: Record<string, TiledMap>): string[] {
+  const problems: string[] = []
+  const known = Object.keys(maps)
+  for (const worldId of known) {
+    for (const door of findDoors(maps[worldId])) {
+      // Las puertas sin destino ya las reporta `validateMap`.
+      if (!door.world || !door.spawn) continue
+      const target = maps[door.world]
+      if (!target) {
+        problems.push(
+          `La puerta ${doorLabel(door)} del mundo "${worldId}" lleva al mundo "${door.world}", que no existe (mundos: ${known.join(', ')})`,
+        )
+        continue
+      }
+      const names = findSpawnPoints(target).map((s) => s.name)
+      if (!names.includes(door.spawn)) {
+        problems.push(
+          `La puerta ${doorLabel(door)} del mundo "${worldId}" llega al spawn "${door.spawn}" del mundo "${door.world}", que no lo define (spawns: ${names.join(', ')})`,
+        )
+      }
+    }
   }
   return problems
 }

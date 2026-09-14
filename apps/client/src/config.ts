@@ -10,22 +10,17 @@ if (!serverUrl) {
   )
 }
 
-/** Mapa Tiled JSON de la oficina. Las imágenes de sus tilesets se resuelven relativas a él. */
-const mapUrl =
-  (import.meta.env.VITE_MAP_URL as string | undefined) || '/assets/map/oficina-taller.json'
-
 /** Carpeta con las hojas de sprites de los avatares (`<id>.png`). */
 const avatarsUrl = '/assets/avatars/'
 
 /** Logo de Taller en pixel art, decoración de la recepción. */
 const logoUrl = '/assets/logo/taller-logo-pixel.png'
 
-/** `?debug` en la URL dibuja los cuerpos de colisión (mapa y avatares). */
+/** `?debug` en la URL dibuja cuerpos de colisión, spawns y puertas. */
 const debug = new URLSearchParams(window.location.search).has('debug')
 
 export const config = {
   serverUrl,
-  mapUrl,
   avatarsUrl,
   logoUrl,
   debug,

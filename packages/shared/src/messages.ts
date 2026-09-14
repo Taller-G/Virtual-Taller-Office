@@ -30,6 +30,9 @@ export type MessageType = (typeof Message)[keyof typeof Message]
 
 export interface RoomInfoPayload {
   roomId: string
+  /** Id del mundo que hospeda esta sala (ver `worlds.ts`). */
+  worldId: string
+  /** Nombre visible del mundo. */
   name: string
   /** Identificador de sesión asignado al cliente que recibe el mensaje. */
   sessionId: string

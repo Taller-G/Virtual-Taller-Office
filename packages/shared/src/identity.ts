@@ -2,12 +2,21 @@ import { DEFAULT_AVATAR, isAvatarId } from './avatars'
 
 export const NAME_MAX_LENGTH = 20
 
-/** Lo que el cliente manda como `options` al entrar a la sala. */
+/** Lo que el cliente manda como `options` al entrar a la sala de un mundo. */
 export interface JoinOptions {
   name?: string
   avatar?: string
   /** JSON de `Appearance` (aspecto compuesto).  Vacío o ausente = usar preset. */
   appearance?: string
+  /**
+   * Nombre del spawn por el que se llega. Lo pone la puerta que se cruzó; sin
+   * él se entra por el spawn de entrada del mundo.
+   */
+  spawn?: string
+  /** Estado "ausente" con el que se viaja, para que cruzar una puerta no lo pierda. */
+  away?: boolean
+  /** `true` si ese ausente lo había fijado el usuario a mano. */
+  awayManual?: boolean
 }
 
 /**

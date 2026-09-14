@@ -1,33 +1,46 @@
 import { Room, type Client, CloseCode } from 'colyseus'
 import {
   clamp,
+  findSpawnPoint,
+  getWorld,
   guestName,
   isDirection,
+  MapError,
   Message,
   OfficeState,
   Player,
   randomSpawnPosition,
-  ROOM_DISPLAY_NAME,
   sanitizeAppearance,
   sanitizeAvatar,
   sanitizeName,
+  worldForRoomName,
   type ChatSendPayload,
   type JoinOptions,
   type MovePayload,
   type RoomInfoPayload,
   type SetAwayPayload,
   type SetNamePayload,
+  type SpawnPoint,
+  type WorldDefinition,
 } from '@vto/shared'
 import { BubbleManager } from '../bubbles'
 import { ChatRelay } from '../chat'
 import { config, DEFAULT_BUBBLE_RADIUS_TILES } from '../config'
-import { DEFAULT_MAP_FILE, loadOfficeMap, type OfficeMap } from '../map'
+import { worldMap, type WorldMap } from '../map'
+
+/** Lo que `defineRoom` le pasa a la sala de cada mundo (ver `app.config.ts`). */
+export interface WorldRoomOptions {
+  worldId?: string
+}
 
 /** Cada cuánto se revisa quién lleva demasiado tiempo sin actividad. */
 const AWAY_CHECK_INTERVAL_MS = 1_000
 
 /**
- * Sala única y persistente "Oficina Taller".
+ * Sala persistente de **un mundo**: la First Office, la Chiron Office o
+ * cualquier otro del registro de `@vto/shared`. El servidor registra una sala
+ * por mundo (ver `app.config.ts`), así que cada mundo tiene su mapa, su gente,
+ * sus burbujas y su chat sin compartir nada con los demás.
  *
  * Reglas de conexión:
  * - `onJoin`: se agrega un `Player` al estado bajo `client.sessionId`, con el
@@ -57,25 +70,41 @@ const AWAY_CHECK_INTERVAL_MS = 1_000
  * El servidor es la fuente de verdad de la lista de jugadores y de las
  * burbujas: el cliente solo refleja `state.players` y `state.bubbles`.
  *
- * Mapa: al crearse, la sala lee el mismo archivo Tiled que dibuja el cliente
- * (`MAP_FILE`) y toma de ahí el punto de aparición y los límites. Si el mapa
- * no es válido la sala no se crea y el servidor no arranca.
+ * Mapa: al crearse, la sala toma el mapa de su mundo (el mismo archivo Tiled
+ * que dibuja el cliente) y de ahí los puntos de aparición y los límites. Los
+ * mapas de todos los mundos se leen y validan juntos al arrancar —puertas
+ * incluidas—: si alguno no es válido, el servidor no arranca.
+ *
+ * Puertas: viajar es salir de esta sala y entrar a la del mundo destino. La
+ * sala destino recibe en `options.spawn` el nombre del punto de llegada que
+ * nombra la puerta, y en `options.away` el estado de presencia del que viaja.
  */
-export class OficinaTallerRoom extends Room<{ state: OfficeState }> {
-  /** La sala vive aunque no haya nadie: todos entran siempre a la misma. */
+export class WorldRoom extends Room<{ state: OfficeState }> {
+  /** La sala vive aunque no haya nadie: todos los de ese mundo entran a la misma. */
   autoDispose = false
   maxClients = config.maxClients
   state = new OfficeState()
-  map!: OfficeMap
+  /** El mundo que hospeda esta sala. */
+  world!: WorldDefinition
+  map!: WorldMap
   bubbles!: BubbleManager
   chat!: ChatRelay
   /** Último instante (ms, reloj de la sala) con actividad por sessionId. */
   private lastActivity = new Map<string, number>()
 
-  async onCreate() {
-    this.map = loadOfficeMap(config.mapFile ?? DEFAULT_MAP_FILE)
+  async onCreate(options?: WorldRoomOptions) {
+    // El mundo sale del nombre con el que se registró la sala; las opciones
+    // de `defineRoom` son el respaldo (y lo que usan las pruebas).
+    const world = worldForRoomName(this.roomName) ?? getWorld(options?.worldId ?? '')
+    if (!world) {
+      throw new MapError(
+        `La sala "${this.roomName}" no corresponde a ningún mundo configurado (ver WORLDS en @vto/shared)`,
+      )
+    }
+    this.world = world
+    this.map = worldMap(world.id)
     console.log(
-      `[sala] mapa ${this.map.file} (${this.map.bounds.width}x${this.map.bounds.height} px, spawn ${this.map.spawn.x},${this.map.spawn.y})`,
+      `[mundo ${world.id}] mapa ${this.map.file} (${this.map.bounds.width}x${this.map.bounds.height} px, entrada ${this.map.spawn.x},${this.map.spawn.y})`,
     )
 
     this.bubbles = new BubbleManager(this.state, {
@@ -83,7 +112,7 @@ export class OficinaTallerRoom extends Room<{ state: OfficeState }> {
       maxMembers: config.bubbleMaxMembers,
     })
     console.log(
-      `[sala] burbujas: radio ${this.bubbles.radius} px, tope ${this.bubbles.maxMembers} miembros`,
+      `[mundo ${world.id}] burbujas: radio ${this.bubbles.radius} px, tope ${this.bubbles.maxMembers} miembros`,
     )
 
     this.chat = new ChatRelay(this.state, {
@@ -104,12 +133,16 @@ export class OficinaTallerRoom extends Room<{ state: OfficeState }> {
 
     this.clock.setInterval(() => this.checkAway(), AWAY_CHECK_INTERVAL_MS)
 
-    await this.setMetadata({ name: ROOM_DISPLAY_NAME })
-    console.log(`[sala] "${ROOM_DISPLAY_NAME}" creada (roomId=${this.roomId})`)
+    await this.setMetadata({ name: world.name, worldId: world.id })
+    console.log(`[mundo ${world.id}] "${world.name}" listo (roomId=${this.roomId})`)
   }
 
   onJoin(client: Client, options?: JoinOptions) {
-    const { x, y } = randomSpawnPosition(this.map.spawn, this.map.bounds)
+    // Quien llega por una puerta lo hace en el spawn que esa puerta nombra, y
+    // mirando hacia donde ese spawn diga: de espaldas a la puerta de vuelta.
+    const spawn = this.spawnFor(options?.spawn)
+    const { x, y } = randomSpawnPosition(spawn, this.map.bounds)
+    const away = options?.away === true
     const player = new Player({
       sessionId: client.sessionId,
       name: sanitizeName(options?.name) ?? guestName(client.sessionId),
@@ -117,10 +150,11 @@ export class OficinaTallerRoom extends Room<{ state: OfficeState }> {
       appearance: sanitizeAppearance(options?.appearance),
       x,
       y,
-      dir: 'down',
+      dir: spawn.dir,
       moving: false,
-      away: false,
-      awayManual: false,
+      // Viajar no cambia el estado de presencia: se llega como se salió.
+      away,
+      awayManual: away && options?.awayManual === true,
       connected: true,
     })
     this.state.players.set(client.sessionId, player)
@@ -130,13 +164,31 @@ export class OficinaTallerRoom extends Room<{ state: OfficeState }> {
 
     const info: RoomInfoPayload = {
       roomId: this.roomId,
-      name: ROOM_DISPLAY_NAME,
+      worldId: this.world.id,
+      name: this.world.name,
       sessionId: client.sessionId,
     }
     client.send(Message.ROOM_INFO, info)
     console.log(
-      `[sala] entra ${client.sessionId} como "${player.name}" (${player.avatar}; ${this.state.players.size} en sala)`,
+      `[mundo ${this.world.id}] entra ${client.sessionId} como "${player.name}" (${player.avatar}; spawn "${spawn.name}"; ${this.state.players.size} presentes)`,
     )
+  }
+
+  /**
+   * El spawn por el que entra alguien: el que nombra la puerta que cruzó o,
+   * si no nombra ninguno (o nombra uno que este mapa no tiene), la entrada del
+   * mundo. La validación cruzada al arrancar ya garantiza que las puertas
+   * reales apunten a spawns que existen; esto cubre a un cliente inventivo.
+   */
+  private spawnFor(name?: string): SpawnPoint {
+    const wanted = typeof name === 'string' ? name.trim() : ''
+    if (wanted === '') return this.map.spawn
+    try {
+      return findSpawnPoint(this.map.data, wanted)
+    } catch {
+      console.warn(`[mundo ${this.world.id}] spawn "${wanted}" desconocido; se usa la entrada`)
+      return this.map.spawn
+    }
   }
 
   /**
@@ -227,7 +279,7 @@ export class OficinaTallerRoom extends Room<{ state: OfficeState }> {
     const player = this.state.players.get(client.sessionId)
     if (player) player.connected = false
     console.log(
-      `[sala] se cortó ${client.sessionId} (code=${code}); se sostiene el asiento ${config.reconnectGraceSeconds}s`,
+      `[mundo ${this.world.id}] se cortó ${client.sessionId} (code=${code}); se sostiene el asiento ${config.reconnectGraceSeconds}s`,
     )
     // No se espera el resultado: el framework enruta a onReconnect() u onLeave().
     // El catch evita un "unhandled rejection" cuando la sala se está cerrando.
@@ -237,7 +289,7 @@ export class OficinaTallerRoom extends Room<{ state: OfficeState }> {
   onReconnect(client: Client) {
     const player = this.state.players.get(client.sessionId)
     if (player) player.connected = true
-    console.log(`[sala] reconectó ${client.sessionId}`)
+    console.log(`[mundo ${this.world.id}] reconectó ${client.sessionId}`)
   }
 
   onLeave(client: Client, code?: number) {
@@ -249,10 +301,12 @@ export class OficinaTallerRoom extends Room<{ state: OfficeState }> {
     this.lastActivity.delete(client.sessionId)
     this.chat.forget(client.sessionId)
     const reason = code === CloseCode.CONSENTED ? 'salida consentida' : `code=${code}`
-    console.log(`[sala] sale ${client.sessionId} (${reason}; ${this.state.players.size} en sala)`)
+    console.log(
+      `[mundo ${this.world.id}] sale ${client.sessionId} (${reason}; ${this.state.players.size} presentes)`,
+    )
   }
 
   onDispose() {
-    console.log(`[sala] "${ROOM_DISPLAY_NAME}" cerrada (roomId=${this.roomId})`)
+    console.log(`[mundo ${this.world.id}] "${this.world.name}" cerrado (roomId=${this.roomId})`)
   }
 }

@@ -1,12 +1,24 @@
 import Phaser from 'phaser'
 import { Callbacks } from '@colyseus/sdk'
-import { Message, type Direction, type MovePayload, type Player } from '@vto/shared'
+import {
+  DEFAULT_WORLD_ID,
+  doorAt,
+  getWorld,
+  Message,
+  worldName,
+  type Direction,
+  type Door,
+  type MovePayload,
+  type Player,
+} from '@vto/shared'
 import type { OfficeConnection, OfficeRoom } from '../network/connection'
+import { toast } from '../ui/toasts'
 import { Avatar, BODY } from './Avatar'
 import { createAvatarAnims } from './avatarAnims'
 import { BubbleArea } from './BubbleArea'
 import { buildOfficeMap, drawCollisionDebug, type BuiltMap } from './officeMap'
 import { isTyping } from './typingGuard'
+import { loadWorld } from './worldAssets'
 
 /** Velocidad de caminata, px/s. */
 const SPEED = 150
@@ -14,6 +26,8 @@ const SPEED = 150
 const CAMERA_ZOOM = 2
 /** Cada cuánto, como máximo, se manda la posición propia al servidor (20 veces/s). */
 const SEND_INTERVAL_MS = 50
+/** Duración del fundido al cruzar una puerta (ida y vuelta), en ms. */
+const FADE_MS = 220
 
 interface Keys {
   up: Phaser.Input.Keyboard.Key[]
@@ -47,8 +61,15 @@ interface Sent {
  *
  * Los mensajes del chat de la burbuja aparecen como globo sobre el avatar del
  * autor y no se guardan: el globo se va solo (ver `Avatar.say`).
+ *
+ * Puertas: pisar un objeto de clase `door` del mapa lleva a otro mundo. No hay
+ * tecla ni confirmación: en cuanto los pies entran al área, la escena funde a
+ * negro, carga el mapa del destino, cambia de sala y se reinicia allá. Si el
+ * destino no está disponible, se avisa y se sigue donde se estaba.
  */
 export class OfficeScene extends Phaser.Scene {
+  /** Mundo que está dibujando esta escena. */
+  private worldId = DEFAULT_WORLD_ID
   private map!: BuiltMap
   private avatars = new Map<string, Avatar>()
   private bubbleAreas = new Map<string, BubbleArea>()
@@ -60,6 +81,13 @@ export class OfficeScene extends Phaser.Scene {
   private offChat?: () => void
   private lastSent: Sent = { x: NaN, y: NaN, dir: 'down', moving: false, at: 0 }
   private debug: boolean
+  /** Verdadero mientras se cruza una puerta: no se dispara otra ni se mueve nadie. */
+  private traveling = false
+  /**
+   * Falso mientras el avatar sigue parado sobre una puerta desde que llegó:
+   * evita rebotar de vuelta al mundo anterior sin haberse movido.
+   */
+  private doorArmed = false
 
   constructor(
     private connection: OfficeConnection,
@@ -69,8 +97,16 @@ export class OfficeScene extends Phaser.Scene {
     this.debug = options.debug ?? false
   }
 
+  /** El mundo llega de `BootScene` o del reinicio tras cruzar una puerta. */
+  init(data?: { worldId?: string }) {
+    this.worldId = data?.worldId ?? this.connection.worldId ?? DEFAULT_WORLD_ID
+    this.traveling = false
+    this.doorArmed = false
+  }
+
   create() {
-    this.map = buildOfficeMap(this)
+    this.map = buildOfficeMap(this, this.worldId)
+    this.cameras.main.fadeIn(FADE_MS)
     if (this.debug) drawCollisionDebug(this, this.map)
     createAvatarAnims(this)
 
@@ -111,6 +147,7 @@ export class OfficeScene extends Phaser.Scene {
 
   update(time: number, delta: number) {
     if (this.me) this.moveMe(time)
+    this.checkDoors()
     for (const avatar of this.avatars.values()) {
       if (!avatar.isMe) avatar.interpolate(delta)
     }
@@ -120,6 +157,11 @@ export class OfficeScene extends Phaser.Scene {
   private moveMe(time: number) {
     const me = this.me!
     const body = me.body as Phaser.Physics.Arcade.Body
+    if (this.traveling) {
+      body.setVelocity(0, 0)
+      me.playAnim('idle', me.dir)
+      return
+    }
     // Con el foco en un campo de texto las teclas no mueven al avatar.
     const typing = isTyping()
     const down = (keys: Phaser.Input.Keyboard.Key[]) => !typing && keys.some((k) => k.isDown)
@@ -147,6 +189,57 @@ export class OfficeScene extends Phaser.Scene {
     this.lastSent = { x, y, dir, moving, at: time }
     const payload: MovePayload = { x, y, dir, moving }
     this.room.send(Message.MOVE, payload)
+  }
+
+  /**
+   * ¿Estoy pisando una puerta? Se mira el centro del cuerpo físico (los pies),
+   * no el del sprite: lo que cruza la puerta es lo que pisa el piso. La puerta
+   * se "arma" recién cuando se sale de su área, así llegar al lado de la
+   * puerta de vuelta no rebota al mundo anterior.
+   */
+  private checkDoors() {
+    if (!this.me || this.traveling) return
+    const feetY = this.me.y + BODY.height / 2
+    const door = doorAt(this.map.raw, this.me.x, feetY)
+    if (!door) {
+      this.doorArmed = true
+      return
+    }
+    if (!this.doorArmed) return
+    void this.travel(door)
+  }
+
+  /**
+   * Cruzar una puerta: fundido a negro, mapa del destino cargado, cambio de
+   * sala y reinicio de la escena ya en el mundo nuevo. Cualquier tropiezo deja
+   * al jugador donde estaba, con un aviso y la pantalla de vuelta.
+   */
+  private async travel(door: Door) {
+    const world = getWorld(door.world)
+    if (!world) return
+    this.traveling = true
+    this.doorArmed = false
+    const camera = this.cameras.main
+    camera.fadeOut(FADE_MS)
+    // Mientras se viaja, la sala que se deja no debe reemplazar esta escena:
+    // el reinicio de abajo vuelve a engancharse con la sala del destino.
+    this.offRoom?.()
+    this.offRoom = undefined
+
+    try {
+      // El mapa primero: si el destino no carga, no se abandona el mundo actual.
+      await loadWorld(this, world)
+      const outcome = await this.connection.travelTo(door.world, door.spawn)
+      if (!outcome.ok) throw new Error(outcome.reason)
+    } catch (error) {
+      toast(error instanceof Error ? error.message : `No se pudo ir a ${worldName(door.world)}`)
+      this.offRoom = this.connection.on('room', (room) => this.bindRoom(room))
+      camera.fadeIn(FADE_MS)
+      this.traveling = false
+      return
+    }
+
+    this.scene.restart({ worldId: door.world })
   }
 
   /** Una sala nueva reemplaza por completo lo que había (reingreso incluido). */
@@ -275,7 +368,9 @@ export class OfficeScene extends Phaser.Scene {
     const avatar = this.avatars.get(sessionId)
     if (!avatar) return
     if (avatar === this.me) {
-      this.cameras.main.stopFollow()
+      // Al apagarse la escena (viaje a otro mundo) el manager de cámaras ya no
+      // está: dejar de seguir es innecesario y romperia el apagado.
+      this.cameras?.main?.stopFollow()
       this.me = undefined
     }
     avatar.destroy(true)

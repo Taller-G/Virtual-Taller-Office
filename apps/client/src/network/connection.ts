@@ -1,8 +1,10 @@
 import { Client, CloseCode, type Room } from '@colyseus/sdk'
 import {
+  DEFAULT_WORLD_ID,
+  getWorld,
   Message,
   newChatId,
-  ROOM_NAME,
+  roomNameFor,
   validateChatText,
   type ChatErrorPayload,
   type ChatMessagePayload,
@@ -14,9 +16,9 @@ import {
   type SetAwayPayload,
   type SetNamePayload,
 } from '@vto/shared'
-import type { OficinaTallerRoom } from '@vto/server/rooms/OficinaTallerRoom'
+import type { WorldRoom } from '@vto/server/rooms/WorldRoom'
 
-export type OfficeRoom = Room<OficinaTallerRoom, OfficeState>
+export type OfficeRoom = Room<WorldRoom, OfficeState>
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
 
@@ -38,15 +40,24 @@ export interface ConnectionEvents {
   chat: (message: ChatMessagePayload) => void
   /** El servidor no aceptó uno de mis mensajes (`id` para reconocerlo). */
   chatError: (error: ChatErrorPayload) => void
+  /** Cambié de mundo: la sala de `room` ya es la del mundo nuevo. */
+  world: (worldId: string) => void
 }
 
 type Listener<E extends keyof ConnectionEvents> = ConnectionEvents[E]
 
 /** Tope del backoff entre reintentos de reingreso, en ms. */
 const MAX_REJOIN_DELAY_MS = 10_000
+/** Cuánto se espera al mundo destino antes de dar el viaje por perdido. */
+const TRAVEL_TIMEOUT_MS = 8_000
 
 /**
- * Conexión con la sala única "Oficina Taller".
+ * Conexión con la sala del mundo en el que estoy.
+ *
+ * Hay una sala por mundo (`world_first_office`, `world_chiron_office`…) y esta
+ * clase sostiene la del mundo actual. **Viajar** por una puerta es entrar
+ * primero a la sala del destino y recién ahí salir de la de origen: si el
+ * destino no está disponible, no se perdió el lugar donde se estaba.
  *
  * Dos capas de recuperación:
  * 1. El SDK reintenta solo ante un corte (red caída) conservando la sesión,
@@ -62,6 +73,8 @@ export class OfficeConnection {
   readonly client: Client
   room?: OfficeRoom
   status: ConnectionStatus = 'disconnected'
+  /** Mundo en el que estoy (id del registro de `@vto/shared`). */
+  worldId: string = DEFAULT_WORLD_ID
 
   private listeners: { [E in keyof ConnectionEvents]: Set<Listener<E>> } = {
     status: new Set(),
@@ -69,10 +82,13 @@ export class OfficeConnection {
     roomInfo: new Set(),
     chat: new Set(),
     chatError: new Set(),
+    world: new Set(),
   }
   private rejoinAttempts = 0
   private rejoinTimer?: ReturnType<typeof setTimeout>
   private stopped = false
+  /** Mientras dura un viaje no se acepta otro ni se reintenta el reingreso. */
+  private traveling = false
   /** Nombre y avatar con los que se entra (y se reingresa tras una caída). */
   private joinOptions: JoinOptions = {}
 
@@ -145,10 +161,83 @@ export class OfficeConnection {
     this.room?.leave(true).catch(() => {})
   }
 
+  /**
+   * Cruzar una puerta: entrar al mundo `worldId` por el spawn `spawn`.
+   *
+   * Primero se entra al destino y recién con eso resuelto se sale del origen,
+   * así un mundo caído, lleno o con el mapa roto deja al jugador donde estaba
+   * (con el motivo para mostrar) en vez de en el limbo. Nombre, avatar y
+   * estado de presencia viajan con el jugador.
+   */
+  async travelTo(
+    worldId: string,
+    spawn: string,
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const world = getWorld(worldId)
+    if (!world) return { ok: false, reason: `El mundo "${worldId}" no existe` }
+    if (this.traveling) return { ok: false, reason: 'Ya estás cruzando una puerta' }
+    if (worldId === this.worldId) return { ok: false, reason: `Ya estás en ${world.name}` }
+
+    this.traveling = true
+    const origin = this.room
+    const me = origin?.state.players.get(origin.sessionId)
+    const options: JoinOptions = {
+      ...this.joinOptions,
+      spawn,
+      away: me?.away ?? false,
+      awayManual: me?.awayManual ?? false,
+    }
+
+    try {
+      // `join` (y no `joinOrCreate`): si la sala de ese mundo no está viva, el
+      // viaje falla en vez de levantar un mundo a espaldas del servidor.
+      const room = await this.joinWithTimeout(roomNameFor(worldId), options)
+      await new Promise<void>((resolve) => room.onStateChange.once(() => resolve()))
+
+      if (origin) {
+        // El origen se abandona a propósito: su `onLeave` no tiene que
+        // disparar el reingreso automático (ver la guarda en `attach`).
+        this.room = undefined
+        void origin.leave(true).catch(() => {})
+      }
+      this.worldId = worldId
+      this.attach(room)
+      this.emit('world', worldId)
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, reason: `No se pudo entrar a ${world.name}: ${detail(error)}` }
+    } finally {
+      this.traveling = false
+    }
+  }
+
+  /**
+   * `join` con tope de tiempo. Si el servidor contesta tarde, la sala que
+   * llegue se abandona al instante: nadie queda de fantasma en el destino.
+   */
+  private async joinWithTimeout(roomName: string, options: JoinOptions): Promise<OfficeRoom> {
+    const joining = this.client.join<WorldRoom>(roomName, options)
+    let timer: ReturnType<typeof setTimeout>
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        void joining.then((room) => room.leave(true)).catch(() => {})
+        reject(new Error('el mundo no respondió a tiempo'))
+      }, TRAVEL_TIMEOUT_MS)
+    })
+    try {
+      return await Promise.race([joining, timeout])
+    } finally {
+      clearTimeout(timer!)
+    }
+  }
+
   private async join() {
     if (this.stopped) return
     try {
-      const room = await this.client.joinOrCreate<OficinaTallerRoom>(ROOM_NAME, this.joinOptions)
+      const room = await this.client.joinOrCreate<WorldRoom>(
+        roomNameFor(this.worldId),
+        this.joinOptions,
+      )
       // `joinOrCreate` resuelve al completar el handshake; el estado inicial
       // llega en el mensaje siguiente. Se espera para que quien escuche
       // `room` encuentre ya a todos los jugadores (incluido uno mismo).
@@ -173,10 +262,12 @@ export class OfficeConnection {
     room.onMessage(Message.CHAT_ERROR, (error) => this.emit('chatError', error))
 
     room.onDrop((code, reason) => {
+      if (this.room !== room) return
       this.setStatus('reconnecting', reason || `código ${code}`)
     })
 
     room.onReconnect(() => {
+      if (this.room !== room) return
       this.setStatus('connected')
     })
 
@@ -185,6 +276,8 @@ export class OfficeConnection {
     })
 
     room.onLeave((code, reason) => {
+      // Sala vieja que se dejó al cruzar una puerta: ya hay otra en pie.
+      if (this.room !== room) return
       this.room = undefined
       if (this.stopped || code === CloseCode.CONSENTED) {
         this.setStatus('disconnected', 'Saliste de la sala')
@@ -221,4 +314,10 @@ function reasonFor(code: number, reason?: string): string {
 function describe(error: unknown): string {
   if (error instanceof Error && error.message) return `No se pudo conectar: ${error.message}`
   return 'No se pudo conectar al servidor'
+}
+
+/** El motivo tal cual, para componerlo con un mensaje propio. */
+function detail(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message
+  return 'el servidor no contestó'
 }
