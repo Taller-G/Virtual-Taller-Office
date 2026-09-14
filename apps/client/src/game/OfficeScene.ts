@@ -2,7 +2,7 @@ import Phaser from 'phaser'
 import { Callbacks } from '@colyseus/sdk'
 import {
   DEFAULT_WORLD_ID,
-  doorAt,
+  doorAtRect,
   getWorld,
   Message,
   worldName,
@@ -192,15 +192,21 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   /**
-   * ¿Estoy pisando una puerta? Se mira el centro del cuerpo físico (los pies),
-   * no el del sprite: lo que cruza la puerta es lo que pisa el piso. La puerta
-   * se "arma" recién cuando se sale de su área, así llegar al lado de la
-   * puerta de vuelta no rebota al mundo anterior.
+   * ¿Estoy pisando una puerta? Se compara el **cuerpo físico** (los pies, no el
+   * sprite entero) contra el área de la puerta: alcanza con tocar el umbral,
+   * como al cruzar una puerta de verdad. La puerta se "arma" recién cuando el
+   * cuerpo sale del área, así llegar al lado de la puerta de vuelta no rebota
+   * al mundo anterior.
    */
   private checkDoors() {
-    if (!this.me || this.traveling) return
-    const feetY = this.me.y + BODY.height / 2
-    const door = doorAt(this.map.raw, this.me.x, feetY)
+    if (!this.me?.body || this.traveling) return
+    const body = this.me.body as Phaser.Physics.Arcade.Body
+    const door = doorAtRect(this.map.raw, {
+      x: body.x,
+      y: body.y,
+      width: body.width,
+      height: body.height,
+    })
     if (!door) {
       this.doorArmed = true
       return

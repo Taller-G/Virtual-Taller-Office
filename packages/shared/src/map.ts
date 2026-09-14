@@ -336,6 +336,24 @@ export function doorAt(map: TiledMap, x: number, y: number): Door | undefined {
   return findDoors(map).find((d) => x >= d.x && x < d.x + d.width && y >= d.y && y < d.y + d.height)
 }
 
+/**
+ * La puerta (si la hay) que toca el rectángulo: es lo que usa el cliente con
+ * el cuerpo del jugador, para que pisar el umbral alcance y no haya que meter
+ * el centro exacto del cuerpo adentro del área.
+ */
+export function doorAtRect(
+  map: TiledMap,
+  rect: { x: number; y: number; width: number; height: number },
+): Door | undefined {
+  return findDoors(map).find(
+    (d) =>
+      rect.x < d.x + d.width &&
+      rect.x + rect.width > d.x &&
+      rect.y < d.y + d.height &&
+      rect.y + rect.height > d.y,
+  )
+}
+
 /** Cómo se nombra una puerta en los mensajes de error. */
 export function doorLabel(door: Door): string {
   return door.name ? `"${door.name}" (objeto ${door.id})` : `objeto ${door.id}`

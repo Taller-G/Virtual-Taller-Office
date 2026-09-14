@@ -5,7 +5,7 @@ Este repositorio contiene la **fundación**: cliente web, servidor en tiempo rea
 —la **First Office**, donde todo el mundo entra, y la **Chiron Office**, oscura, a la que se llega
 cruzando una puerta— con un ciclo de conexión sólido (entrar, salir, refrescar, perder la red,
 caída del servidor); el **mapa 2D de cada mundo**
-(recepción, escritorios, sala de reunión, cocina) con paredes y muebles que bloquean el paso; la
+(recepción, escritorios, salas de reunión, sala de foco, cocina) con paredes y muebles que bloquean el paso; la
 **presencia en tiempo real**: cada persona elige nombre y avatar, se mueve con flechas o WASD, ve a
 los demás moverse con animación, y un panel muestra quién está y quién está ausente; y las
 **burbujas de conversación por proximidad**: acercarse a alguien abre un grupo que el servidor
@@ -224,15 +224,16 @@ misma burbuja en menos de 300 ms, un tercero entra y los tres ven tres miembros,
 y los otros siguen, al quedar uno desaparece, el jugador N+1 no entra en una burbuja llena, y una
 posición falsa del cliente no crea ni rompe burbujas distintas a las que calcula el servidor).
 Además validan los **mapas reales** de todos los mundos (`test/map.test.ts`): entrada única sobre
-piso transitable, cuatro zonas, tilesets embebidos con imágenes presentes, colisiones declaradas en
-el mapa, y las puertas de la First Office y la Chiron Office cerrando en los dos sentidos sin caer
-sobre paredes ni muebles. El **contrato de las puertas** tiene sus pruebas en `test/doors.test.ts`
-(spawns con nombre, puerta sin destino, puerta a un mundo o a un spawn que no existe: el servidor no
-arranca y nombra la puerta y lo que falta) y **viajar entre mundos** en `test/travel.room.test.ts`
-(se llega al spawn que nombra la puerta mirando hacia adentro, el ausente viaja con el jugador, los
-que se quedan dejan de verlo y los del destino lo ven llegar, el chat de un mundo no llega al otro y
-un mundo apagado no se levanta al cruzar su puerta). El **catálogo de avatares** y la normalización
-de nombres están en `test/identity.test.ts`.
+piso transitable, las zonas de la oficina (incluidas las tres salas del ala sur), que se llegue
+caminando desde el spawn a todas ellas, tilesets embebidos con imágenes presentes, colisiones
+declaradas en el mapa, y las puertas de la First Office y la Chiron Office cerrando en los dos
+sentidos sin caer sobre paredes ni muebles. El **contrato de las puertas** tiene sus pruebas en
+`test/doors.test.ts` (spawns con nombre, puerta sin destino, puerta a un mundo o a un spawn que no
+existe: el servidor no arranca y nombra la puerta y lo que falta) y **viajar entre mundos** en
+`test/travel.room.test.ts` (se llega al spawn que nombra la puerta mirando hacia adentro, el ausente
+viaja con el jugador, los que se quedan dejan de verlo y los del destino lo ven llegar, el chat de un
+mundo no llega al otro y un mundo apagado no se levanta al cruzar su puerta). El **catálogo de
+avatares** y la normalización de nombres están en `test/identity.test.ts`.
 
 ## Despliegue
 

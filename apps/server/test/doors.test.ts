@@ -7,6 +7,7 @@ import {
   CLASS_SPAWN,
   DEFAULT_SPAWN_NAME,
   doorAt,
+  doorAtRect,
   findDoors,
   findSpawnPoint,
   findSpawnPoints,
@@ -143,6 +144,19 @@ describe('Puertas dentro de un mapa', () => {
     ])
     expect(doorAt(map, 40, 8)?.world).toBe('chiron-office')
     expect(doorAt(map, 8, 8)).toBeUndefined()
+  })
+
+  it('alcanza con que el cuerpo del jugador toque el umbral', () => {
+    const map = mapWith([
+      spawn(1, undefined, 16, 16),
+      door(2, 'A Chiron', 'chiron-office', 'desde-first-office', 32, 0),
+    ])
+    // Cuerpo de 18x12 que asoma apenas dentro de la puerta (x >= 32).
+    expect(doorAtRect(map, { x: 20, y: 20, width: 18, height: 12 })?.id).toBe(2)
+    // Pegado al borde pero sin tocarla: no viaja.
+    expect(doorAtRect(map, { x: 14, y: 20, width: 18, height: 12 })).toBeUndefined()
+    // Debajo de la puerta, alineado en x: tampoco.
+    expect(doorAtRect(map, { x: 34, y: 40, width: 18, height: 12 })).toBeUndefined()
   })
 
   it('una puerta sin mundo o sin spawn se rechaza nombrando la puerta', () => {
