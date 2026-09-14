@@ -21,14 +21,14 @@ function setup(maxMembers = 6, events: BubbleEvents = {}) {
   return { state, bubbles, add, move }
 }
 
-describe('BubbleManager: burbujas por proximidad (semántica WorkAdventure)', () => {
-  it('replica radio y tope en el estado para que el cliente use los mismos valores', () => {
+describe('BubbleManager: proximity bubbles (WorkAdventure semantics)', () => {
+  it('replicates radius and cap in the state so the client uses the same values', () => {
     const { state } = setup(4)
     expect(state.bubbleRadius).toBe(RADIUS)
     expect(state.bubbleMaxMembers).toBe(4)
   })
 
-  it('dos jugadores sin burbuja a menos del radio forman una burbuja en su punto medio', () => {
+  it('two players without a bubble within the radius form a bubble at their midpoint', () => {
     const { state, add, move } = setup()
     const a = add('a', 100, 100)
     const b = add('b', 400, 100)
@@ -47,7 +47,7 @@ describe('BubbleManager: burbujas por proximidad (semántica WorkAdventure)', ()
     expect(bubble.y).toBe(100)
   })
 
-  it('un tercero que se acerca al centro se suma y el baricentro se recalcula', () => {
+  it('a third one approaching the centre joins and the centroid is recomputed', () => {
     const { state, add, move } = setup()
     add('a', 100, 100)
     add('b', 140, 100)
@@ -63,7 +63,7 @@ describe('BubbleManager: burbujas por proximidad (semántica WorkAdventure)', ()
     expect(bubble.y).toBe(100 + RADIUS / 3)
   })
 
-  it('al alejarse más del radio del baricentro el jugador sale; los demás siguen', () => {
+  it('moving further than the radius from the centroid the player leaves; the rest stay', () => {
     const { state, add, move } = setup()
     const a = add('a', 100, 100)
     const b = add('b', 140, 100)
@@ -81,7 +81,7 @@ describe('BubbleManager: burbujas por proximidad (semántica WorkAdventure)', ()
     expect(bubble.y).toBe(100)
   })
 
-  it('cuando queda un solo miembro la burbuja se destruye', () => {
+  it('when a single member is left the bubble is destroyed', () => {
     const { state, add, move } = setup()
     const a = add('a', 100, 100)
     const b = add('b', 140, 100)
@@ -93,19 +93,19 @@ describe('BubbleManager: burbujas por proximidad (semántica WorkAdventure)', ()
     expect(b.bubbleId).toBe('')
   })
 
-  it('medir contra el baricentro da histéresis: se juntan a R y se sueltan recién a 2R', () => {
+  it('measuring against the centroid gives hysteresis: they join at R and only break apart at 2R', () => {
     const { state, add, move } = setup()
     add('a', 100, 100)
     const b = add('b', 100 + RADIUS, 100)
     expect(state.bubbles.size).toBe(1)
 
-    move(b, 100 + 2 * RADIUS, 100) // el baricentro queda a R exacto: sigue adentro
+    move(b, 100 + 2 * RADIUS, 100) // the centroid ends up at exactly R: still inside
     expect(state.bubbles.size).toBe(1)
     move(b, 100 + 2 * RADIUS + 1, 100)
     expect(state.bubbles.size).toBe(0)
   })
 
-  it('una burbuja llena no absorbe a nadie más', () => {
+  it('a full bubble absorbs nobody else', () => {
     const { state, add, move } = setup(3)
     add('a', 100, 100)
     add('b', 110, 100)
@@ -119,7 +119,7 @@ describe('BubbleManager: burbujas por proximidad (semántica WorkAdventure)', ()
     expect(bubble.members.length).toBe(3)
     expect(state.bubbles.size).toBe(1)
 
-    // Dos libres al lado de una burbuja llena forman la suya propia.
+    // Two free players next to a full bubble form one of their own.
     const e = add('e', 500, 500)
     move(e, 108, 108)
     expect(state.bubbles.size).toBe(2)
@@ -128,7 +128,7 @@ describe('BubbleManager: burbujas por proximidad (semántica WorkAdventure)', ()
     expect(d.bubbleId).not.toBe(bubble.id)
   })
 
-  it('un jugador que sale de la sala deja su burbuja (y la destruye si queda uno)', () => {
+  it('a player leaving the room leaves their bubble (and destroys it if one is left)', () => {
     const { state, bubbles, add } = setup()
     const a = add('a', 100, 100)
     const b = add('b', 140, 100)
@@ -146,8 +146,8 @@ describe('BubbleManager: burbujas por proximidad (semántica WorkAdventure)', ()
     expect(a.bubbleId).toBe('')
   })
 
-  it('al destruirse una burbuja, el que queda libre se agrupa con quien tenga al lado', () => {
-    // Tope 2: a y b conversan, c está al lado esperando lugar.
+  it('when a bubble is destroyed, whoever is freed groups up with the person next to them', () => {
+    // Cap 2: a and b are talking, c is next to them waiting for a slot.
     const { state, bubbles, add } = setup(2)
     const a = add('a', 100, 100)
     const b = add('b', 120, 100)
@@ -155,8 +155,9 @@ describe('BubbleManager: burbujas por proximidad (semántica WorkAdventure)', ()
     expect(state.bubbles.size).toBe(1)
     expect(c.bubbleId).toBe('')
 
-    // a se va de la sala: la burbuja queda con uno y se destruye, pero b y c
-    // siguen pegados, así que la burbuja nueva sale sin que nadie camine.
+    // a leaves the room: the bubble is left with one and is destroyed, but b
+    // and c are still next to each other, so the new bubble forms without
+    // anyone walking.
     state.players.delete('a')
     bubbles.onPlayerLeft(a)
     expect(state.bubbles.size).toBe(1)
@@ -167,7 +168,7 @@ describe('BubbleManager: burbujas por proximidad (semántica WorkAdventure)', ()
     expect(a.bubbleId).toBe('')
   })
 
-  it('una burbuja que deja de estar llena absorbe a quien esperaba al lado', () => {
+  it('a bubble that stops being full absorbs whoever was waiting next to it', () => {
     const { state, add, move } = setup(3)
     add('a', 100, 100)
     add('b', 110, 100)
@@ -177,7 +178,7 @@ describe('BubbleManager: burbujas por proximidad (semántica WorkAdventure)', ()
     expect(bubble.members.length).toBe(3)
     expect(d.bubbleId).toBe('')
 
-    // c se aleja: la burbuja baja a dos y d, que estaba al alcance, entra.
+    // c walks away: the bubble drops to two and d, who was within reach, joins.
     move(c, 600, 600)
     expect(c.bubbleId).toBe('')
     expect(state.bubbles.size).toBe(1)
@@ -185,20 +186,20 @@ describe('BubbleManager: burbujas por proximidad (semántica WorkAdventure)', ()
     expect(d.bubbleId).toBe(bubble.id)
   })
 
-  it('elige la opción más cercana entre un jugador libre y una burbuja', () => {
+  it('picks the closest option between a free player and a bubble', () => {
     const { state, add, move } = setup()
     add('a', 100, 100)
-    add('b', 140, 100) // burbuja centrada en (120, 100)
+    add('b', 140, 100) // bubble centred at (120, 100)
     add('c', 300, 100)
     const d = add('d', 500, 500)
 
-    // A 40 px de c y a 140 px del centro de la burbuja: forma una nueva con c.
+    // 40 px from c and 140 px from the bubble's centre: it forms a new one with c.
     move(d, 260, 100)
     expect(state.bubbles.size).toBe(2)
     expect(d.bubbleId).toBe(state.players.get('c')!.bubbleId)
   })
 
-  it('emite los eventos de creación, entrada, salida y destrucción', () => {
+  it('emits the created, joined, left and destroyed events', () => {
     const log: string[] = []
     const { add, move } = setup(6, {
       onCreated: (b) => log.push(`created ${b.id}`),

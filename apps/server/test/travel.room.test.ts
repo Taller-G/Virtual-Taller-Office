@@ -18,13 +18,13 @@ const FIRST = 'first-office'
 const CHIRON = 'chiron-office'
 
 /**
- * Viajar entre mundos: cada mundo es su propia sala, así que "cruzar la
- * puerta" es salir de una y entrar a la otra con el nombre del spawn de
- * llegada. Acá se prueba lo que garantiza el servidor de ese viaje: dónde
- * aparece quien llega, qué se lleva puesto, y que nada (ni la gente ni el
- * chat) cruce de un mundo al otro.
+ * Travelling between worlds: each world is its own room, so "crossing the
+ * door" is leaving one and joining the other with the name of the arrival
+ * spawn. What is tested here is what the server guarantees about that trip:
+ * where the arriving player appears, what they bring with them, and that
+ * nothing (neither people nor chat) crosses from one world to the other.
  */
-describe('Mundos conectados por puertas', () => {
+describe('Worlds connected by doors', () => {
   let colyseus: ColyseusTestServer
   let first: WorldRoom
   let chiron: WorldRoom
@@ -49,7 +49,7 @@ describe('Mundos conectados por puertas', () => {
   async function waitFor(predicate: () => boolean, timeoutMs: number, label: string) {
     const started = Date.now()
     while (!predicate()) {
-      if (Date.now() - started > timeoutMs) throw new Error(`Timeout esperando: ${label}`)
+      if (Date.now() - started > timeoutMs) throw new Error(`Timed out waiting for: ${label}`)
       await new Promise((resolve) => setTimeout(resolve, 20))
     }
   }
@@ -72,7 +72,7 @@ describe('Mundos conectados por puertas', () => {
     chiron = await colyseus.createRoom<WorldRoom>(roomNameFor(CHIRON), {})
   }
 
-  it('cada mundo levanta su propio mapa', async () => {
+  it('each world brings up its own map', async () => {
     await createWorlds()
     expect(first.world.id).toBe(FIRST)
     expect(chiron.world.id).toBe(CHIRON)
@@ -80,29 +80,29 @@ describe('Mundos conectados por puertas', () => {
     expect(first.map.bounds).not.toEqual(chiron.map.bounds)
   })
 
-  it('quien llega por una puerta aparece en el spawn que esa puerta nombra, mirando hacia adentro', async () => {
+  it('whoever arrives through a door appears at the spawn that door names, facing inwards', async () => {
     await createWorlds()
-    const traveller = await connect(chiron, { name: 'Dami', spawn: 'desde-first-office' })
+    const traveller = await connect(chiron, { name: 'Dami', spawn: 'from-first-office' })
 
-    const arrival = findSpawnPoint(chiron.map.data, 'desde-first-office')
+    const arrival = findSpawnPoint(chiron.map.data, 'from-first-office')
     const me = chiron.state.players.get(traveller.sessionId)!
     expect(Math.hypot(me.x - arrival.x, me.y - arrival.y)).toBeLessThanOrEqual(arrival.radius)
     expect(me.dir).toBe(arrival.dir)
     expect(me.name).toBe('Dami')
   })
 
-  it('un spawn que el mundo no conoce cae en la entrada en vez de romper', async () => {
+  it('a spawn the world does not know falls back to the entrance instead of breaking', async () => {
     await createWorlds()
-    const traveller = await connect(chiron, { spawn: 'una-puerta-que-no-existe' })
+    const traveller = await connect(chiron, { spawn: 'a-door-that-does-not-exist' })
     const entry = chiron.map.spawn
     const me = chiron.state.players.get(traveller.sessionId)!
     expect(Math.hypot(me.x - entry.x, me.y - entry.y)).toBeLessThanOrEqual(entry.radius)
   })
 
-  it('el estado ausente viaja con el jugador', async () => {
+  it('the away state travels with the player', async () => {
     await createWorlds()
     const traveller = await connect(chiron, {
-      spawn: 'desde-first-office',
+      spawn: 'from-first-office',
       away: true,
       awayManual: true,
     })
@@ -111,78 +111,78 @@ describe('Mundos conectados por puertas', () => {
     expect(me.awayManual).toBe(true)
   })
 
-  it('los que se quedan dejan de ver al que viaja y los del destino lo ven llegar', async () => {
+  it('those who stay stop seeing the traveller and those at the destination see them arrive', async () => {
     await createWorlds()
-    const stays = await connect(first, { name: 'Se queda' })
-    const traveller = await connect(first, { name: 'Viaja' })
-    const already = await connect(chiron, { name: 'Ya estaba' })
-    await waitFor(() => stays.state.players.size === 2, 500, 'los dos en la First Office')
+    const stays = await connect(first, { name: 'Stays' })
+    const traveller = await connect(first, { name: 'Travels' })
+    const already = await connect(chiron, { name: 'Was here' })
+    await waitFor(() => stays.state.players.size === 2, 500, 'both in the First Office')
 
-    // Viajar: se entra al destino y se sale del origen (como hace el cliente).
-    const arrived = await connect(chiron, { name: 'Viaja', spawn: 'desde-first-office' })
+    // Travelling: join the destination and leave the origin (as the client does).
+    const arrived = await connect(chiron, { name: 'Travels', spawn: 'from-first-office' })
     await leaveQuietly(traveller)
 
-    await waitFor(() => stays.state.players.size === 1, 1_000, 'el viajero se fue de la First')
-    expect([...stays.state.players.values()].map((p) => p.name)).toEqual(['Se queda'])
+    await waitFor(() => stays.state.players.size === 1, 1_000, 'the traveller left the First')
+    expect([...stays.state.players.values()].map((p) => p.name)).toEqual(['Stays'])
 
-    await waitFor(() => already.state.players.size === 2, 1_000, 'el viajero llegó a Chiron')
+    await waitFor(() => already.state.players.size === 2, 1_000, 'the traveller arrived in Chiron')
     expect([...already.state.players.values()].map((p) => p.name).sort()).toEqual([
-      'Viaja',
-      'Ya estaba',
+      'Travels',
+      'Was here',
     ])
     expect(already.state.players.has(arrived.sessionId)).toBe(true)
   })
 
-  it('el chat de un mundo no llega al otro, aunque estén en las mismas coordenadas', async () => {
+  it('the chat of one world does not reach the other, even at the same coordinates', async () => {
     await createWorlds()
-    const here = await connect(first, { name: 'Acá' })
-    const alsoHere = await connect(first, { name: 'También acá' })
-    const faraway = await connect(chiron, { name: 'En Chiron' })
+    const here = await connect(first, { name: 'Here' })
+    const alsoHere = await connect(first, { name: 'Also here' })
+    const faraway = await connect(chiron, { name: 'In Chiron' })
 
     const received: ChatMessagePayload[] = []
     const crossed: ChatMessagePayload[] = []
     alsoHere.onMessage(Message.CHAT_MESSAGE, (m) => received.push(m))
     faraway.onMessage(Message.CHAT_MESSAGE, (m) => crossed.push(m))
 
-    // Los tres en el mismo punto: en la First Office eso es una burbuja; el de
-    // Chiron está en otra sala, así que no comparte nada.
+    // All three at the same point: in the First Office that is a bubble; the
+    // one in Chiron is in another room, so they share nothing.
     for (const client of [here, alsoHere]) {
       client.send(Message.MOVE, { x: 400, y: 400, dir: 'down', moving: false })
     }
     faraway.send(Message.MOVE, { x: 400, y: 400, dir: 'down', moving: false })
-    // Los dos de la First Office tienen que estar en la MISMA burbuja antes de
-    // hablar: si uno todavía no llegó, el servidor rechaza el mensaje por no
-    // tener con quién conversar.
+    // The two in the First Office have to be in the SAME bubble before
+    // talking: if one has not arrived yet, the server rejects the message for
+    // having nobody to converse with.
     await waitFor(
       () => {
         const mine = here.state.players.get(here.sessionId)
         const theirs = here.state.players.get(alsoHere.sessionId)
-        // Los dos ya en el punto acordado (el estado inicial también los pone
-        // juntos en la entrada) y en la misma burbuja.
+        // Both already at the agreed point (the initial state also puts them
+        // together at the entrance) and in the same bubble.
         const arrived = mine?.x === 400 && mine.y === 400 && theirs?.x === 400 && theirs.y === 400
         return arrived && !!mine?.bubbleId && mine.bubbleId === theirs?.bubbleId
       },
       1_000,
-      'burbuja compartida en la First Office',
+      'shared bubble in the First Office',
     )
     expect(faraway.state.bubbles.size).toBe(0)
 
-    here.send(Message.CHAT_SEND, { id: 'm1', text: 'hola vecinos' })
-    await waitFor(() => received.length === 1, 1_000, 'el mensaje llegó a la burbuja')
-    expect(received[0].text).toBe('hola vecinos')
-    // Margen para que un mensaje mal ruteado tuviera tiempo de llegar.
+    here.send(Message.CHAT_SEND, { id: 'm1', text: 'hi neighbours' })
+    await waitFor(() => received.length === 1, 1_000, 'the message reached the bubble')
+    expect(received[0].text).toBe('hi neighbours')
+    // Margin so that a misrouted message would have had time to arrive.
     await new Promise((resolve) => setTimeout(resolve, 200))
     expect(crossed).toEqual([])
   })
 
-  it('si el mundo destino no está en pie, entrar falla y el jugador se queda donde está', async () => {
+  it('if the destination world is not up, joining fails and the player stays where they are', async () => {
     await createWorlds()
-    const stays = await connect(first, { name: 'Se queda' })
+    const stays = await connect(first, { name: 'Stays' })
     await chiron.disconnect()
 
-    // `join` (lo que usa el cliente al viajar) no levanta un mundo apagado.
+    // `join` (what the client uses when travelling) does not bring up a world that is down.
     await expect(
-      colyseus.sdk.join(roomNameFor(CHIRON), { spawn: 'desde-first-office' }),
+      colyseus.sdk.join(roomNameFor(CHIRON), { spawn: 'from-first-office' }),
     ).rejects.toBeTruthy()
     expect(first.state.players.has(stays.sessionId)).toBe(true)
   })

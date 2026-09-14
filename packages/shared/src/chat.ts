@@ -1,48 +1,48 @@
 /**
- * Chat de texto de la burbuja de proximidad.
+ * Text chat of the proximity bubble.
  *
- * Los mensajes son efímeros y **no** viven en el schema: van por
- * `room.send` / `room.onMessage` (ver `messages.ts`), el servidor solo los
- * retransmite a los miembros de la burbuja del remitente y nadie guarda
- * historial. El único historial es el que cada cliente arma en memoria
- * mientras está en la burbuja.
+ * Messages are ephemeral and do **not** live in the schema: they travel over
+ * `room.send` / `room.onMessage` (see `messages.ts`), the server only relays
+ * them to the members of the sender's bubble and nobody stores history. The
+ * only history is the one each client builds in memory while it is in the
+ * bubble.
  *
- * Acá vive la validación del texto, compartida a propósito: el cliente la usa
- * para rechazar antes de enviar (y mostrar el motivo) y el servidor la vuelve
- * a aplicar, porque un cliente puede mentir.
+ * Text validation lives here, deliberately shared: the client uses it to
+ * reject before sending (and show the reason) and the server applies it
+ * again, because a client can lie.
  */
 
-/** Máximo de caracteres de un mensaje, ya normalizado. */
+/** Maximum number of characters of a message, once normalised. */
 export const CHAT_MAX_LENGTH = 240
 
 /**
- * Motivos por los que un mensaje no se envía o el servidor no lo acepta.
- * `offline` es el único que decide solo el cliente (no hay sala a la que
- * mandarlo); los demás los puede devolver el servidor.
+ * Reasons why a message is not sent or the server does not accept it.
+ * `offline` is the only one the client decides on its own (there is no room
+ * to send it to); the others can be returned by the server.
  */
 export type ChatRejection = 'empty' | 'too_long' | 'no_bubble' | 'rate_limited' | 'offline'
 
-/** Texto para la UI de cada motivo de rechazo. */
+/** UI text for each rejection reason. */
 export const CHAT_REJECTION_TEXT: Record<ChatRejection, string> = {
-  empty: 'Escribí algo para enviar.',
-  too_long: `El mensaje no puede pasar de ${CHAT_MAX_LENGTH} caracteres.`,
-  no_bubble: 'Ya no estás en la conversación.',
-  rate_limited: 'Escribiste muy rápido: esperá un momento.',
-  offline: 'Sin conexión con el servidor.',
+  empty: 'Write something to send.',
+  too_long: `A message cannot be longer than ${CHAT_MAX_LENGTH} characters.`,
+  no_bubble: 'You are no longer in the conversation.',
+  rate_limited: 'You are typing too fast: wait a moment.',
+  offline: 'No connection to the server.',
 }
 
 /**
- * Caracteres invisibles que se sacan siempre: espacios de ancho cero y marcas
- * de dirección (LRO/RLO/aislantes). No aportan nada a un mensaje y sirven para
- * disfrazar texto o dar vuelta el orden de lo que se lee.
+ * Invisible characters that are always stripped: zero-width spaces and
+ * direction marks (LRO/RLO/isolates). They add nothing to a message and are
+ * used to disguise text or reverse the order of what is read.
  */
-const INVISIBLE = /[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g
+const INVISIBLE = /[​-‏‪-‮⁦-⁩﻿]/g
 
 /**
- * Cambia por espacios los caracteres de control (C0 y C1), que después el
- * colapso de espacios se lleva. Se hace por código y no con una expresión
- * regular porque una clase de caracteres de control es ilegible y la marca
- * el linter (`no-control-regex`).
+ * Turns control characters (C0 and C1) into spaces, which the whitespace
+ * collapse then removes. It is done by code point instead of with a regular
+ * expression because a control-character class is unreadable and the linter
+ * flags it (`no-control-regex`).
  */
 function withoutControls(value: string): string {
   let out = ''
@@ -54,12 +54,12 @@ function withoutControls(value: string): string {
 }
 
 /**
- * Normaliza el texto de un mensaje: saca invisibles y controles, colapsa
- * cualquier espacio (saltos de línea incluidos: el campo es de una línea) y
- * recorta las puntas. **No** recorta el largo ni escapa nada: el mensaje se
- * transporta tal como se escribió y se muestra como texto plano
- * (`textContent` en el panel, `Phaser.Text` en el globo), así `<b>hola</b>`
- * se lee literal en vez de convertirse en HTML.
+ * Normalises the text of a message: strips invisible and control characters,
+ * collapses any whitespace (line breaks included: the field is single-line)
+ * and trims the ends. It does **not** cap the length nor escape anything: the
+ * message travels exactly as it was written and is shown as plain text
+ * (`textContent` in the panel, `Phaser.Text` in the balloon), so `<b>hi</b>`
+ * reads literally instead of turning into HTML.
  */
 export function sanitizeChatText(value: unknown): string {
   if (typeof value !== 'string') return ''
@@ -70,8 +70,9 @@ export type ChatTextResult =
   { ok: true; text: string } | { ok: false; reason: Extract<ChatRejection, 'empty' | 'too_long'> }
 
 /**
- * Valida el texto de un mensaje. El largo se mide sobre el texto normalizado
- * y se **rechaza**, no se recorta: el que escribe tiene que ver que se pasó.
+ * Validates the text of a message. The length is measured on the normalised
+ * text and is **rejected**, not truncated: whoever writes has to see that
+ * they went over.
  */
 export function validateChatText(value: unknown): ChatTextResult {
   const text = sanitizeChatText(value)
@@ -80,21 +81,21 @@ export function validateChatText(value: unknown): ChatTextResult {
   return { ok: true, text }
 }
 
-/** Largo máximo del id con el que el remitente correlaciona su acuse. */
+/** Maximum length of the id the sender correlates its acknowledgement with. */
 export const CHAT_ID_MAX_LENGTH = 40
 const UNSAFE_ID = /[^A-Za-z0-9_-]/g
 
 /**
- * Normaliza el id que manda el cliente (lo elige él para reconocer el eco de
- * su propio mensaje). Se limita a caracteres inofensivos y a un largo fijo; si
- * no queda nada usable, el servidor pone uno.
+ * Normalises the id the client sends (it picks it to recognise the echo of
+ * its own message). It is limited to harmless characters and a fixed length;
+ * if nothing usable is left, the server assigns one.
  */
 export function sanitizeChatId(value: unknown): string {
   if (typeof value !== 'string') return ''
   return value.replace(UNSAFE_ID, '').slice(0, CHAT_ID_MAX_LENGTH)
 }
 
-/** Id local de un mensaje propio, para reconocer su eco. */
+/** Local id of one's own message, to recognise its echo. */
 export function newChatId(): string {
   return `m${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }

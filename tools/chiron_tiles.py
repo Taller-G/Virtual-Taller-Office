@@ -1,19 +1,19 @@
 """
-Vocabulario de tiles de la Chiron Office: qué tiles tiene el tileset oscuro,
-de dónde sale cada uno y cómo se lo tiñe.
+The tile vocabulary of the Chiron Office: which tiles the dark tileset has,
+where each one comes from and how it is tinted.
 
-Lo comparten `make-chiron-tileset.py` (que dibuja el PNG) y
-`make-chiron-map.py` (que arma el mapa nombrando los tiles, no gids sueltos).
-Si cambia el orden de `TILES`, los dos scripts se rehacen juntos y el mapa
-sigue siendo coherente; correr uno solo deja el mapa apuntando a tiles viejos.
+Shared by `make-chiron-tileset.py` (which draws the PNG) and
+`make-chiron-map.py` (which builds the map naming tiles, not bare gids). If the
+order of `TILES` changes, both scripts have to be re-run together; running only
+one leaves the map pointing at the wrong tiles.
 
-Por qué un tileset propio: `FloorAndGround` (LimeZu Modern Interiors) es un
-pack claro — de sus 1482 tiles completos solo 6 tienen luminancia por debajo
-de 80. No hay con qué pintar una oficina oscura. En vez de tapar el mundo con
-un velo (`ambient`), acá se generan pisos y paredes **ya oscuros**, tomando
-los mismos tiles que usa la First Office —o sea, la misma geometría de muros,
-que ya sabemos que encastra— y pasándolos por un duotono frío. La licencia de
-LimeZu permite editar los assets (ver `docs/licencias-assets.md`).
+Why a tileset of our own: `FloorAndGround` (LimeZu Modern Interiors) is a bright
+pack — of its 1482 full tiles only 6 have a luminance below 80. There is nothing
+in it to paint a dark office with. So instead of covering the world with a veil
+(`ambient`), floors and walls are generated **already dark**, by taking the very
+tiles the First Office is built from — that is, the same wall geometry we know
+fits together — and running them through a cold duotone. LimeZu's licence allows
+editing the assets (see `docs/asset-licenses.md`).
 """
 
 from __future__ import annotations
@@ -26,64 +26,64 @@ TILESETS = ROOT / 'apps/client/public/assets/tilesets'
 SOURCE_SHEET = TILESETS / 'FloorAndGround.png'
 TARGET_SHEET = TILESETS / 'ChironDark.png'
 
-#: Nombre del tileset dentro del mapa Tiled (y clave de textura en Phaser).
+#: Name of the tileset inside the Tiled map (and texture key in Phaser).
 TILESET_NAME = 'ChironDark'
-#: Ruta a la imagen, relativa al archivo del mapa (como la escribe Tiled).
+#: Path to the image, relative to the map file (the way Tiled writes it).
 TILESET_IMAGE = '../tilesets/ChironDark.png'
 
 TILE = 32
-#: Columnas de la hoja generada. Solo afecta cómo se ve el PNG en Tiled.
+#: Columns of the generated sheet. Only affects how the PNG looks in Tiled.
 SHEET_COLUMNS = 8
 
 # ---------------------------------------------------------------------------
-# Paletas
+# Palettes
 # ---------------------------------------------------------------------------
 
-#: Duotono base: de la sombra (azul noche) al brillo (acero frío). Todo lo que
-#: es estructura —pisos, paredes, rejillas— usa esta paleta, y por eso la
-#: oficina entera se lee como un solo lugar.
+#: Base duotone: from the shadow (night blue) to the highlight (cold steel).
+#: Everything structural uses it, and that is why the whole office reads as a
+#: single place.
 SLATE = ((7, 10, 20), (96, 116, 144))
-#: Acento violeta para la alfombra del Pozo: el único punto de color cálido-frío
-#: del mapa, para que el estar no sea otro rectángulo gris.
+#: Violet accent for the rug in The Pit: the one spot of colour in the map, so
+#: the lounge is not yet another grey rectangle.
 VIOLET = ((13, 10, 28), (118, 86, 168))
-#: Acento verde-cian para las rejillas técnicas del Archivo y los Monitores.
+#: Green-cyan accent for the technical grating in the Archive and the Monitors.
 CYAN = ((6, 14, 18), (78, 132, 140))
-#: Paredes. Rampa más corta que `SLATE`: el pack original las tiene blancas y
-#: con la rampa larga quedan de un gris medio que aclara toda la oficina.
+#: Walls. A shorter ramp than `SLATE`: the pack paints them white, and with the
+#: long ramp they come out mid-grey and wash the whole office out.
 WALL = ((5, 8, 16), (64, 78, 98))
-#: Piso de la galería: un escalón por encima del piso general, para que el eje
-#: este-oeste se lea sin necesidad de una pared.
+#: The gallery floor: one step above the general floor, so the east-west axis
+#: reads without needing a wall.
 HALL = ((7, 10, 20), (58, 72, 92))
-#: Muros vistos de canto (los laterales y los tabiques). En el pack son una
-#: franja blanca maciza; con la paleta de las paredes quedan como losas claras
-#: que se comen la atención en un mapa oscuro.
+#: Walls seen edge-on (the side walls and the stubs). In the pack they are a
+#: solid white strip; with the wall palette they become bright slabs that eat
+#: all the attention in a dark map.
 EDGE = ((4, 6, 12), (42, 52, 68))
 
-#: Color de las luces que se dibujan a mano (charcos de luz y tiras).
+#: Colour of the hand-drawn lights (light pools and strips).
 LIGHT_WARM = (255, 228, 176)
 LIGHT_COLD = (150, 214, 255)
 
 
 @dataclass(frozen=True)
 class DarkTile:
-    """Un tile del tileset oscuro."""
+    """One tile of the dark tileset."""
 
     name: str
-    #: gid en `FloorAndGround` del tile que se tiñe; `None` si se dibuja a mano.
+    #: gid in `FloorAndGround` of the tile being tinted; `None` if hand-drawn.
     source: int | None = None
-    #: Paleta del duotono (sombra, brillo).
+    #: Duotone palette (shadow, highlight).
     palette: tuple[tuple[int, int, int], tuple[int, int, int]] = SLATE
-    #: Si bloquea el paso. Se escribe como propiedad `collides` del tileset.
+    #: Whether it blocks the way. Written as the tileset's `collides` property.
     collides: bool = False
-    #: Para los tiles dibujados a mano: qué dibujo (ver `make-chiron-tileset.py`).
+    #: For hand-drawn tiles: which drawing (see `make-chiron-tileset.py`).
     draw: str | None = None
-    #: Parámetros del dibujo.
+    #: Arguments for the drawing.
     args: dict = field(default_factory=dict)
 
 
-# Paredes. Son los mismos tiles con los que está armada la First Office, así
-# que las esquinas, los remates y las sombras encastran igual que allá; lo
-# único que cambia es el color. Todos bloquean el paso.
+# Walls. These are the same tiles the First Office is built from, so corners,
+# caps and shadows fit together exactly as they do over there; only the colour
+# changes. All of them block the way.
 WALLS = [
     DarkTile('wall_tl', 29, palette=WALL, collides=True),
     DarkTile('wall_top', 594, palette=WALL, collides=True),
@@ -94,29 +94,31 @@ WALLS = [
     DarkTile('wall_bl', 216, palette=WALL, collides=True),
     DarkTile('wall_bottom', 217, palette=WALL, collides=True),
     DarkTile('wall_br', 218, palette=WALL, collides=True),
-    # Tabiques interiores: el horizontal trae su zócalo, el vertical es macizo.
+    # Interior partitions: the horizontal one brings its own skirting, the
+    # vertical one is solid.
     DarkTile('stub_h', 994, palette=WALL, collides=True),
     DarkTile('stub_h_l', 993, palette=WALL, collides=True),
     DarkTile('stub_h_r', 995, palette=WALL, collides=True),
     DarkTile('stub_v', 92, palette=EDGE, collides=True),
 ]
 
-# Pisos y superficies. Ninguno bloquea.
+# Floors and surfaces. None of them block.
 FLOORS = [
-    # Franja de sombra al pie del muro norte: se camina, pero se ve el apoyo.
+    # Shadow band at the foot of the north wall: walkable, but the wall reads
+    # as standing on something.
     DarkTile('shadow_l', 603),
     DarkTile('shadow', 604),
-    # Piso general de la oficina.
+    # The office's general floor.
     DarkTile('floor_l', 667),
     DarkTile('floor', 668),
-    # Piso liso de la galería, un tono aparte para que el eje se lea.
+    # The gallery's own floor, a shade apart so the axis reads on its own.
     DarkTile('hall', 412, palette=HALL),
-    # Rejilla técnica (Archivo y Monitores).
+    # Technical grating (Archive and Monitors).
     DarkTile('grate_a', 1802, palette=CYAN),
     DarkTile('grate_b', 1803, palette=CYAN),
     DarkTile('grate_c', 1866, palette=CYAN),
     DarkTile('grate_d', 1867, palette=CYAN),
-    # Alfombra del Pozo (motivo de 3×2 que se repite).
+    # The rug in The Pit (a 3×2 motif that repeats).
     DarkTile('rug_a', 1290, palette=VIOLET),
     DarkTile('rug_b', 1291, palette=VIOLET),
     DarkTile('rug_c', 1292, palette=VIOLET),
@@ -125,8 +127,8 @@ FLOORS = [
     DarkTile('rug_f', 1356, palette=VIOLET),
 ]
 
-# Luces. Se dibujan a mano, con transparencia, y van en una capa propia por
-# encima del piso: son la única fuente de claridad del mundo.
+# Lights. Hand-drawn, with transparency, and they live in a layer of their own
+# above the floor: they are the only brightness in this world.
 LIGHTS = [
     DarkTile('pool_tl', draw='pool', args={'quad': 'tl'}),
     DarkTile('pool_tr', draw='pool', args={'quad': 'tr'}),
@@ -134,33 +136,34 @@ LIGHTS = [
     DarkTile('pool_br', draw='pool', args={'quad': 'br'}),
     DarkTile('spot', draw='spot'),
     DarkTile('spot_cold', draw='spot', args={'color': LIGHT_COLD, 'peak': 70}),
-    # Tira LED fría al pie de la pared y su resplandor sobre el piso.
+    # Cold LED strip at the foot of the wall, and its glow on the floor.
     DarkTile('led', draw='led'),
     DarkTile('led_glow', draw='led_glow'),
 ]
 
-# La puerta entre mundos. Es el único tile que también usa el mapa de la First
-# Office: allá el vano oscuro recortado en la pared clara es lo que hace obvio
-# que ahí se sale a otro lado, y acá es el mismo vano visto desde adentro.
+# The door between worlds. These are the only tiles the First Office map takes
+# from this tileset: over there the dark opening cut into the bright wall is
+# what makes it obvious that you leave through it, and here it is the same
+# opening seen from the inside.
 PORTAL = [
     DarkTile('portal_top', draw='portal', args={'half': 'top'}),
     DarkTile('portal_bottom', draw='portal', args={'half': 'bottom'}),
-    # El mismo vano en un muro visto de canto (el muro sur de Chiron mide una
-    # fila sola): la luz se derrama hacia arriba, hacia adentro de la sala.
+    # The same opening in a wall seen edge-on (Chiron's south wall is a single
+    # row): the light spills upwards, into the room.
     DarkTile('portal_edge', draw='portal', args={'half': 'edge'}),
-    # Luz que se derrama del vano sobre el piso: va en la capa de luces, sobre
-    # el tile que pisa quien viaja.
+    # Light spilling from the opening onto the floor: goes in the lights layer,
+    # on the tile the traveller steps on.
     DarkTile('threshold', draw='threshold'),
 ]
 
 TILES: list[DarkTile] = WALLS + FLOORS + LIGHTS + PORTAL
 
-#: Índice (0-based) de cada tile dentro de la hoja, por nombre.
+#: Index (0-based) of each tile within the sheet, by name.
 INDEX = {tile.name: i for i, tile in enumerate(TILES)}
 
 SHEET_ROWS = (len(TILES) + SHEET_COLUMNS - 1) // SHEET_COLUMNS
 
 
 def collides_tiles() -> list[int]:
-    """Índices de los tiles que bloquean el paso."""
+    """Indices of the tiles that block the way."""
     return [i for i, tile in enumerate(TILES) if tile.collides]

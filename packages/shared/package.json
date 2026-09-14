@@ -2,7 +2,7 @@
   "name": "@vto/shared",
   "version": "0.1.0",
   "private": true,
-  "description": "Contratos compartidos entre cliente y servidor: nombre de sala, mensajes y esquema de estado",
+  "description": "Contracts shared between client and server: world registry, messages and state schema",
   "type": "module",
   "exports": {
     ".": {

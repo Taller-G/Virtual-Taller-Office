@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-Genera las hojas de sprites de accesorios (gorros, anteojos) como overlays
-transparentes de 1664×48 px, alineados frame a frame con el avatar.
+Generates the accessory sprite sheets (hats, glasses) as transparent overlays of
+1664x48 px, aligned frame by frame with the avatar.
 
-Para que cada accesorio siga el movimiento de la cabeza (sube/baja 2 px entre
-frames de animación), el script analiza un avatar de referencia (ash) y detecta
-la posición de la cabeza en cada frame.
+So that each accessory follows the movement of the head (which goes up/down 2 px
+between animation frames), the script analyses a reference avatar (ash) and
+detects the position of the head in each frame.
 
-Solo desarrollo: el resultado se versiona en
+Development only: the result is committed in
 apps/client/public/assets/avatars/layers/accessories/.
-Requiere Python 3 y Pillow.
+Requires Python 3 and Pillow.
 
-Uso:  python3 tools/gen-accessories.py
+Usage:  python3 tools/gen-accessories.py
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ ACC_DIR = AVATARS_DIR / "layers" / "accessories"
 FRAME_W, FRAME_H, FRAME_COUNT = 32, 48, 52
 SHEET_W = FRAME_W * FRAME_COUNT
 
-# Qué frames pertenecen a qué dirección.
+# Which frames belong to which direction.
 # idle: right 0-5, up 6-11, left 12-17, down 18-23
 # walk: right 24-29, up 30-35, left 36-41, down 42-47
 # sit:  48-51
@@ -47,15 +47,15 @@ DIR_MAP[51] = "down"
 
 
 # ---------------------------------------------------------------------------
-# Analizar la posición de la cabeza en cada frame del avatar de referencia.
+# Analyse the position of the head in each frame of the reference avatar.
 # ---------------------------------------------------------------------------
 def analyze_head(ref_path: Path) -> list[dict]:
-    """Devuelve info de cada frame: {'top': y, 'cx': x, 'dir': str}."""
+    """Returns info for each frame: {'top': y, 'cx': x, 'dir': str}."""
     im = Image.open(ref_path).convert("RGBA")
     frames = []
     for fi in range(FRAME_COUNT):
         fx = fi * FRAME_W
-        # Top: primera fila no transparente
+        # Top: first non-transparent row
         top_y = FRAME_H
         for y in range(FRAME_H):
             for x in range(FRAME_W):
@@ -64,7 +64,7 @@ def analyze_head(ref_path: Path) -> list[dict]:
                     break
             if top_y < FRAME_H:
                 break
-        # Centro horizontal de los píxeles opacos en la fila de los ojos (~top+20)
+        # Horizontal centre of the opaque pixels on the eye row (~top+20)
         eye_y = min(top_y + 20, FRAME_H - 1)
         xs = []
         for x in range(FRAME_W):
@@ -76,8 +76,8 @@ def analyze_head(ref_path: Path) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Patrones de accesorios (pixeles relativos a un punto de anclaje).
-# Cada entrada: (dx, dy, (r, g, b, a)).
+# Accessory patterns (pixels relative to an anchor point).
+# Each entry: (dx, dy, (r, g, b, a)).
 # ---------------------------------------------------------------------------
 def _make_pattern(
     pixels: list[tuple[int, int, int, int, int]],
@@ -85,10 +85,10 @@ def _make_pattern(
     return [(dx, dy, (r, g, b, a)) for dx, dy, r, g, b, a in pixels]
 
 
-# -- Gorra (cap): visera al frente, forma redondeada -------------------------
+# -- Cap: peak at the front, rounded shape -----------------------------------
 CAP = {
     "down": _make_pattern([
-        # Corona (encima de la cabeza)
+        # Crown (on top of the head)
         (-3, 0, 70, 70, 94, 255),
         (-2, 0, 90, 90, 120, 255), (-1, 0, 90, 90, 120, 255),
         (0, 0, 90, 90, 120, 255), (1, 0, 90, 90, 120, 255),
@@ -131,7 +131,7 @@ CAP = {
         (0, 1, 120, 120, 160, 255), (1, 1, 120, 120, 160, 255),
         (2, 1, 120, 120, 160, 255), (3, 1, 120, 120, 160, 255),
         (4, 1, 70, 70, 94, 255),
-        # Visera (hacia la derecha)
+        # Peak (towards the right)
         (3, 2, 100, 100, 140, 255), (4, 2, 100, 100, 140, 255),
         (5, 2, 100, 100, 140, 255), (6, 2, 70, 70, 94, 255),
     ]),
@@ -145,13 +145,13 @@ CAP = {
         (0, 1, 120, 120, 160, 255), (1, 1, 120, 120, 160, 255),
         (2, 1, 120, 120, 160, 255), (3, 1, 120, 120, 160, 255),
         (4, 1, 70, 70, 94, 255),
-        # Visera (hacia la izquierda)
+        # Peak (towards the left)
         (-5, 2, 70, 70, 94, 255), (-4, 2, 100, 100, 140, 255),
         (-3, 2, 100, 100, 140, 255),
     ]),
 }
 
-# -- Gorro de lana (beanie) --------------------------------------------------
+# -- Woollen beanie ----------------------------------------------------------
 BEANIE = {
     "down": _make_pattern([
         (-3, -1, 70, 70, 94, 255),
@@ -226,20 +226,20 @@ BEANIE = {
     ]),
 }
 
-# -- Anteojos redondos -------------------------------------------------------
-# Anclados al centro de la cabeza, desplazados ~+20 filas desde el top.
+# -- Round glasses -----------------------------------------------------------
+# Anchored to the centre of the head, offset ~+20 rows from the top.
 GLASSES_ROUND = {
     "down": _make_pattern([
-        # Ojo izquierdo
+        # Left eye
         (-4, 0, 58, 58, 80, 255), (-3, 0, 58, 58, 80, 255),
         (-4, 1, 58, 58, 80, 255), (-3, 1, 180, 220, 255, 160),
-        # Puente
+        # Bridge
         (-2, 0, 58, 58, 80, 255),
-        # Ojo derecho
+        # Right eye
         (-1, 0, 58, 58, 80, 255), (0, 0, 58, 58, 80, 255),
         (-1, 1, 180, 220, 255, 160), (0, 1, 58, 58, 80, 255),
     ]),
-    "up": _make_pattern([]),  # No visible de espaldas
+    "up": _make_pattern([]),  # Not visible from behind
     "right": _make_pattern([
         (0, 0, 58, 58, 80, 255), (1, 0, 58, 58, 80, 255),
         (0, 1, 180, 220, 255, 160), (1, 1, 58, 58, 80, 255),
@@ -255,12 +255,12 @@ GLASSES_ROUND = {
 # -- Anteojos cuadrados ------------------------------------------------------
 GLASSES_SQUARE = {
     "down": _make_pattern([
-        # Ojo izquierdo
+        # Left eye
         (-5, 0, 58, 58, 80, 255), (-4, 0, 58, 58, 80, 255), (-3, 0, 58, 58, 80, 255),
         (-5, 1, 58, 58, 80, 255), (-4, 1, 200, 200, 220, 140), (-3, 1, 58, 58, 80, 255),
-        # Puente
+        # Bridge
         (-2, 0, 58, 58, 80, 255),
-        # Ojo derecho
+        # Right eye
         (-1, 0, 58, 58, 80, 255), (0, 0, 58, 58, 80, 255), (1, 0, 58, 58, 80, 255),
         (-1, 1, 58, 58, 80, 255), (0, 1, 200, 200, 220, 140), (1, 1, 58, 58, 80, 255),
     ]),
@@ -278,12 +278,12 @@ GLASSES_SQUARE = {
 }
 
 # ---------------------------------------------------------------------------
-# Generador
+# Generator
 # ---------------------------------------------------------------------------
 ACCESSORIES: dict[str, tuple[str, int, dict]] = {
-    # nombre: (tipo_anclaje, offset_y_desde_top, patrones_por_dir)
-    # 'hat': anclaje al top de la cabeza
-    # 'glasses': anclaje al centro + offset fijo
+    # name: (anchor_kind, y_offset_from_top, patterns_by_dir)
+    # 'hat': anchored to the top of the head
+    # 'glasses': anchored to the centre + a fixed offset
     "cap": ("hat", 0, CAP),
     "beanie": ("hat", 0, BEANIE),
     "glasses-round": ("glasses", 20, GLASSES_ROUND),
@@ -298,7 +298,7 @@ def stamp(
     anchor_x: int,
     anchor_y: int,
 ) -> None:
-    """Dibuja un patrón en el frame indicado."""
+    """Draws a pattern on the given frame."""
     fx = frame_idx * FRAME_W
     for dx, dy, rgba in pattern:
         px = fx + anchor_x + dx

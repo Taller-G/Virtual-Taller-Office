@@ -14,23 +14,24 @@ import {
 
 export type AnimState = 'idle' | 'walk'
 
-/** Clave de textura (hoja de sprites) de un avatar en la caché de Phaser. */
+/** Texture key (sprite sheet) of an avatar in Phaser's cache. */
 export function textureKey(avatar: string): string {
   return `avatar-${avatar}`
 }
 
 /**
- * Clave de textura para una capa de avatar compuesto.
- * Ejemplos: `layer-adam-body-default`, `layer-ash-hair`, `layer-acc-beanie`.
+ * Texture key for a layer of a composed avatar.
+ * Examples: `layer-adam-body-default`, `layer-ash-hair`, `layer-acc-beanie`.
  */
 export function layerTextureKey(group: string, part: string, variant?: string): string {
   return variant ? `layer-${group}-${part}-${variant}` : `layer-${group}-${part}`
 }
 
 /**
- * Devuelve un avatar cuya hoja de sprites cargó de verdad: el pedido si existe,
- * si no el avatar por defecto, y si tampoco (caso extremo) el primero disponible.
- * Así, si falta un sheet, el jugador entra igual con un avatar válido.
+ * Returns an avatar whose sprite sheet really loaded: the requested one if it
+ * exists, otherwise the default avatar, and failing that (an extreme case) the
+ * first available one. That way, if a sheet is missing, the player still
+ * joins with a valid avatar.
  */
 export function resolveLoadedAvatar(
   textures: Phaser.Textures.TextureManager,
@@ -41,22 +42,23 @@ export function resolveLoadedAvatar(
   return AVATAR_IDS.find((id) => textures.exists(textureKey(id))) ?? avatar
 }
 
-/** Clave de animación: `<avatar>-<idle|walk>-<dirección>`. */
+/** Animation key: `<avatar>-<idle|walk>-<direction>`. */
 export function animKey(avatar: string, state: AnimState, dir: Direction): string {
   return `${avatar}-${state}-${dir}`
 }
 
-/** Frame quieto mirando abajo: el que se muestra como retrato. */
+/** Idle frame facing down: the one shown as a portrait. */
 export const PORTRAIT_FRAME = ANIM_START.idle.down
 
-/** Clave de animación para una capa: `<textureKey>-<idle|walk>-<dir>`. */
+/** Animation key for a layer: `<textureKey>-<idle|walk>-<dir>`. */
 export function layerAnimKey(textureKey: string, state: AnimState, dir: Direction): string {
   return `${textureKey}-${state}-${dir}`
 }
 
 /**
- * Registra animaciones idle/walk para una textura de capa si existe y si las
- * animaciones no están ya registradas. Misma cadencia y frames que los presets.
+ * Registers idle/walk animations for a layer texture if it exists and if the
+ * animations are not registered already. Same cadence and frames as the
+ * presets.
  */
 function registerLayerAnims(scene: Phaser.Scene, texKey: string): void {
   if (!scene.textures.exists(texKey)) return
@@ -80,14 +82,14 @@ function registerLayerAnims(scene: Phaser.Scene, texKey: string): void {
 }
 
 /**
- * Registra las animaciones de caminar/quieto en cuatro direcciones para todos
- * los avatares del catálogo y todas las capas de avatares compuestos.
- * Idempotente: las animaciones viven en el AnimationManager global del juego,
- * así que reiniciar la escena no duplica.
+ * Registers the walk/idle animations in four directions for every avatar in
+ * the catalogue and every layer of composed avatars. Idempotent: the
+ * animations live in the game's global AnimationManager, so restarting the
+ * scene does not duplicate them.
  */
 export function createAvatarAnims(scene: Phaser.Scene) {
   const anims = scene.anims
-  // Presets: avatares completos (single-sheet).
+  // Presets: full avatars (single-sheet).
   for (const avatar of AVATAR_IDS) {
     if (!scene.textures.exists(textureKey(avatar))) continue
     for (const state of ['idle', 'walk'] as const) {
@@ -108,7 +110,7 @@ export function createAvatarAnims(scene: Phaser.Scene) {
     }
   }
 
-  // Capas: body (por tono), hair, top, accesorios.
+  // Layers: body (per tone), hair, top, accessories.
   for (const base of APPEARANCE_BASES) {
     for (const tone of SKIN_TONES) {
       registerLayerAnims(scene, layerTextureKey(base, 'body', tone))

@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-Genera las 4 variantes recoloreadas de los avatares base (adam, ash, lucy,
-nancy) para completar el catálogo de 8 avatares.
+Generates the 4 recoloured variants of the base avatars (adam, ash, lucy,
+nancy) to complete the catalogue of 8 avatars.
 
-Solo desarrollo: el resultado se versiona en apps/client/public/assets/avatars.
-Requiere Python 3 y Pillow (`pip install pillow`).
+Development only: the result is committed in apps/client/public/assets/avatars.
+Requires Python 3 and Pillow (`pip install pillow`).
 
-Uso:  python3 tools/recolor-avatars.py
+Usage:  python3 tools/recolor-avatars.py
 
-Cómo funciona: rota el tono (HSV) de ropa y pelo y deja intactos los colores
-que los 4 personajes comparten (piel, boca, contornos y sombras), así las
-variantes siguen pareciendo del mismo set de LimeZu. La licencia de LimeZu
-permite editar los assets (ver docs/licencias-assets.md).
+How it works: it rotates the hue (HSV) of clothes and hair and leaves untouched
+the colours the 4 characters share (skin, mouth, outlines and shadows), so the
+variants still look like they come from the same LimeZu set. LimeZu's licence
+allows editing the assets (see docs/asset-licenses.md).
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from PIL import Image
 
 AVATARS_DIR = Path(__file__).resolve().parents[1] / "apps/client/public/assets/avatars"
 
-# id destino: (id base, rotación de tono en grados, ajuste de saturación)
+# target id: (base id, hue rotation in degrees, saturation adjustment)
 VARIANTS: dict[str, tuple[str, float, float]] = {
     "bruno": ("adam", 150, 1.0),
     "dana": ("ash", 200, 1.05),
@@ -30,7 +30,7 @@ VARIANTS: dict[str, tuple[str, float, float]] = {
     "tomas": ("nancy", 90, 1.0),
 }
 
-# Colores compartidos por los 4 personajes base: piel, boca, contornos, sombras.
+# Colours shared by the 4 base characters: skin, mouth, outlines, shadows.
 PROTECTED = {
     (58, 58, 80),
     (70, 70, 94),
@@ -64,7 +64,7 @@ def recolor(source: Path, target: Path, degrees: float, sat: float) -> None:
                 cache[px] = px if a == 0 or (r, g, b) in PROTECTED else (*shift((r, g, b), degrees, sat), a)
             out.putpixel((x, y), cache[px])
     out.save(target, optimize=True)
-    print(f"{target.name}: desde {source.name}, tono {degrees:+}°")
+    print(f"{target.name}: from {source.name}, hue {degrees:+} deg")
 
 
 def main() -> None:

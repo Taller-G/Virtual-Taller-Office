@@ -20,13 +20,13 @@ import { buildOfficeMap, drawCollisionDebug, type BuiltMap } from './officeMap'
 import { isTyping } from './typingGuard'
 import { loadWorld } from './worldAssets'
 
-/** Velocidad de caminata, px/s. */
+/** Walking speed, px/s. */
 const SPEED = 150
-/** Zoom de la cámara: entero para que el pixel art no se vea borroso. */
+/** Camera zoom: an integer so the pixel art does not look blurry. */
 const CAMERA_ZOOM = 2
-/** Cada cuánto, como máximo, se manda la posición propia al servidor (20 veces/s). */
+/** How often, at most, one's own position is sent to the server (20 times/s). */
 const SEND_INTERVAL_MS = 50
-/** Duración del fundido al cruzar una puerta (ida y vuelta), en ms. */
+/** Duration of the fade when crossing a door (out and in), in ms. */
 const FADE_MS = 220
 
 interface Keys {
@@ -45,30 +45,31 @@ interface Sent {
 }
 
 /**
- * Escena de la oficina: dibuja el mapa Tiled con sus colisiones y un avatar
- * por jugador presente en el estado de la sala. El propio se mueve con
- * flechas / WASD (física Arcade contra paredes y muebles) y manda posición y
- * animación al servidor a lo sumo 20 veces por segundo, solo cuando cambian.
- * Los demás se deslizan hacia la última posición recibida.
+ * The office scene: it draws the Tiled map with its collisions and one avatar
+ * per player present in the room's state. Your own moves with the arrow keys /
+ * WASD (Arcade physics against walls and furniture) and sends position and
+ * animation to the server at most 20 times per second, only when they change.
+ * The others slide towards the latest position received.
  *
- * La lista de avatares refleja `state.players` tal cual: se crean en
- * `onAdd` y se destruyen en `onRemove`; nada más los agrega o los retiene.
+ * The list of avatars mirrors `state.players` exactly: they are created in
+ * `onAdd` and destroyed in `onRemove`; nothing else adds or retains them.
  *
- * Las burbujas de conversación se dibujan igual: un área por cada entrada de
- * `state.bubbles`, con el radio que manda el servidor. La propia va resaltada
- * y los avatares de mis compañeros llevan un anillo a los pies. La membresía
- * nunca se calcula acá: sale de `player.bubbleId`.
+ * The conversation bubbles are drawn the same way: one area per entry in
+ * `state.bubbles`, with the radius the server sends. Your own is highlighted
+ * and the avatars of the people you are with carry a ring at their feet.
+ * Membership is never computed here: it comes from `player.bubbleId`.
  *
- * Los mensajes del chat de la burbuja aparecen como globo sobre el avatar del
- * autor y no se guardan: el globo se va solo (ver `Avatar.say`).
+ * Bubble chat messages appear as a balloon over the author's avatar and are
+ * not stored: the balloon goes away on its own (see `Avatar.say`).
  *
- * Puertas: pisar un objeto de clase `door` del mapa lleva a otro mundo. No hay
- * tecla ni confirmación: en cuanto los pies entran al área, la escena funde a
- * negro, carga el mapa del destino, cambia de sala y se reinicia allá. Si el
- * destino no está disponible, se avisa y se sigue donde se estaba.
+ * Doors: stepping on an object of class `door` in the map leads to another
+ * world. There is no key press and no confirmation: as soon as the feet enter
+ * the area, the scene fades to black, loads the destination's map, switches
+ * room and restarts there. If the destination is unavailable, it says so and
+ * you stay where you were.
  */
 export class OfficeScene extends Phaser.Scene {
-  /** Mundo que está dibujando esta escena. */
+  /** World this scene is drawing. */
   private worldId = DEFAULT_WORLD_ID
   private map!: BuiltMap
   private avatars = new Map<string, Avatar>()
@@ -81,11 +82,12 @@ export class OfficeScene extends Phaser.Scene {
   private offChat?: () => void
   private lastSent: Sent = { x: NaN, y: NaN, dir: 'down', moving: false, at: 0 }
   private debug: boolean
-  /** Verdadero mientras se cruza una puerta: no se dispara otra ni se mueve nadie. */
+  /** True while crossing a door: no other one fires and nobody moves. */
   private traveling = false
   /**
-   * Falso mientras el avatar sigue parado sobre una puerta desde que llegó:
-   * evita rebotar de vuelta al mundo anterior sin haberse movido.
+   * False while the avatar is still standing on a door from the moment it
+   * arrived: it avoids bouncing straight back to the previous world without
+   * having moved.
    */
   private doorArmed = false
 
@@ -97,7 +99,7 @@ export class OfficeScene extends Phaser.Scene {
     this.debug = options.debug ?? false
   }
 
-  /** El mundo llega de `BootScene` o del reinicio tras cruzar una puerta. */
+  /** The world comes from `BootScene` or from the restart after crossing a door. */
   init(data?: { worldId?: string }) {
     this.worldId = data?.worldId ?? this.connection.worldId ?? DEFAULT_WORLD_ID
     this.traveling = false
@@ -133,8 +135,9 @@ export class OfficeScene extends Phaser.Scene {
 
     this.offRoom = this.connection.on('room', (room) => this.bindRoom(room))
     if (this.connection.room) this.bindRoom(this.connection.room)
-    // Todo mensaje que llega es de mi burbuja (el servidor ya filtró), así que
-    // se muestra como globo sobre el avatar de quien lo dijo, yo incluido.
+    // Every message that arrives is from my bubble (the server already
+    // filtered), so it is shown as a balloon over the avatar of whoever said
+    // it, myself included.
     this.offChat = this.connection.on('chat', (message) =>
       this.avatars.get(message.from)?.say(message.text),
     )
@@ -162,7 +165,7 @@ export class OfficeScene extends Phaser.Scene {
       me.playAnim('idle', me.dir)
       return
     }
-    // Con el foco en un campo de texto las teclas no mueven al avatar.
+    // With the focus in a text field the keys do not move the avatar.
     const typing = isTyping()
     const down = (keys: Phaser.Input.Keyboard.Key[]) => !typing && keys.some((k) => k.isDown)
     const dx = (down(this.keys.right) ? 1 : 0) - (down(this.keys.left) ? 1 : 0)
@@ -171,7 +174,7 @@ export class OfficeScene extends Phaser.Scene {
     if (dx || dy) {
       const length = Math.hypot(dx, dy)
       body.setVelocity((dx / length) * SPEED, (dy / length) * SPEED)
-      // En diagonal gana el eje horizontal para elegir la dirección del sprite.
+      // Diagonally the horizontal axis wins when choosing the sprite's direction.
       const dir: Direction = dx > 0 ? 'right' : dx < 0 ? 'left' : dy > 0 ? 'down' : 'up'
       me.playAnim('walk', dir)
     } else {
@@ -192,11 +195,11 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   /**
-   * ¿Estoy pisando una puerta? Se compara el **cuerpo físico** (los pies, no el
-   * sprite entero) contra el área de la puerta: alcanza con tocar el umbral,
-   * como al cruzar una puerta de verdad. La puerta se "arma" recién cuando el
-   * cuerpo sale del área, así llegar al lado de la puerta de vuelta no rebota
-   * al mundo anterior.
+   * Am I standing on a door? The **physics body** (the feet, not the whole
+   * sprite) is compared against the door's area: touching the threshold is
+   * enough, like crossing a real door. The door is only "armed" again once the
+   * body leaves the area, so arriving next to the return door does not bounce
+   * back to the previous world.
    */
   private checkDoors() {
     if (!this.me?.body || this.traveling) return
@@ -216,9 +219,9 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   /**
-   * Cruzar una puerta: fundido a negro, mapa del destino cargado, cambio de
-   * sala y reinicio de la escena ya en el mundo nuevo. Cualquier tropiezo deja
-   * al jugador donde estaba, con un aviso y la pantalla de vuelta.
+   * Crossing a door: fade to black, destination map loaded, room switched and
+   * scene restarted already in the new world. Any stumble leaves the player
+   * where they were, with a notice and the screen back.
    */
   private async travel(door: Door) {
     const world = getWorld(door.world)
@@ -227,18 +230,18 @@ export class OfficeScene extends Phaser.Scene {
     this.doorArmed = false
     const camera = this.cameras.main
     camera.fadeOut(FADE_MS)
-    // Mientras se viaja, la sala que se deja no debe reemplazar esta escena:
-    // el reinicio de abajo vuelve a engancharse con la sala del destino.
+    // While travelling, the room being left must not replace this scene: the
+    // restart below hooks back up with the destination's room.
     this.offRoom?.()
     this.offRoom = undefined
 
     try {
-      // El mapa primero: si el destino no carga, no se abandona el mundo actual.
+      // The map first: if the destination does not load, the current world is not left.
       await loadWorld(this, world)
       const outcome = await this.connection.travelTo(door.world, door.spawn)
       if (!outcome.ok) throw new Error(outcome.reason)
     } catch (error) {
-      toast(error instanceof Error ? error.message : `No se pudo ir a ${worldName(door.world)}`)
+      toast(error instanceof Error ? error.message : `Could not travel to ${worldName(door.world)}`)
       this.offRoom = this.connection.on('room', (room) => this.bindRoom(room))
       camera.fadeIn(FADE_MS)
       this.traveling = false
@@ -248,7 +251,7 @@ export class OfficeScene extends Phaser.Scene {
     this.scene.restart({ worldId: door.world })
   }
 
-  /** Una sala nueva reemplaza por completo lo que había (reingreso incluido). */
+  /** A new room fully replaces whatever was there (rejoining included). */
   private bindRoom(room: OfficeRoom) {
     this.clearRoom()
     this.room = room
@@ -266,7 +269,7 @@ export class OfficeScene extends Phaser.Scene {
           $.listen(player, 'appearance', (raw) => avatar.setAppearance(raw)),
           $.listen(player, 'bubbleId', () => this.refreshBubbles()),
         )
-        // La posición y animación propias las manda este cliente: no se pisan con el eco.
+        // This client sends its own position and animation: they are not overwritten by the echo.
         if (!isMe) {
           this.unbindRoom.push(
             $.listen(player, 'x', (x) => avatar.setTarget({ x })),
@@ -296,21 +299,21 @@ export class OfficeScene extends Phaser.Scene {
         this.bubbleAreas.delete(id)
         this.refreshBubbles()
       }),
-      // El radio llega con el estado inicial; si cambiara, se redibuja.
+      // The radius arrives with the initial state; if it changed, it is redrawn.
       $.listen('bubbleRadius', (radius) => {
         for (const area of this.bubbleAreas.values()) area.setRadius(radius)
       }),
     )
   }
 
-  /** Radio de las burbujas según el servidor (0 hasta que llega el estado). */
+  /** Radius of the bubbles according to the server (0 until the state arrives). */
   private bubbleRadius(): number {
     return this.room?.state.bubbleRadius ?? 0
   }
 
   /**
-   * Redibuja el resaltado: cuál área es la mía, cuántos somos y qué avatares
-   * están en mi burbuja. Todo sale del estado del servidor.
+   * Redraws the highlight: which area is mine, how many of us there are and
+   * which avatars are in my bubble. All of it comes from the server's state.
    */
   private refreshBubbles() {
     const state = this.room?.state
@@ -374,8 +377,9 @@ export class OfficeScene extends Phaser.Scene {
     const avatar = this.avatars.get(sessionId)
     if (!avatar) return
     if (avatar === this.me) {
-      // Al apagarse la escena (viaje a otro mundo) el manager de cámaras ya no
-      // está: dejar de seguir es innecesario y romperia el apagado.
+      // When the scene shuts down (travel to another world) the camera
+      // manager is already gone: stopping the follow is unnecessary and would
+      // break the shutdown.
       this.cameras?.main?.stopFollow()
       this.me = undefined
     }

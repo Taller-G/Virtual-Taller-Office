@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-Genera `apps/client/public/assets/tilesets/ChironDark.png`: el tileset oscuro
-con el que está pintada la Chiron Office (pisos, paredes y luces).
+Generates `apps/client/public/assets/tilesets/ChironDark.png`: the dark tileset
+the Chiron Office is painted with (floors, walls and lights).
 
-Uso:  python3 tools/make-chiron-tileset.py
-      python3 tools/make-chiron-map.py      # después, para rehacer el mapa
+Usage:  python3 tools/make-chiron-tileset.py
+        python3 tools/make-chiron-map.py      # then, to rebuild the map
 
-Qué hace: toma de `FloorAndGround.png` los mismos tiles con los que está armada
-la First Office, los pasa por un duotono frío (sombra azul noche → brillo
-acero) y agrega unos tiles de luz dibujados a mano. El resultado es una hoja
-chica y ordenada, pensada para un solo mapa; el vocabulario y las paletas
-están en `tools/chiron_tiles.py`.
+What it does: takes from `FloorAndGround.png` the very tiles the First Office is
+built from, runs them through a cold duotone (night-blue shadow → steel
+highlight) and adds a few hand-drawn light tiles. The result is a small, tidy
+sheet meant for a single map; the vocabulary and the palettes live in
+`tools/chiron_tiles.py`.
 
-Solo desarrollo: el PNG se versiona y después el mapa se edita en Tiled como
-cualquier otro (ver `docs/mapa.md`).
+Development only: the PNG is committed, and the map is then edited in Tiled like
+any other (see `docs/map.md`).
 """
 
 from __future__ import annotations
@@ -37,12 +37,12 @@ from chiron_tiles import (  # noqa: E402
     DarkTile,
 )
 
-#: Columnas de `FloorAndGround` (los gid se leen en ese orden).
+#: Columns of `FloorAndGround` (gids are read in that order).
 SOURCE_COLUMNS = 64
 
 
 def source_tile(sheet: Image.Image, gid: int) -> Image.Image:
-    """El tile `gid` de FloorAndGround (firstgid 1) como imagen RGBA."""
+    """Tile `gid` of FloorAndGround (firstgid 1), as an RGBA image."""
     index = gid - 1
     col, row = index % SOURCE_COLUMNS, index // SOURCE_COLUMNS
     return sheet.crop((col * TILE, row * TILE, (col + 1) * TILE, (row + 1) * TILE))
@@ -54,12 +54,11 @@ def duotone(
     light: tuple[int, int, int],
 ) -> Image.Image:
     """
-    Mapea el tile a una rampa de dos colores según su luminancia.
+    Maps the tile onto a two-colour ramp according to its luminance.
 
-    El gamma (1.4) hunde los medios tonos: sin él las paredes blancas del pack
-    original quedan en un gris medio y la oficina se ve nublada, no oscura.
-    Se conserva un 12% del color original para que las texturas no queden
-    completamente planas.
+    The gamma (1.4) sinks the mid-tones: without it the pack's white walls come
+    out mid-grey and the office looks overcast rather than dark. 12% of the
+    original colour is kept so the textures do not go completely flat.
     """
     out = Image.new('RGBA', tile.size)
     src = tile.load()
@@ -81,12 +80,12 @@ def duotone(
 
 
 # ---------------------------------------------------------------------------
-# Tiles de luz (dibujados a mano)
+# Light tiles (hand-drawn)
 # ---------------------------------------------------------------------------
 
 
 def falloff(distance: float, radius: float) -> float:
-    """Caída suave de una luz: 1 en el centro, 0 en el borde."""
+    """A light's soft falloff: 1 at the centre, 0 at the edge."""
     if distance >= radius:
         return 0.0
     t = 1 - distance / radius
@@ -95,12 +94,12 @@ def falloff(distance: float, radius: float) -> float:
 
 def draw_pool(quad: str) -> Image.Image:
     """
-    Un cuarto de un charco de luz de 2×2 tiles. Los cuatro cuartos juntos son
-    una lámpara cenital sobre el piso; sueltos no sirven.
+    One quarter of a 2×2-tile pool of light. The four quarters together are an
+    overhead lamp on the floor; on their own they are no use.
     """
     out = Image.new('RGBA', (TILE, TILE))
     px = out.load()
-    # Centro del charco completo, en coordenadas de este cuarto.
+    # Centre of the whole pool, in this quarter's coordinates.
     cx = TILE if quad in ('tl', 'bl') else 0.0
     cy = TILE if quad in ('tl', 'tr') else 0.0
     for y in range(TILE):
@@ -113,7 +112,7 @@ def draw_pool(quad: str) -> Image.Image:
 
 
 def draw_spot(color: tuple[int, int, int] = LIGHT_WARM, peak: int = 84) -> Image.Image:
-    """Un charco de luz chico, de un tile: una lámpara de pie o un monitor."""
+    """A small one-tile pool of light: a floor lamp or a monitor."""
     out = Image.new('RGBA', (TILE, TILE))
     px = out.load()
     for y in range(TILE):
@@ -126,7 +125,7 @@ def draw_spot(color: tuple[int, int, int] = LIGHT_WARM, peak: int = 84) -> Image
 
 
 def draw_led() -> Image.Image:
-    """Tira LED fría: se pone sobre la franja de sombra al pie de la pared."""
+    """Cold LED strip: sits on the shadow band at the foot of the wall."""
     out = Image.new('RGBA', (TILE, TILE))
     px = out.load()
     for x in range(TILE):
@@ -139,7 +138,7 @@ def draw_led() -> Image.Image:
 
 
 def draw_led_glow() -> Image.Image:
-    """Resplandor de la tira LED sobre el piso, una fila más abajo."""
+    """The LED strip's glow on the floor, one row further down."""
     out = Image.new('RGBA', (TILE, TILE))
     px = out.load()
     for x in range(TILE):
@@ -150,9 +149,9 @@ def draw_led_glow() -> Image.Image:
 
 def draw_portal(half: str) -> Image.Image:
     """
-    Mitad de un vano de puerta (1 tile de ancho, 2 de alto). Es un hueco
-    oscuro con jambas y un resplandor frío desde abajo: la luz del otro mundo.
-    Se dibuja como mueble decorativo sobre la pared, que ya bloquea el paso.
+    Half of a doorway (1 tile wide, 2 tall): a dark opening with jambs and a
+    cold glow from below — the light of the other world. Drawn as decorative
+    furniture on top of the wall, which already blocks the way.
     """
     out = Image.new('RGBA', (TILE, TILE))
     px = out.load()
@@ -165,13 +164,13 @@ def draw_portal(half: str) -> Image.Image:
                 continue
             if half == 'top':
                 if y < 3:
-                    px[x, y] = jamb  # dintel
+                    px[x, y] = jamb  # lintel
                     continue
                 glow = (y / TILE / 2) ** 2
             elif half == 'bottom':
                 glow = ((y / TILE + 1) / 2) ** 2
             else:
-                # 'edge': el vano entero en un tile, con la luz hacia arriba.
+                # 'edge': the whole opening in one tile, light facing up.
                 glow = (1 - y / TILE) ** 1.6
             side = 1 - abs(x - TILE / 2) / (TILE / 2 - 3)
             px[x, y] = (
@@ -182,7 +181,7 @@ def draw_portal(half: str) -> Image.Image:
 
 
 def draw_threshold() -> Image.Image:
-    """La luz del vano derramada sobre el piso que se pisa para viajar."""
+    """The doorway's light spilled over the floor tile you step on to travel."""
     out = Image.new('RGBA', (TILE, TILE))
     px = out.load()
     for y in range(TILE):
@@ -205,7 +204,7 @@ DRAWINGS = {
 def render(tile: DarkTile, sheet: Image.Image) -> Image.Image:
     if tile.draw:
         return DRAWINGS[tile.draw](**tile.args)
-    assert tile.source is not None, f'el tile "{tile.name}" no dice de dónde sale'
+    assert tile.source is not None, f'tile "{tile.name}" does not say where it comes from'
     shadow, light = tile.palette
     return duotone(source_tile(sheet, tile.source), shadow, light)
 
@@ -217,7 +216,7 @@ def main() -> None:
         col, row = i % SHEET_COLUMNS, i // SHEET_COLUMNS
         out.alpha_composite(render(tile, sheet), (col * TILE, row * TILE))
     out.save(TARGET_SHEET)
-    print(f'escrito {TARGET_SHEET.relative_to(Path(__file__).resolve().parent.parent)}'
+    print(f'wrote {TARGET_SHEET.relative_to(Path(__file__).resolve().parent.parent)}'
           f' ({len(TILES)} tiles, {SHEET_COLUMNS}×{SHEET_ROWS})')
 
 

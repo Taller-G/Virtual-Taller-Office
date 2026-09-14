@@ -2,7 +2,7 @@
   "name": "@vto/client",
   "version": "0.1.0",
   "private": true,
-  "description": "Cliente web (Vite + Phaser 3) de la Oficina Taller; se despliega como sitio estático",
+  "description": "Web client (Vite + Phaser 3) for the Taller Office; deployed as a static site",
   "type": "module",
   "scripts": {
     "dev": "vite",

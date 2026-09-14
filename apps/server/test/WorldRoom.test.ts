@@ -14,32 +14,32 @@ import app from '../src/app.config'
 import { config } from '../src/config'
 import type { WorldRoom } from '../src/rooms/WorldRoom'
 
-/** Espera hasta que `predicate` sea verdadera o venza `timeoutMs`. */
+/** Waits until `predicate` is true or `timeoutMs` expires. */
 async function waitFor(predicate: () => boolean, timeoutMs: number, label: string) {
   const started = Date.now()
   while (!predicate()) {
-    if (Date.now() - started > timeoutMs) throw new Error(`Timeout esperando: ${label}`)
+    if (Date.now() - started > timeoutMs) throw new Error(`Timed out waiting for: ${label}`)
     await new Promise((resolve) => setTimeout(resolve, 20))
   }
   return Date.now() - started
 }
 
-describe('Sala de un mundo: ciclo conectar / desconectar', () => {
+describe('A world\'s room: connect / disconnect cycle', () => {
   let colyseus: ColyseusTestServer
   let room: WorldRoom
   const clients: SdkRoom<WorldRoom, OfficeState>[] = []
 
   async function connect(options?: JoinOptions) {
     const client = await colyseus.connectTo(room, options)
-    // Las pruebas controlan la desconexión a mano; el reintento automático del
-    // SDK confundiría los escenarios de "se cayó y no volvió".
+    // The tests control disconnection by hand; the SDK's automatic retry
+    // would muddle the "it dropped and never came back" scenarios.
     client.reconnection.enabled = false
     client.onMessage(Message.ROOM_INFO, () => {})
     clients.push(client)
     return client
   }
 
-  /** Salida consentida con tope: un cliente ya cerrado nunca resolvería `leave()`. */
+  /** Consented leave with a cap: an already-closed client would never resolve `leave()`. */
   async function leaveQuietly(client: SdkRoom<WorldRoom, OfficeState>) {
     await Promise.race([
       client.leave(true).catch(() => undefined),
@@ -64,7 +64,7 @@ describe('Sala de un mundo: ciclo conectar / desconectar', () => {
     room = await colyseus.createRoom<WorldRoom>(roomNameFor(DEFAULT_WORLD_ID), {})
   }
 
-  it('al entrar recibe su sessionId y el estado con su propio jugador', async () => {
+  it('on joining it receives its sessionId and the state with its own player', async () => {
     await createRoom()
     const client = await connect()
     await client.waitForInitialState()
@@ -76,7 +76,7 @@ describe('Sala de un mundo: ciclo conectar / desconectar', () => {
     expect(me?.connected).toBe(true)
   })
 
-  it('dos clientes entran a la misma sala y se ven entre sí', async () => {
+  it('two clients join the same room and see each other', async () => {
     await createRoom()
     const a = await connect()
     const b = await connect()
@@ -84,7 +84,7 @@ describe('Sala de un mundo: ciclo conectar / desconectar', () => {
     await waitFor(
       () => a.state.players.size === 2 && b.state.players.size === 2,
       2_000,
-      'ambos ven 2',
+      'both see 2',
     )
 
     expect(room.state.players.size).toBe(2)
@@ -92,80 +92,80 @@ describe('Sala de un mundo: ciclo conectar / desconectar', () => {
     expect(b.state.players.has(a.sessionId)).toBe(true)
   })
 
-  it('una salida consentida (cerrar pestaña) quita al jugador de inmediato', async () => {
+  it('a consented leave (closing the tab) removes the player immediately', async () => {
     await createRoom()
     const a = await connect()
     const b = await connect()
-    await waitFor(() => a.state.players.size === 2, 2_000, 'a ve 2')
+    await waitFor(() => a.state.players.size === 2, 2_000, 'a sees 2')
 
     const code = await b.leave(true)
     expect(code).toBe(CloseCode.CONSENTED)
 
-    const elapsed = await waitFor(() => room.state.players.size === 1, 1_000, 'servidor quita a b')
-    await waitFor(() => a.state.players.size === 1, 1_000, 'a ve que b se fue')
+    const elapsed = await waitFor(() => room.state.players.size === 1, 1_000, 'server removes b')
+    await waitFor(() => a.state.players.size === 1, 1_000, 'a sees that b left')
     expect(elapsed).toBeLessThan(1_000)
     expect(room.state.players.has(a.sessionId)).toBe(true)
   })
 
-  it('una desconexión sin aviso quita al jugador antes de 3 segundos', async () => {
+  it('a disconnection without notice removes the player in under 3 seconds', async () => {
     await createRoom()
     const a = await connect()
     const b = await connect()
-    await waitFor(() => a.state.players.size === 2, 2_000, 'a ve 2')
+    await waitFor(() => a.state.players.size === 2, 2_000, 'a sees 2')
 
     const dropped = b.sessionId
-    await b.leave(false) // cierra el socket sin avisar: simula red caída
+    await b.leave(false) // closes the socket without notice: simulates a network drop
 
-    // Durante la gracia el jugador sigue pero marcado como desconectado.
-    await waitFor(() => room.state.players.get(dropped)?.connected === false, 1_000, 'marcado')
+    // During the grace period the player stays but is marked as disconnected.
+    await waitFor(() => room.state.players.get(dropped)?.connected === false, 1_000, 'marked')
 
     const elapsed = await waitFor(
       () => !room.state.players.has(dropped),
       3_000,
-      'servidor lo quita',
+      'server removes them',
     )
     expect(elapsed).toBeLessThan(3_000)
     expect(elapsed).toBeGreaterThanOrEqual(config.reconnectGraceSeconds * 1000 - 200)
-    await waitFor(() => a.state.players.size === 1, 1_000, 'a ve que b se fue')
+    await waitFor(() => a.state.players.size === 1, 1_000, 'a sees that b left')
   })
 
-  it('reconectar dentro de la gracia conserva la misma sesión sin duplicados', async () => {
+  it('reconnecting within the grace period keeps the same session without duplicates', async () => {
     await createRoom()
     const a = await connect()
     const b = await connect()
-    await waitFor(() => a.state.players.size === 2, 2_000, 'a ve 2')
+    await waitFor(() => a.state.players.size === 2, 2_000, 'a sees 2')
 
     const token = b.reconnectionToken
     const sessionId = b.sessionId
     await b.leave(false)
-    await waitFor(() => room.state.players.get(sessionId)?.connected === false, 1_000, 'marcado')
+    await waitFor(() => room.state.players.get(sessionId)?.connected === false, 1_000, 'marked')
 
     const again = await colyseus.sdk.reconnect<WorldRoom>(token)
     again.reconnection.enabled = false
     clients.push(again)
 
     expect(again.sessionId).toBe(sessionId)
-    await waitFor(() => room.state.players.get(sessionId)?.connected === true, 1_000, 'reconectado')
+    await waitFor(() => room.state.players.get(sessionId)?.connected === true, 1_000, 'reconnected')
     expect(room.state.players.size).toBe(2)
-    await waitFor(() => a.state.players.size === 2, 1_000, 'a sigue viendo 2')
+    await waitFor(() => a.state.players.size === 2, 1_000, 'a still sees 2')
   })
 
-  it('refrescar varias veces deja exactamente un jugador por navegador', async () => {
+  it('refreshing several times leaves exactly one player per browser', async () => {
     await createRoom()
     const observer = await connect()
 
     let current = await connect()
     for (let i = 0; i < 5; i++) {
-      await current.leave(true) // el cliente hace leave consentido en pagehide
+      await current.leave(true) // the client does a consented leave on pagehide
       current = await connect()
     }
 
-    await waitFor(() => room.state.players.size === 2, 2_000, 'observador + 1 jugador')
-    await waitFor(() => observer.state.players.size === 2, 2_000, 'observador ve 2')
+    await waitFor(() => room.state.players.size === 2, 2_000, 'observer + 1 player')
+    await waitFor(() => observer.state.players.size === 2, 2_000, 'observer sees 2')
     expect(room.state.players.has(current.sessionId)).toBe(true)
   })
 
-  it('el jugador aparece en el punto de aparición definido en el mapa', async () => {
+  it('the player appears at the spawn point defined in the map', async () => {
     await createRoom()
     const client = await connect()
     await client.waitForInitialState()
@@ -176,26 +176,26 @@ describe('Sala de un mundo: ciclo conectar / desconectar', () => {
     expect(distance).toBeLessThanOrEqual(spawn.radius + 1)
   })
 
-  it('un mensaje de movimiento actualiza la posición y la acota al mapa', async () => {
+  it('a move message updates the position and clamps it to the map', async () => {
     await createRoom()
     const a = await connect()
     const b = await connect()
-    await waitFor(() => b.state.players.size === 2, 2_000, 'b ve 2')
+    await waitFor(() => b.state.players.size === 2, 2_000, 'b sees 2')
 
     a.send(Message.MOVE, { x: 300, y: 200, dir: 'left', moving: true })
-    await waitFor(() => room.state.players.get(a.sessionId)?.x === 300, 1_000, 'servidor mueve')
-    await waitFor(() => b.state.players.get(a.sessionId)?.y === 200, 1_000, 'b ve el movimiento')
+    await waitFor(() => room.state.players.get(a.sessionId)?.x === 300, 1_000, 'server moves them')
+    await waitFor(() => b.state.players.get(a.sessionId)?.y === 200, 1_000, 'b sees the movement')
     expect(b.state.players.get(a.sessionId)?.dir).toBe('left')
     expect(b.state.players.get(a.sessionId)?.moving).toBe(true)
 
     a.send(Message.MOVE, { x: 300, y: 200, dir: 'diagonal', moving: 'yes' })
     await room.waitForNextPatch().catch(() => {})
-    // Dirección inválida: se conserva la anterior; moving solo acepta `true`.
+    // Invalid direction: the previous one is kept; moving only accepts `true`.
     expect(room.state.players.get(a.sessionId)?.dir).toBe('left')
     expect(room.state.players.get(a.sessionId)?.moving).toBe(false)
 
     a.send(Message.MOVE, { x: -50, y: 99_999 })
-    await waitFor(() => room.state.players.get(a.sessionId)?.x === 0, 1_000, 'acotado en x')
+    await waitFor(() => room.state.players.get(a.sessionId)?.x === 0, 1_000, 'clamped in x')
     expect(room.state.players.get(a.sessionId)?.y).toBe(room.map.bounds.height)
 
     a.send(Message.MOVE, { x: 'nope', y: NaN })
@@ -203,7 +203,7 @@ describe('Sala de un mundo: ciclo conectar / desconectar', () => {
     expect(room.state.players.get(a.sessionId)?.x).toBe(0)
   })
 
-  it('entra con el nombre y avatar elegidos, y todos los ven', async () => {
+  it('joins with the chosen name and avatar, and everyone sees them', async () => {
     await createRoom()
     const observer = await connect()
     const client = await connect({ name: '  Constantino   Strada  ', avatar: 'iris' })
@@ -218,51 +218,51 @@ describe('Sala de un mundo: ciclo conectar / desconectar', () => {
     await waitFor(
       () => observer.state.players.get(client.sessionId)?.name === 'Constantino Strada',
       1_000,
-      'el observador ve el nombre',
+      'the observer sees the name',
     )
     expect(observer.state.players.get(client.sessionId)?.avatar).toBe('iris')
   })
 
-  it('opciones inválidas caen en nombre de invitado, avatar por defecto y nombre acotado', async () => {
+  it('invalid options fall back to a guest name, the default avatar and a capped name', async () => {
     await createRoom()
     const anon = await connect({ name: '   ', avatar: 'pikachu' })
     const long = await connect({ name: 'x'.repeat(NAME_MAX_LENGTH + 10), avatar: 42 as never })
     await long.waitForInitialState()
 
     expect(room.state.players.get(anon.sessionId)?.name).toBe(
-      `Invitado-${anon.sessionId.slice(0, 4)}`,
+      `Guest-${anon.sessionId.slice(0, 4)}`,
     )
     expect(room.state.players.get(anon.sessionId)?.avatar).toBe(DEFAULT_AVATAR)
     expect(room.state.players.get(long.sessionId)?.name).toBe('x'.repeat(NAME_MAX_LENGTH))
     expect(room.state.players.get(long.sessionId)?.avatar).toBe(DEFAULT_AVATAR)
   })
 
-  it('cambiar el nombre se replica; un nombre vacío se ignora', async () => {
+  it('changing the name is replicated; an empty name is ignored', async () => {
     await createRoom()
     const a = await connect({ name: 'Ana' })
     const b = await connect()
-    await waitFor(() => b.state.players.get(a.sessionId)?.name === 'Ana', 1_000, 'b ve Ana')
+    await waitFor(() => b.state.players.get(a.sessionId)?.name === 'Ana', 1_000, 'b sees Ana')
 
-    a.send(Message.SET_NAME, { name: 'Ana María' })
-    await waitFor(() => b.state.players.get(a.sessionId)?.name === 'Ana María', 1_000, 'renombrada')
+    a.send(Message.SET_NAME, { name: 'Ana Maria' })
+    await waitFor(() => b.state.players.get(a.sessionId)?.name === 'Ana Maria', 1_000, 'renamed')
 
     a.send(Message.SET_NAME, { name: '   ' })
     await room.waitForNextPatch().catch(() => {})
-    expect(room.state.players.get(a.sessionId)?.name).toBe('Ana María')
+    expect(room.state.players.get(a.sessionId)?.name).toBe('Ana Maria')
   })
 
-  it('sin actividad pasa a "ausente" y al moverse vuelve a "activo"', async () => {
+  it('without activity it becomes "away" and on moving it goes back to "active"', async () => {
     await createRoom()
     const a = await connect()
     const b = await connect()
-    await waitFor(() => b.state.players.size === 2, 2_000, 'b ve 2')
+    await waitFor(() => b.state.players.size === 2, 2_000, 'b sees 2')
     expect(room.state.players.get(a.sessionId)?.away).toBe(false)
 
-    // AWAY_AFTER_SECONDS=1 en vitest.config.ts; el chequeo corre cada 1 s.
+    // AWAY_AFTER_SECONDS=1 in vitest.config.ts; the check runs every 1 s.
     const elapsed = await waitFor(
       () => b.state.players.get(a.sessionId)?.away === true,
       3_500,
-      'b ve a a ausente',
+      'b sees a as away',
     )
     expect(elapsed).toBeGreaterThanOrEqual(config.awayAfterSeconds * 1000 - 200)
     expect(room.state.players.get(a.sessionId)?.awayManual).toBe(false)
@@ -271,26 +271,26 @@ describe('Sala de un mundo: ciclo conectar / desconectar', () => {
     await waitFor(
       () => b.state.players.get(a.sessionId)?.away === false,
       1_000,
-      'a vuelve a activo',
+      'a goes back to active',
     )
   })
 
-  it('el "ausente" manual se fija y se quita a mano, y moverse no lo quita', async () => {
+  it('the manual "away" is set and cleared by hand, and moving does not clear it', async () => {
     await createRoom()
     const a = await connect()
     const b = await connect()
-    await waitFor(() => b.state.players.size === 2, 2_000, 'b ve 2')
+    await waitFor(() => b.state.players.size === 2, 2_000, 'b sees 2')
 
     a.send(Message.SET_AWAY, { away: true })
-    await waitFor(() => b.state.players.get(a.sessionId)?.away === true, 1_000, 'b ve ausente')
+    await waitFor(() => b.state.players.get(a.sessionId)?.away === true, 1_000, 'b sees away')
     expect(b.state.players.get(a.sessionId)?.awayManual).toBe(true)
 
     a.send(Message.MOVE, { x: 400, y: 300, dir: 'up', moving: true })
-    await waitFor(() => b.state.players.get(a.sessionId)?.x === 400, 1_000, 'b ve el movimiento')
+    await waitFor(() => b.state.players.get(a.sessionId)?.x === 400, 1_000, 'b sees the movement')
     expect(b.state.players.get(a.sessionId)?.away).toBe(true)
 
     a.send(Message.SET_AWAY, { away: false })
-    await waitFor(() => b.state.players.get(a.sessionId)?.away === false, 1_000, 'b ve activo')
+    await waitFor(() => b.state.players.get(a.sessionId)?.away === false, 1_000, 'b sees active')
     expect(b.state.players.get(a.sessionId)?.awayManual).toBe(false)
   })
 })

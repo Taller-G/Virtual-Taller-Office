@@ -8,42 +8,43 @@ import { isTyping } from '../game/typingGuard'
 import type { OfficeConnection, OfficeRoom } from '../network/connection'
 import { clearUnread, isWindowUnfocused, notifyUnread, watchFocus } from './notify'
 
-/** Un mensaje en el historial local del panel. */
+/** A message in the panel's local history. */
 interface Entry {
   id: string
   name: string
   text: string
-  /** Hora del servidor; en los propios todavía sin acuse, la hora local. */
+  /** Server time; on one's own not yet acknowledged, the local time. */
   at: number
   mine: boolean
   status: 'sending' | 'sent' | 'error'
   reason?: ChatRejection
 }
 
-/** Tope del historial local: lo viejo se descarta, nada se guarda igual. */
+/** Cap of the local history: old entries are dropped, nothing is stored anyway. */
 const MAX_ENTRIES = 200
-/** El campo deja escribir de más para poder avisar que se pasó del límite. */
+/** The field lets you type past the cap so it can warn you went over the limit. */
 const INPUT_MAX_LENGTH = CHAT_MAX_LENGTH * 2
 
-const HINT_NO_BUBBLE = 'Acercate a alguien para conversar'
-const HINT_IN_BUBBLE = 'Enter para escribir y enviar · Esc para cerrar'
+const HINT_NO_BUBBLE = 'Walk up to someone to talk'
+const HINT_IN_BUBBLE = 'Enter to type and send - Esc to close'
 
-const time = new Intl.DateTimeFormat('es', { hour: '2-digit', minute: '2-digit' })
+const time = new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit' })
 
 /**
- * Panel de conversación de la burbuja.
+ * The bubble's conversation panel.
  *
- * El historial es **solo local y solo de esta burbuja**: arranca vacío en el
- * momento en que entro (por eso quien se suma a una charla en curso no ve lo
- * anterior) y se borra al salir o al cambiar de burbuja. El servidor no guarda
- * nada y no hay forma de pedirle lo que ya pasó.
+ * The history is **local only and for this bubble only**: it starts empty at
+ * the moment I join (which is why whoever joins a conversation already under
+ * way does not see what came before) and it is cleared on leaving or changing
+ * bubble. The server stores nothing and there is no way to ask it for what
+ * already happened.
  *
- * Todo mensaje se pinta con `textContent`: el texto con etiquetas HTML se lee
- * literal, nunca se interpreta.
+ * Every message is painted with `textContent`: text with HTML tags reads
+ * literally, it is never interpreted.
  *
- * Mis mensajes se muestran al instante como "enviando"; el eco que devuelve el
- * servidor (mismo `id`) los pasa a "enviado" con la hora oficial, y un
- * `chat_error` los marca con el motivo del rechazo.
+ * My messages are shown instantly as "sending"; the echo the server returns
+ * (same `id`) moves them to "sent" with the official time, and a `chat_error`
+ * marks them with the reason for the rejection.
  */
 export function mountChat(connection: OfficeConnection) {
   const panel = document.getElementById('chat')!
@@ -57,10 +58,10 @@ export function mountChat(connection: OfficeConnection) {
 
   let room: OfficeRoom | undefined
   let unbind: (() => void) | undefined
-  /** Burbuja a la que pertenece el historial de abajo. `''` = ninguna. */
+  /** Bubble the history below belongs to. `''` = none. */
   let bubbleId = ''
   let entries: Entry[] = []
-  /** Motivo del último rechazo, hasta que se corrija el texto. */
+  /** Reason for the latest rejection, until the text is corrected. */
   let rejection: ChatRejection | undefined
 
   const canChat = () => bubbleId !== ''
@@ -101,7 +102,7 @@ export function mountChat(connection: OfficeConnection) {
 
         const text = document.createElement('p')
         text.className = 'chat__text'
-        // Texto plano a propósito: `<b>hola</b>` se lee tal cual.
+        // Plain text on purpose: `<b>hi</b>` reads exactly as written.
         text.textContent = entry.text
 
         li.append(head, text)
@@ -110,10 +111,10 @@ export function mountChat(connection: OfficeConnection) {
           status.className = 'chat__status'
           status.textContent =
             entry.status === 'sent'
-              ? 'Enviado'
+              ? 'Sent'
               : entry.status === 'sending'
-                ? 'Enviando…'
-                : `No se envió: ${CHAT_REJECTION_TEXT[entry.reason ?? 'offline']}`
+                ? 'Sending...'
+                : `Not sent: ${CHAT_REJECTION_TEXT[entry.reason ?? 'offline']}`
           li.append(status)
         }
         return li
@@ -125,7 +126,7 @@ export function mountChat(connection: OfficeConnection) {
   function render() {
     panel.dataset.state = canChat() ? 'in' : 'none'
     inputEl.disabled = !canChat()
-    inputEl.placeholder = canChat() ? 'Escribí un mensaje…' : HINT_NO_BUBBLE
+    inputEl.placeholder = canChat() ? 'Write a message...' : HINT_NO_BUBBLE
     renderHint()
     renderCount()
     renderLog()
@@ -136,7 +137,7 @@ export function mountChat(connection: OfficeConnection) {
     if (entries.length > MAX_ENTRIES) entries = entries.slice(-MAX_ENTRIES)
   }
 
-  /** Cambié de burbuja (o salí): el historial de la anterior se descarta. */
+  /** I changed bubble (or left): the previous one's history is discarded. */
   function setBubble(next: string) {
     if (next === bubbleId) return
     bubbleId = next
@@ -150,8 +151,9 @@ export function mountChat(connection: OfficeConnection) {
   }
 
   function onIncoming(message: ChatMessagePayload) {
-    // Defensa por si llega algo de una burbuja que ya no es la mía (mensaje
-    // en vuelo mientras me alejaba): no entra al historial.
+    // A guard in case something arrives from a bubble that is no longer mine
+    // (a message in flight while I was walking away): it does not enter the
+    // history.
     if (!canChat() || message.bubbleId !== bubbleId) return
 
     const mine = message.from === room?.sessionId
@@ -194,30 +196,30 @@ export function mountChat(connection: OfficeConnection) {
   function send() {
     const result = connection.sendChat(inputEl.value)
     if (!result.ok) {
-      // Rechazado antes de salir a la red: el texto queda para corregirlo.
+      // Rejected before hitting the network: the text stays so it can be fixed.
       rejection = result.reason
       renderHint()
       return
     }
     rejection = undefined
-    // Se muestra al instante como "enviando": el eco del servidor lo confirma.
+    // Shown instantly as "sending": the server's echo confirms it.
     push({
       id: result.id,
-      name: room?.state.players.get(room.sessionId)?.name ?? 'Vos',
+      name: room?.state.players.get(room.sessionId)?.name ?? 'You',
       text: result.text,
       at: Date.now(),
       mine: true,
       status: 'sending',
     })
     inputEl.value = ''
-    // Enviado: se suelta el foco para volver a mover al avatar en el acto
-    // (mientras un campo de texto tiene el foco, el teclado no llega al
-    // juego). Otro Enter reabre el campo para seguir la charla.
+    // Sent: the focus is released so the avatar can move again right away
+    // (while a text field has the focus, the keyboard does not reach the
+    // game). Another Enter reopens the field to carry on talking.
     inputEl.blur()
     render()
   }
 
-  /** Cierra el campo descartando el borrador y devuelve el teclado al juego. */
+  /** Closes the field discarding the draft and gives the keyboard back to the game. */
   function close() {
     inputEl.value = ''
     rejection = undefined
@@ -238,27 +240,27 @@ export function mountChat(connection: OfficeConnection) {
   })
 
   inputEl.addEventListener('keydown', (event) => {
-    // Enter envía. Se atiende acá en vez de dejar que el navegador dispare el
-    // submit implícito para poder marcar el evento como atendido: el mismo
-    // keydown sigue burbujeando hasta el listener del documento, que si no
-    // volvería a enfocar el campo apenas se suelta.
+    // Enter sends. It is handled here instead of letting the browser fire the
+    // implicit submit so the event can be marked as handled: the same keydown
+    // keeps bubbling up to the document listener, which would otherwise focus
+    // the field again as soon as it is released.
     if (event.key === 'Enter') {
       event.preventDefault()
       send()
       return
     }
-    // Esc cierra el campo (y descarta el borrador); el foco vuelve al juego.
+    // Esc closes the field (and discards the draft); the focus goes back to the game.
     if (event.key !== 'Escape') return
     event.preventDefault()
     close()
   })
 
-  // Enter abre el campo, pero solo dentro de una burbuja: sin burbuja no pasa
-  // nada y queda a la vista la pista de acercarse a alguien.
+  // Enter opens the field, but only inside a bubble: without a bubble nothing
+  // happens and the hint about walking up to someone stays visible.
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter' || event.defaultPrevented) return
-    // Si ya se está escribiendo en algún campo (el del chat, mi nombre, la
-    // pantalla de entrada), el Enter es de ese campo, no de acá.
+    // If something is already being typed in a field (the chat's, my name,
+    // the entry screen), the Enter belongs to that field, not to this.
     if (isTyping()) return
     if (!canChat()) return
     event.preventDefault()

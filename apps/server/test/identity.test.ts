@@ -13,21 +13,21 @@ import {
   serializeAppearance,
 } from '@vto/shared'
 
-describe('catálogo de avatares', () => {
-  it('ofrece exactamente 11 avatares con ids únicos', () => {
+describe('avatar catalogue', () => {
+  it('offers exactly 11 avatars with unique ids', () => {
     expect(AVATARS).toHaveLength(11)
     expect(new Set(AVATAR_IDS).size).toBe(11)
     expect(AVATAR_IDS).toContain(DEFAULT_AVATAR)
   })
 
-  it('sanitizeAvatar acepta solo ids del catálogo', () => {
+  it('sanitizeAvatar accepts only ids from the catalogue', () => {
     for (const id of AVATAR_IDS) expect(sanitizeAvatar(id)).toBe(id)
     expect(sanitizeAvatar('nope')).toBe(DEFAULT_AVATAR)
     expect(sanitizeAvatar(undefined)).toBe(DEFAULT_AVATAR)
     expect(sanitizeAvatar(3)).toBe(DEFAULT_AVATAR)
   })
 
-  it('isDirection reconoce las cuatro direcciones', () => {
+  it('isDirection recognises the four directions', () => {
     expect(['up', 'down', 'left', 'right'].every(isDirection)).toBe(true)
     expect(isDirection('diagonal')).toBe(false)
     expect(isDirection(undefined)).toBe(false)
@@ -35,13 +35,13 @@ describe('catálogo de avatares', () => {
 })
 
 describe('sanitizeName', () => {
-  it('recorta espacios y limita el largo', () => {
-    expect(sanitizeName('  Ana   López ')).toBe('Ana López')
+  it('trims whitespace and caps the length', () => {
+    expect(sanitizeName('  Ana   Lopez ')).toBe('Ana Lopez')
     expect(sanitizeName('a'.repeat(50))).toHaveLength(NAME_MAX_LENGTH)
     expect(sanitizeName('ab\n\tcd')).toBe('ab cd')
   })
 
-  it('devuelve undefined si no queda nada usable', () => {
+  it('returns undefined when nothing usable is left', () => {
     expect(sanitizeName('')).toBeUndefined()
     expect(sanitizeName('    ')).toBeUndefined()
     expect(sanitizeName(undefined)).toBeUndefined()
@@ -50,13 +50,13 @@ describe('sanitizeName', () => {
 })
 
 describe('appearance', () => {
-  it('serializa y deserializa correctamente', () => {
+  it('serialises and parses back correctly', () => {
     const raw = serializeAppearance(DEFAULT_APPEARANCE)
     const parsed = parseAppearance(raw)
     expect(parsed).toEqual(DEFAULT_APPEARANCE)
   })
 
-  it('rechaza apariencias inválidas', () => {
+  it('rejects invalid appearances', () => {
     expect(parseAppearance('')).toBeNull()
     expect(parseAppearance('not json')).toBeNull()
     expect(parseAppearance('{"base":"invalid"}')).toBeNull()
@@ -66,7 +66,7 @@ describe('appearance', () => {
     ).toBeNull()
   })
 
-  it('sanitizeAppearance pasa un JSON válido y rechaza basura', () => {
+  it('sanitizeAppearance passes valid JSON through and rejects junk', () => {
     const valid = serializeAppearance(DEFAULT_APPEARANCE)
     expect(sanitizeAppearance(valid)).toBe(valid)
     expect(sanitizeAppearance('')).toBe('')
@@ -75,13 +75,13 @@ describe('appearance', () => {
     expect(sanitizeAppearance(123)).toBe('')
   })
 
-  it('acepta todas las combinaciones de opciones', () => {
+  it('accepts every combination of options', () => {
     const a = { ...DEFAULT_APPEARANCE, hat: 'beanie' as const, glasses: 'glasses-round' as const }
     const raw = serializeAppearance(a)
     expect(parseAppearance(raw)).toEqual(a)
   })
 
-  it('acepta accesorios "none"', () => {
+  it('accepts "none" accessories', () => {
     const a = { ...DEFAULT_APPEARANCE, hat: 'none' as const, glasses: 'none' as const }
     const raw = serializeAppearance(a)
     expect(parseAppearance(raw)).toEqual(a)

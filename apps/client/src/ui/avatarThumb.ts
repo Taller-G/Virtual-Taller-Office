@@ -3,8 +3,8 @@ import { config } from '../config'
 import { PORTRAIT_FRAME } from '../game/avatarAnims'
 
 /**
- * Retrato de un avatar (frame quieto mirando abajo) como elemento DOM: recorta
- * la hoja de sprites con `background-position`, escalado sin suavizado.
+ * Portrait of an avatar (idle frame facing down) as a DOM element: it crops the
+ * sprite sheet with `background-position`, scaled without smoothing.
  */
 export function avatarThumb(avatar: string, scale = 1): HTMLSpanElement {
   const el = document.createElement('span')

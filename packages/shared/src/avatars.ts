@@ -1,23 +1,23 @@
 /**
- * Catálogo de avatares disponibles. Cada id corresponde a una hoja de sprites
- * `apps/client/public/assets/avatars/<id>.png` (32×48 px por frame, 52 frames)
- * con el layout de los personajes de LimeZu usado por SkyOffice:
+ * Catalogue of available avatars. Each id maps to a sprite sheet
+ * `apps/client/public/assets/avatars/<id>.png` (32x48 px per frame, 52 frames)
+ * with the layout of the LimeZu characters used by SkyOffice:
  *
- *   idle: right 0-5 · up 6-11 · left 12-17 · down 18-23
- *   walk: right 24-29 · up 30-35 · left 36-41 · down 42-47
- *   (48-51: sentado, no se usa todavía)
+ *   idle: right 0-5 - up 6-11 - left 12-17 - down 18-23
+ *   walk: right 24-29 - up 30-35 - left 36-41 - down 42-47
+ *   (48-51: sitting, not used yet)
  *
- * El servidor valida el avatar elegido contra esta lista; el cliente la usa
- * para el selector de entrada y para cargar las hojas.
+ * The server validates the chosen avatar against this list; the client uses
+ * it for the entry picker and to load the sheets.
  *
- * `persona1`, `persona2` y `persona3` son los avatares del equipo de Taller,
- * derivados de los sprites base (lucy/nancy/ash) recoloreando pelo y ropa para
- * conservar los rasgos de cada persona real; se generan con
- * `tools/person-avatars.py`. Renombrá sus labels cuando tengas los nombres.
+ * `persona1`, `persona2` and `persona3` are the Taller team's avatars,
+ * derived from the base sprites (lucy/nancy/ash) by recolouring hair and
+ * clothes so each real person's traits are kept; they are generated with
+ * `tools/person-avatars.py`. Rename their labels once you have the names.
  */
 export interface AvatarInfo {
   id: string
-  /** Nombre que se muestra en el selector. */
+  /** Name shown in the picker. */
   label: string
 }
 
@@ -29,7 +29,7 @@ export const AVATARS: readonly AvatarInfo[] = [
   { id: 'bruno', label: 'Bruno' },
   { id: 'dana', label: 'Dana' },
   { id: 'iris', label: 'Iris' },
-  { id: 'tomas', label: 'Tomás' },
+  { id: 'tomas', label: 'Tomas' },
   { id: 'persona1', label: 'Persona 1' },
   { id: 'persona2', label: 'Persona 2' },
   { id: 'persona3', label: 'Persona 3' },
@@ -43,7 +43,7 @@ export const AVATAR_FRAME = { width: 32, height: 48, count: 52 } as const
 export const DIRECTIONS = ['down', 'up', 'left', 'right'] as const
 export type Direction = (typeof DIRECTIONS)[number]
 
-/** Primer frame de cada animación en la hoja; cada una tiene `FRAMES_PER_ANIM` frames. */
+/** First frame of each animation in the sheet; each one has `FRAMES_PER_ANIM` frames. */
 export const FRAMES_PER_ANIM = 6
 export const ANIM_START: Record<'idle' | 'walk', Record<Direction, number>> = {
   idle: { right: 0, up: 6, left: 12, down: 18 },
@@ -62,7 +62,7 @@ export function isDirection(value: unknown): value is Direction {
 // Composable appearance (layered avatars)
 // ---------------------------------------------------------------------------
 
-/** Bases disponibles para avatares compuestos (los 4 originales de LimeZu). */
+/** Bases available for composed avatars (the 4 originals from LimeZu). */
 export const APPEARANCE_BASES = ['adam', 'ash', 'lucy', 'nancy'] as const
 export type AppearanceBase = (typeof APPEARANCE_BASES)[number]
 
@@ -76,10 +76,10 @@ export const GLASSES_OPTIONS = ['none', 'glasses-round', 'glasses-square'] as co
 export type GlassesOption = (typeof GLASSES_OPTIONS)[number]
 
 /**
- * Paleta de colores nombrados para pelo y ropa.  Cada entrada es un tint hex
- * que Phaser aplica sobre la capa en escala de grises con `setTint()`.
+ * Palette of named colours for hair and clothes.  Each entry is a hex tint
+ * that Phaser applies over the greyscale layer with `setTint()`.
  *
- * 0xFFFFFF = sin teñir (conserva el gris original como color neutro).
+ * 0xFFFFFF = untinted (keeps the original grey as a neutral colour).
  */
 export const HAIR_COLORS = {
   black: 0x3a3a4a,
@@ -114,8 +114,8 @@ export const TOP_COLOR_IDS = Object.keys(TOP_COLORS) as readonly TopColorId[]
 export type TopColorId = keyof typeof TOP_COLORS
 
 /**
- * Aspecto compuesto de un avatar: describe completamente cómo se ve un
- * personaje a partir de capas que se superponen.
+ * Composed look of an avatar: fully describes how a character looks, built
+ * from layers stacked on top of each other.
  */
 export interface Appearance {
   base: AppearanceBase
@@ -135,12 +135,12 @@ export const DEFAULT_APPEARANCE: Appearance = {
   glasses: 'none',
 }
 
-/** Serializa un Appearance a JSON string para el campo del schema. */
+/** Serialises an Appearance to a JSON string for the schema field. */
 export function serializeAppearance(a: Appearance): string {
   return JSON.stringify(a)
 }
 
-/** Deserializa un JSON string a Appearance, o devuelve null si es inválido. */
+/** Parses a JSON string into an Appearance, or returns null if invalid. */
 export function parseAppearance(raw: string): Appearance | null {
   if (!raw) return null
   try {
@@ -171,15 +171,15 @@ export function parseAppearance(raw: string): Appearance | null {
 }
 
 /**
- * Valida y normaliza un string de apariencia.  Si es inválido devuelve string
- * vacío (= usar avatar preset en vez de compuesto).
+ * Validates and normalises an appearance string.  If it is invalid it returns
+ * an empty string (= use a preset avatar instead of a composed one).
  */
 export function sanitizeAppearance(raw: unknown): string {
   if (typeof raw !== 'string' || !raw) return ''
   return parseAppearance(raw) !== null ? raw : ''
 }
 
-// Guardas de tipo
+// Type guards
 function isAppearanceBase(v: unknown): v is AppearanceBase {
   return typeof v === 'string' && (APPEARANCE_BASES as readonly string[]).includes(v)
 }

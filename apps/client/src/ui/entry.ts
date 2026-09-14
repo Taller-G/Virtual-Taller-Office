@@ -28,7 +28,7 @@ import { avatarThumb } from './avatarThumb'
 export interface Identity {
   name: string
   avatar: string
-  /** JSON de Appearance (aspecto compuesto). Vacío = usar preset. */
+  /** Appearance JSON (composed look). Empty = use a preset. */
   appearance: string
 }
 
@@ -56,7 +56,7 @@ function saveIdentity(identity: Identity) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(identity))
   } catch {
-    // Sin almacenamiento (modo privado, etc.): se pide de nuevo la próxima vez.
+    // No storage (private mode, etc.): it will be asked again next time.
   }
 }
 
@@ -65,20 +65,20 @@ function saveIdentity(identity: Identity) {
 // ---------------------------------------------------------------------------
 
 const LABEL: Record<string, string> = {
-  adam: 'Estilo 1',
-  ash: 'Estilo 2',
-  lucy: 'Estilo 3',
-  nancy: 'Estilo 4',
+  adam: 'Style 1',
+  ash: 'Style 2',
+  lucy: 'Style 3',
+  nancy: 'Style 4',
   default: 'Original',
-  light: 'Clara',
-  medium: 'Media',
-  tan: 'Bronceada',
-  dark: 'Oscura',
-  none: 'Ninguno',
-  cap: 'Gorra',
-  beanie: 'Gorro',
-  'glasses-round': 'Redondos',
-  'glasses-square': 'Cuadrados',
+  light: 'Light',
+  medium: 'Medium',
+  tan: 'Tan',
+  dark: 'Dark',
+  none: 'None',
+  cap: 'Cap',
+  beanie: 'Beanie',
+  'glasses-round': 'Round',
+  'glasses-square': 'Square',
 }
 
 function colorHex(n: number): string {
@@ -134,15 +134,15 @@ function optionRow<T extends string>(
 // ---------------------------------------------------------------------------
 
 /**
- * Pantalla de entrada: nombre visible y elección de avatar.
+ * Entry screen: visible name and choice of avatar.
  *
- * Dos modos (pestañas):
- * - **Presets**: los 11 avatares del catálogo (single-sheet), igual que antes.
- * - **Personalizar**: editor de apariencia compuesta con pickers para base,
- *   tono de piel, color de pelo, color de ropa, gorro y anteojos.
+ * Two modes (tabs):
+ * - **Presets**: the 11 avatars in the catalogue (single-sheet), as before.
+ * - **Customise**: composed appearance editor with pickers for base, skin
+ *   tone, hair colour, clothes colour, hat and glasses.
  *
- * Recuerda la última elección en localStorage. Resuelve cuando el usuario
- * confirma; recién entonces se entra a la sala.
+ * It remembers the last choice in localStorage. It resolves when the user
+ * confirms; only then is the room joined.
  */
 export function showEntry(): Promise<Identity> {
   const remembered = loadIdentity()
@@ -164,7 +164,7 @@ export function showEntry(): Promise<Identity> {
   const fieldset = form.querySelector<HTMLFieldSetElement>('.entry__avatars')!
   fieldset.replaceChildren()
   const legend = document.createElement('legend')
-  legend.textContent = 'Tu avatar'
+  legend.textContent = 'Your avatar'
   fieldset.append(legend)
 
   const tabs = document.createElement('div')
@@ -175,7 +175,7 @@ export function showEntry(): Promise<Identity> {
   presetTab.className = 'entry__tab'
   const customTab = document.createElement('button')
   customTab.type = 'button'
-  customTab.textContent = 'Personalizar'
+  customTab.textContent = 'Customise'
   customTab.className = 'entry__tab'
   tabs.append(presetTab, customTab)
   fieldset.append(tabs)
@@ -208,14 +208,14 @@ export function showEntry(): Promise<Identity> {
   customPanel.className = 'appearance-editor'
 
   customPanel.append(
-    optionRow('Silueta', APPEARANCE_BASES, appearance.base, (v: AppearanceBase) => {
+    optionRow('Silhouette', APPEARANCE_BASES, appearance.base, (v: AppearanceBase) => {
       appearance = { ...appearance, base: v }
     }),
-    optionRow('Piel', SKIN_TONES, appearance.skinTone, (v: SkinTone) => {
+    optionRow('Skin', SKIN_TONES, appearance.skinTone, (v: SkinTone) => {
       appearance = { ...appearance, skinTone: v }
     }),
     optionRow(
-      'Pelo',
+      'Hair',
       HAIR_COLOR_IDS,
       appearance.hairColor,
       (v: HairColorId) => {
@@ -224,7 +224,7 @@ export function showEntry(): Promise<Identity> {
       HAIR_COLORS as Record<HairColorId, number>,
     ),
     optionRow(
-      'Ropa',
+      'Clothes',
       TOP_COLOR_IDS,
       appearance.topColor,
       (v: TopColorId) => {
@@ -232,10 +232,10 @@ export function showEntry(): Promise<Identity> {
       },
       TOP_COLORS as Record<TopColorId, number>,
     ),
-    optionRow('Gorro', HAT_OPTIONS, appearance.hat, (v: HatOption) => {
+    optionRow('Hat', HAT_OPTIONS, appearance.hat, (v: HatOption) => {
       appearance = { ...appearance, hat: v }
     }),
-    optionRow('Anteojos', GLASSES_OPTIONS, appearance.glasses, (v: GlassesOption) => {
+    optionRow('Glasses', GLASSES_OPTIONS, appearance.glasses, (v: GlassesOption) => {
       appearance = { ...appearance, glasses: v }
     }),
   )

@@ -2,27 +2,27 @@ import { DEFAULT_AVATAR, isAvatarId } from './avatars'
 
 export const NAME_MAX_LENGTH = 20
 
-/** Lo que el cliente manda como `options` al entrar a la sala de un mundo. */
+/** What the client sends as `options` when joining a world's room. */
 export interface JoinOptions {
   name?: string
   avatar?: string
-  /** JSON de `Appearance` (aspecto compuesto).  Vacío o ausente = usar preset. */
+  /** JSON of `Appearance` (composed look).  Empty or absent = use a preset. */
   appearance?: string
   /**
-   * Nombre del spawn por el que se llega. Lo pone la puerta que se cruzó; sin
-   * él se entra por el spawn de entrada del mundo.
+   * Name of the spawn you arrive through. The door you crossed sets it;
+   * without it you enter through the world's entry spawn.
    */
   spawn?: string
-  /** Estado "ausente" con el que se viaja, para que cruzar una puerta no lo pierda. */
+  /** The "away" state you travel with, so crossing a door does not lose it. */
   away?: boolean
-  /** `true` si ese ausente lo había fijado el usuario a mano. */
+  /** `true` if that away state had been set by hand by the user. */
   awayManual?: boolean
 }
 
 /**
- * Normaliza un nombre visible: recorta espacios (incluidos los repetidos),
- * limita el largo y devuelve `undefined` si no queda nada usable. El servidor
- * decide el fallback (`Invitado-xxxx`).
+ * Normalises a visible name: trims whitespace (repeated ones included), caps
+ * the length and returns `undefined` if nothing usable is left. The server
+ * decides the fallback (`Guest-xxxx`).
  */
 export function sanitizeName(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
@@ -30,11 +30,11 @@ export function sanitizeName(value: unknown): string | undefined {
   return name.length > 0 ? name : undefined
 }
 
-/** Avatar válido del catálogo o el avatar por defecto. */
+/** A valid avatar from the catalogue, or the default avatar. */
 export function sanitizeAvatar(value: unknown): string {
   return isAvatarId(value) ? value : DEFAULT_AVATAR
 }
 
 export function guestName(sessionId: string): string {
-  return `Invitado-${sessionId.slice(0, 4)}`
+  return `Guest-${sessionId.slice(0, 4)}`
 }

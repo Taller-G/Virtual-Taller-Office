@@ -24,10 +24,10 @@ import {
 import { loadWorldMaps } from '../src/map'
 
 /**
- * El contrato de las puertas: un rectángulo de clase `door` que nombra mundo y
- * spawn de destino, y spawns con nombre a los que se llega. Acá se prueba el
- * contrato puro (sin servidor ni archivos): qué lee la app de un mapa y con
- * qué mensaje rechaza uno roto.
+ * The contract of the doors: a rectangle of class `door` that names the
+ * destination world and spawn, and named spawns that get arrived at. What is
+ * tested here is the pure contract (no server, no files): what the app reads
+ * from a map and with which message it rejects a broken one.
  */
 function mapWith(objects: TiledObject[], data = [1, 1, 1, 1]): TiledMap {
   return {
@@ -51,8 +51,8 @@ function mapWith(objects: TiledObject[], data = [1, 1, 1, 1]): TiledMap {
       },
     ],
     layers: [
-      { type: 'tilelayer', id: 1, name: 'Piso', width: 2, height: 2, data },
-      { type: 'objectgroup', id: 2, name: 'Objetos', objects },
+      { type: 'tilelayer', id: 1, name: 'Floor', width: 2, height: 2, data },
+      { type: 'objectgroup', id: 2, name: 'Objects', objects },
     ],
   }
 }
@@ -83,8 +83,8 @@ const door = (id: number, name: string, world: unknown, target: unknown, x = 0, 
     ],
   }) satisfies TiledObject
 
-describe('Spawns con nombre', () => {
-  it('el spawn sin nombre es la entrada al mundo', () => {
+describe('Named spawns', () => {
+  it('the spawn without a name is the entrance to the world', () => {
     const map = mapWith([spawn(1, undefined, 16, 16)])
     expect(validateMap(map)).toEqual([])
     expect(findSpawnPoint(map)).toEqual({
@@ -96,46 +96,46 @@ describe('Spawns con nombre', () => {
     })
   })
 
-  it('un spawn con nombre se pide por su nombre y trae su dirección', () => {
-    const map = mapWith([spawn(1, undefined, 16, 16), spawn(2, 'desde-chiron', 48, 16, 'left')])
+  it('a named spawn is asked for by its name and carries its direction', () => {
+    const map = mapWith([spawn(1, undefined, 16, 16), spawn(2, 'from-chiron', 48, 16, 'left')])
     expect(validateMap(map)).toEqual([])
-    expect(findSpawnPoint(map, 'desde-chiron')).toMatchObject({ x: 48, y: 16, dir: 'left' })
-    expect(findSpawnPoints(map).map((s) => s.name)).toEqual([DEFAULT_SPAWN_NAME, 'desde-chiron'])
+    expect(findSpawnPoint(map, 'from-chiron')).toMatchObject({ x: 48, y: 16, dir: 'left' })
+    expect(findSpawnPoints(map).map((s) => s.name)).toEqual([DEFAULT_SPAWN_NAME, 'from-chiron'])
   })
 
-  it('pedir un spawn que no existe falla', () => {
+  it('asking for a spawn that does not exist fails', () => {
     const map = mapWith([spawn(1, undefined, 16, 16)])
-    expect(() => findSpawnPoint(map, 'no-existe')).toThrow(/llamado "no-existe"/)
+    expect(() => findSpawnPoint(map, 'does-not-exist')).toThrow(/named "does-not-exist"/)
   })
 
-  it('dos spawns con el mismo nombre son un error del mapa', () => {
+  it('two spawns with the same name are an error in the map', () => {
     const map = mapWith([
       spawn(1, undefined, 16, 16),
-      spawn(2, 'llegada', 48, 16),
-      spawn(3, 'llegada', 16, 48),
+      spawn(2, 'arrival', 48, 16),
+      spawn(3, 'arrival', 16, 48),
     ])
-    expect(validateMap(map)).toContain('Hay más de un spawn llamado "llegada"')
+    expect(validateMap(map)).toContain('There is more than one spawn named "arrival"')
   })
 
-  it('un spawn con nombre sobre una pared es un error del mapa', () => {
-    const map = mapWith([spawn(1, undefined, 16, 16), spawn(2, 'llegada', 48, 16)], [1, 2, 1, 1])
-    expect(validateMap(map)).toContain('El spawn "llegada" cae sobre un tile que colisiona')
+  it('a named spawn on a wall is an error in the map', () => {
+    const map = mapWith([spawn(1, undefined, 16, 16), spawn(2, 'arrival', 48, 16)], [1, 2, 1, 1])
+    expect(validateMap(map)).toContain('The spawn "arrival" falls on a colliding tile')
   })
 })
 
-describe('Puertas dentro de un mapa', () => {
-  it('lee mundo y spawn destino del rectángulo', () => {
+describe('Doors within a map', () => {
+  it('reads the destination world and spawn from the rectangle', () => {
     const map = mapWith([
       spawn(1, undefined, 16, 16),
-      door(2, 'A Chiron', 'chiron-office', 'desde-first-office', 32, 0),
+      door(2, 'To Chiron', 'chiron-office', 'from-first-office', 32, 0),
     ])
     expect(validateMap(map)).toEqual([])
     expect(findDoors(map)).toEqual([
       {
         id: 2,
-        name: 'A Chiron',
+        name: 'To Chiron',
         world: 'chiron-office',
-        spawn: 'desde-first-office',
+        spawn: 'from-first-office',
         x: 32,
         y: 0,
         width: 32,
@@ -146,85 +146,83 @@ describe('Puertas dentro de un mapa', () => {
     expect(doorAt(map, 8, 8)).toBeUndefined()
   })
 
-  it('alcanza con que el cuerpo del jugador toque el umbral', () => {
+  it('it is enough for the player\'s body to touch the threshold', () => {
     const map = mapWith([
       spawn(1, undefined, 16, 16),
-      door(2, 'A Chiron', 'chiron-office', 'desde-first-office', 32, 0),
+      door(2, 'To Chiron', 'chiron-office', 'from-first-office', 32, 0),
     ])
-    // Cuerpo de 18x12 que asoma apenas dentro de la puerta (x >= 32).
+    // An 18x12 body that pokes just inside the door (x >= 32).
     expect(doorAtRect(map, { x: 20, y: 20, width: 18, height: 12 })?.id).toBe(2)
-    // Pegado al borde pero sin tocarla: no viaja.
+    // Right up against the edge but not touching it: no travel.
     expect(doorAtRect(map, { x: 14, y: 20, width: 18, height: 12 })).toBeUndefined()
-    // Debajo de la puerta, alineado en x: tampoco.
+    // Below the door, aligned in x: no travel either.
     expect(doorAtRect(map, { x: 34, y: 40, width: 18, height: 12 })).toBeUndefined()
   })
 
-  it('una puerta sin mundo o sin spawn se rechaza nombrando la puerta', () => {
-    const map = mapWith([spawn(1, undefined, 16, 16), door(7, 'Puerta rota', '', '', 32, 0)])
+  it('a door without a world or without a spawn is rejected, naming the door', () => {
+    const map = mapWith([spawn(1, undefined, 16, 16), door(7, 'Broken door', '', '', 32, 0)])
     const problems = validateMap(map)
     expect(problems).toContain(
-      'La puerta "Puerta rota" (objeto 7) no declara la propiedad "world" (mundo destino)',
+      'The door "Broken door" (object 7) does not declare the property "world" (destination world)',
     )
     expect(problems).toContain(
-      'La puerta "Puerta rota" (objeto 7) no declara la propiedad "spawn" (spawn de llegada)',
+      'The door "Broken door" (object 7) does not declare the property "spawn" (arrival spawn)',
     )
   })
 
-  it('una puerta sin área se rechaza', () => {
-    const broken = { ...door(9, '', 'otro', 'llegada'), width: 0, height: 0 }
+  it('a door without an area is rejected', () => {
+    const broken = { ...door(9, '', 'other', 'arrival'), width: 0, height: 0 }
     const map = mapWith([spawn(1, undefined, 16, 16), broken])
-    expect(validateMap(map)).toContain(
-      'La puerta objeto 9 no tiene área: tiene que ser un rectángulo',
-    )
+    expect(validateMap(map)).toContain('The door object 9 has no area: it has to be a rectangle')
   })
 })
 
-describe('Validación cruzada entre mundos', () => {
+describe('Cross-validation between worlds', () => {
   const chiron = mapWith([
     spawn(1, undefined, 16, 16),
-    spawn(2, 'desde-first-office', 48, 16, 'down'),
+    spawn(2, 'from-first-office', 48, 16, 'down'),
   ])
 
-  it('acepta una puerta que apunta a un mundo y un spawn que existen', () => {
+  it('accepts a door pointing at a world and a spawn that exist', () => {
     const first = mapWith([
       spawn(1, undefined, 16, 16),
-      door(2, 'A Chiron', 'chiron-office', 'desde-first-office', 32, 0),
+      door(2, 'To Chiron', 'chiron-office', 'from-first-office', 32, 0),
     ])
     expect(validateWorldDoors({ 'first-office': first, 'chiron-office': chiron })).toEqual([])
   })
 
-  it('rechaza una puerta a un mundo desconocido nombrando puerta y destino', () => {
+  it('rejects a door to an unknown world, naming door and destination', () => {
     const first = mapWith([
       spawn(1, undefined, 16, 16),
-      door(42, 'A ninguna parte', 'mundo-fantasma', 'x', 32, 0),
+      door(42, 'To nowhere', 'ghost-world', 'x', 32, 0),
     ])
     const [problem, ...rest] = validateWorldDoors({
       'first-office': first,
       'chiron-office': chiron,
     })
     expect(rest).toEqual([])
-    expect(problem).toContain('La puerta "A ninguna parte" (objeto 42) del mundo "first-office"')
-    expect(problem).toContain('lleva al mundo "mundo-fantasma", que no existe')
+    expect(problem).toContain('The door "To nowhere" (object 42) of world "first-office"')
+    expect(problem).toContain('leads to world "ghost-world", which does not exist')
   })
 
-  it('rechaza una puerta a un spawn que el mundo destino no define', () => {
+  it('rejects a door to a spawn the destination world does not define', () => {
     const first = mapWith([
       spawn(1, undefined, 16, 16),
-      door(43, 'A Chiron', 'chiron-office', 'sin-puerta', 32, 0),
+      door(43, 'To Chiron', 'chiron-office', 'no-door', 32, 0),
     ])
     const [problem, ...rest] = validateWorldDoors({
       'first-office': first,
       'chiron-office': chiron,
     })
     expect(rest).toEqual([])
-    expect(problem).toContain('La puerta "A Chiron" (objeto 43) del mundo "first-office"')
+    expect(problem).toContain('The door "To Chiron" (object 43) of world "first-office"')
     expect(problem).toContain(
-      'llega al spawn "sin-puerta" del mundo "chiron-office", que no lo define',
+      'arrives at spawn "no-door" of world "chiron-office", which does not define it',
     )
   })
 })
 
-describe('loadWorldMaps: los mundos se validan juntos al arrancar', () => {
+describe('loadWorldMaps: the worlds are validated together at boot', () => {
   const dir = mkdtempSync(join(tmpdir(), 'vto-worlds-'))
 
   function world(id: string, map: TiledMap): WorldDefinition {
@@ -235,18 +233,18 @@ describe('loadWorldMaps: los mundos se validan juntos al arrancar', () => {
 
   const chironMap = mapWith([
     spawn(1, undefined, 16, 16),
-    spawn(2, 'desde-first-office', 48, 16, 'down'),
-    door(3, 'A First Office', 'first-office', 'desde-chiron', 0, 32),
+    spawn(2, 'from-first-office', 48, 16, 'down'),
+    door(3, 'To the First Office', 'first-office', 'from-chiron', 0, 32),
   ])
 
-  it('carga los dos mundos cuando las puertas cierran en ambos sentidos', () => {
+  it('loads both worlds when the doors match up in both directions', () => {
     const maps = loadWorldMaps([
       world(
         'first-office',
         mapWith([
           spawn(1, undefined, 16, 16),
-          spawn(2, 'desde-chiron', 48, 16, 'left'),
-          door(3, 'A Chiron', 'chiron-office', 'desde-first-office', 0, 32),
+          spawn(2, 'from-chiron', 48, 16, 'left'),
+          door(3, 'To Chiron', 'chiron-office', 'from-first-office', 0, 32),
         ]),
       ),
       world('chiron-office', chironMap),
@@ -255,29 +253,29 @@ describe('loadWorldMaps: los mundos se validan juntos al arrancar', () => {
     expect(maps.get('chiron-office')?.spawn.name).toBe(DEFAULT_SPAWN_NAME)
   })
 
-  it('una puerta a un mundo que no existe impide arrancar', () => {
+  it('a door to a world that does not exist prevents startup', () => {
     expect(() =>
       loadWorldMaps([
         world(
           'first-office',
-          mapWith([spawn(1, undefined, 16, 16), door(8, 'A ninguna parte', 'chiron-offices', 'x')]),
+          mapWith([spawn(1, undefined, 16, 16), door(8, 'To nowhere', 'chiron-offices', 'x')]),
         ),
         world('chiron-office', chironMap),
       ]),
     ).toThrow(
-      /La puerta "A ninguna parte" \(objeto 8\).*lleva al mundo "chiron-offices", que no existe/s,
+      /The door "To nowhere" \(object 8\).*leads to world "chiron-offices", which does not exist/s,
     )
   })
 
-  it('una puerta a un spawn que no existe impide arrancar', () => {
+  it('a door to a spawn that does not exist prevents startup', () => {
     expect(() =>
       loadWorldMaps([
         world(
           'first-office',
-          mapWith([spawn(1, undefined, 16, 16), door(9, 'A Chiron', 'chiron-office', 'garage')]),
+          mapWith([spawn(1, undefined, 16, 16), door(9, 'To Chiron', 'chiron-office', 'garage')]),
         ),
         world('chiron-office', chironMap),
       ]),
-    ).toThrow(/llega al spawn "garage" del mundo "chiron-office", que no lo define/)
+    ).toThrow(/arrives at spawn "garage" of world "chiron-office", which does not define it/)
   })
 })

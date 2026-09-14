@@ -2,7 +2,7 @@
   "name": "virtual-taller-office",
   "private": true,
   "version": "0.1.0",
-  "description": "Oficina virtual 2D de Taller: cliente Phaser + servidor Colyseus en tiempo real",
+  "description": "Taller's 2D virtual office: Phaser client + real-time Colyseus server",
   "type": "module",
   "workspaces": [
     "packages/*",

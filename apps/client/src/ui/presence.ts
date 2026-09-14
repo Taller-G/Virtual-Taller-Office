@@ -5,13 +5,13 @@ import { avatarThumb } from './avatarThumb'
 import { toast } from './toasts'
 
 /**
- * Panel "quién está en la oficina" + avisos de entrada/salida + controles
- * propios (renombrar, marcarse ausente).
+ * The "who is in the office" panel + join/leave notices + one's own controls
+ * (rename, mark yourself away).
  *
- * La lista es un reflejo directo de `room.state.players`: se agrega en
- * `onAdd`, se quita en `onRemove` y se redibuja con cada cambio de nombre,
- * avatar, ausente o conexión. El cliente nunca agrega ni retiene jugadores por
- * su cuenta; al cambiar de sala o desconectarse, se vacía.
+ * The list is a direct reflection of `room.state.players`: entries are added
+ * in `onAdd`, removed in `onRemove` and redrawn with every change of name,
+ * avatar, away state or connection. The client never adds or retains players
+ * on its own; on changing room or disconnecting, it is emptied.
  */
 export function mountPresence(connection: OfficeConnection) {
   const panel = document.getElementById('presence')!
@@ -22,7 +22,7 @@ export function mountPresence(connection: OfficeConnection) {
 
   nameInput.maxLength = NAME_MAX_LENGTH
 
-  /** Jugadores presentes según el servidor, por sessionId. */
+  /** Players present according to the server, by sessionId. */
   const players = new Map<string, Player>()
   let room: OfficeRoom | undefined
   const unbind: Array<() => void> = []
@@ -33,7 +33,7 @@ export function mountPresence(connection: OfficeConnection) {
     const mine = me()
     const others = [...players.entries()]
       .filter(([id]) => id !== room?.sessionId)
-      .sort(([, a], [, b]) => a.name.localeCompare(b.name, 'es'))
+      .sort(([, a], [, b]) => a.name.localeCompare(b.name, 'en'))
     const rows = mine ? [[room!.sessionId, mine] as const, ...others] : others
 
     const n = players.size
@@ -42,13 +42,13 @@ export function mountPresence(connection: OfficeConnection) {
 
     if (mine) {
       if (document.activeElement !== nameInput) nameInput.value = mine.name
-      awayButton.textContent = mine.away ? 'Volver a activo' : 'Marcarme ausente'
+      awayButton.textContent = mine.away ? 'Back to active' : 'Mark me away'
       awayButton.setAttribute('aria-pressed', String(mine.away))
       awayButton.title = mine.away
         ? mine.awayManual
-          ? 'Fijaste el estado ausente a mano'
-          : 'Ausente por inactividad; movete o hacé clic para volver'
-        : 'Los demás te verán como ausente hasta que lo quites'
+          ? 'You set the away state by hand'
+          : 'Away through inactivity; move or click to come back'
+        : 'Everyone else will see you as away until you clear it'
     }
     panel.dataset.state = mine ? 'in' : 'out'
   }
@@ -64,12 +64,12 @@ export function mountPresence(connection: OfficeConnection) {
     if (isMe) {
       const you = document.createElement('span')
       you.className = 'presence__you'
-      you.textContent = 'vos'
+      you.textContent = 'you'
       name.append(' ', you)
     }
     const status = document.createElement('span')
     status.className = 'presence__status'
-    status.textContent = !player.connected ? 'sin conexión' : player.away ? 'ausente' : 'activo'
+    status.textContent = !player.connected ? 'offline' : player.away ? 'away' : 'active'
     li.append(avatarThumb(player.avatar, 1), name, status)
     return li
   }
@@ -78,7 +78,7 @@ export function mountPresence(connection: OfficeConnection) {
     clear()
     room = newRoom
     const $ = Callbacks.get(newRoom)
-    // Los `onAdd` inmediatos (jugadores que ya estaban) no generan aviso.
+    // The immediate `onAdd`s (players who were already there) raise no notice.
     let initial = true
     unbind.push(
       $.onAdd('players', (player, sessionId) => {
@@ -89,12 +89,12 @@ export function mountPresence(connection: OfficeConnection) {
           $.listen(player, 'away', render),
           $.listen(player, 'connected', render),
         )
-        if (!initial && sessionId !== newRoom.sessionId) toast(`${player.name} entró a la oficina`)
+        if (!initial && sessionId !== newRoom.sessionId) toast(`${player.name} joined the office`)
         render()
       }),
       $.onRemove('players', (player, sessionId) => {
         players.delete(sessionId)
-        if (sessionId !== newRoom.sessionId) toast(`${player.name} salió de la oficina`)
+        if (sessionId !== newRoom.sessionId) toast(`${player.name} left the office`)
         render()
       }),
     )
@@ -115,7 +115,7 @@ export function mountPresence(connection: OfficeConnection) {
     if (status === 'disconnected') clear()
   })
 
-  // --- Controles propios -----------------------------------------------------
+  // --- Own controls ----------------------------------------------------------
 
   const commitName = () => {
     const name = sanitizeName(nameInput.value)
@@ -130,7 +130,7 @@ export function mountPresence(connection: OfficeConnection) {
   nameInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault()
-      nameInput.blur() // dispara el commit en `blur` y devuelve el teclado al juego
+      nameInput.blur() // fires the commit on `blur` and gives the keyboard back to the game
     } else if (event.key === 'Escape') {
       nameInput.value = me()?.name ?? ''
       nameInput.blur()

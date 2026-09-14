@@ -5,7 +5,7 @@ coverage/
 *.log
 .DS_Store
 
-# Entorno local: se versionan solo los .env.example y .env.development
+# Local environment: only .env.example and .env.development are committed
 .env
 .env.local
 .env.production

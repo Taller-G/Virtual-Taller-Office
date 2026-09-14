@@ -1,6 +1,6 @@
 import Phaser from 'phaser'
 
-/** ¿El elemento recibe texto del teclado? (input, textarea, select, contentEditable) */
+/** Does the element receive text from the keyboard? (input, textarea, select, contentEditable) */
 export function isTypingTarget(element: EventTarget | Element | null): boolean {
   if (!(element instanceof HTMLElement)) return false
   if (element.isContentEditable) return true
@@ -20,11 +20,11 @@ export function isTyping(): boolean {
 }
 
 /**
- * Mientras un campo de texto tiene el foco, el teclado no llega al juego:
- * se apaga el KeyboardManager (así las teclas no mueven al avatar) y se deja
- * de hacer `preventDefault` sobre flechas/espacio (así el cursor del campo
- * funciona). Al perder el foco se restaura y se sueltan las teclas que
- * hubieran quedado marcadas como presionadas.
+ * While a text field has the focus, the keyboard does not reach the game: the
+ * KeyboardManager is turned off (so the keys do not move the avatar) and
+ * `preventDefault` stops being applied to arrows/space (so the field's caret
+ * works). On losing the focus it is restored and any keys left marked as
+ * pressed are released.
  */
 export function installTypingGuard(game: Phaser.Game): () => void {
   const manager = game.input.keyboard

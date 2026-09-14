@@ -11,21 +11,21 @@ import {
 import { layerTextureKey, textureKey } from './avatarAnims'
 import { queueTilesets, queueWorldMap } from './worldAssets'
 
-/** Clave de la textura del logo de Taller (decoración de la recepción). */
+/** Key of the Taller logo texture (decoration for the reception). */
 export const LOGO_KEY = 'logo-taller'
 
-/** Prefijo de las claves de textura de avatar (ver `textureKey`). */
+/** Prefix of the avatar texture keys (see `textureKey`). */
 const AVATAR_KEY_PREFIX = 'avatar-'
-/** Prefijo de las claves de textura de capas de avatar. */
+/** Prefix of the avatar layer texture keys. */
 const LAYER_KEY_PREFIX = 'layer-'
 
 /**
- * Carga el mapa del mundo inicial y, leyendo sus tilesets, encola las imágenes
- * que ese mapa necesita. Así agregar un tileset en Tiled no requiere tocar
- * código: la imagen se resuelve relativa al archivo del mapa, igual que en
- * Tiled. También carga las hojas de sprites de los avatares del catálogo, que
- * son las mismas en todos los mundos. Los mapas de los demás mundos se cargan
- * al cruzar su puerta (ver `worldAssets.ts`).
+ * Loads the initial world's map and, by reading its tilesets, queues the
+ * images that map needs. That way adding a tileset in Tiled does not require
+ * touching code: the image is resolved relative to the map file, just like in
+ * Tiled. It also loads the sprite sheets of the catalogue's avatars, which are
+ * the same in every world. The maps of the other worlds are loaded when their
+ * door is crossed (see `worldAssets.ts`).
  */
 export class BootScene extends Phaser.Scene {
   private world: WorldDefinition
@@ -42,17 +42,18 @@ export class BootScene extends Phaser.Scene {
 
   preload() {
     this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
-      // Un avatar o el logo que no cargan son degradables: la oficina sigue con
-      // un avatar por defecto y sin logo. Faltar el mapa o un tileset sí es fatal.
+      // An avatar or the logo failing to load is degradable: the office goes
+      // on with a default avatar and without the logo. A missing map or
+      // tileset is fatal.
       if (
         file.key.startsWith(AVATAR_KEY_PREFIX) ||
         file.key.startsWith(LAYER_KEY_PREFIX) ||
         file.key === LOGO_KEY
       ) {
-        console.warn(`[assets] no se pudo cargar ${file.src} (se sigue sin él)`)
+        console.warn(`[assets] could not load ${file.src} (carrying on without it)`)
         return
       }
-      this.fail(`No se pudo cargar ${file.src}`)
+      this.fail(`Could not load ${file.src}`)
     })
     queueWorldMap(this, this.world)
     this.load.image(LOGO_KEY, this.logoUrl)
@@ -63,7 +64,7 @@ export class BootScene extends Phaser.Scene {
       })
     }
 
-    // Capas para avatares compuestos: body (por tono de piel), hair, top, accesorios.
+    // Layers for composed avatars: body (per skin tone), hair, top, accessories.
     const layersUrl = `${this.avatarsUrl}layers/`
     for (const base of APPEARANCE_BASES) {
       for (const tone of SKIN_TONES) {
@@ -103,10 +104,10 @@ export class BootScene extends Phaser.Scene {
   private fail(message: string) {
     if (this.failed) return
     this.failed = true
-    console.error(`[mapa] ${message}`)
+    console.error(`[map] ${message}`)
     const { width, height } = this.scale
     this.add
-      .text(width / 2, height / 2, `No se pudo cargar la oficina.\n${message}`, {
+      .text(width / 2, height / 2, `Could not load the office.\n${message}`, {
         fontFamily: 'system-ui, sans-serif',
         fontSize: '14px',
         color: '#ff5d6c',

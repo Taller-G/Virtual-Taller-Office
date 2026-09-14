@@ -1,22 +1,22 @@
 /**
- * Configuración del cliente. Vite inyecta en build las variables `VITE_*`
- * (ver `.env.example`): la URL del servidor no se hardcodea.
+ * Client configuration. Vite injects the `VITE_*` variables at build time
+ * (see `.env.example`): the server URL is not hard-coded.
  */
 const serverUrl = import.meta.env.VITE_SERVER_URL as string | undefined
 
 if (!serverUrl) {
   throw new Error(
-    'Falta VITE_SERVER_URL. Copiá apps/client/.env.example a .env y poné la URL del servidor.',
+    'VITE_SERVER_URL is missing. Copy apps/client/.env.example to .env and set the server URL.',
   )
 }
 
-/** Carpeta con las hojas de sprites de los avatares (`<id>.png`). */
+/** Folder with the avatars' sprite sheets (`<id>.png`). */
 const avatarsUrl = '/assets/avatars/'
 
-/** Logo de Taller en pixel art, decoración de la recepción. */
+/** Taller logo in pixel art, decoration for the reception. */
 const logoUrl = '/assets/logo/taller-logo-pixel.png'
 
-/** `?debug` en la URL dibuja cuerpos de colisión, spawns y puertas. */
+/** `?debug` in the URL draws collision bodies, spawns and doors. */
 const debug = new URLSearchParams(window.location.search).has('debug')
 
 export const config = {
