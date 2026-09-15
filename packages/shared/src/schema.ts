@@ -22,6 +22,13 @@ export const Player = schema(
      * stacked layers (body, hair, top, accessories).
      */
     appearance: t.string().default(''),
+    /**
+     * How many agent mascots walk behind them. The server validates it on
+     * joining (see `sanitizeAgentCount`); every client draws that many little
+     * robots trailing this player. `default(0)` is what lets a client that
+     * knows nothing about agents join a room that does.
+     */
+    agents: t.number().default(0),
     x: t.number().default(0),
     y: t.number().default(0),
     /** Which way it faces: 'down' | 'up' | 'left' | 'right'. */

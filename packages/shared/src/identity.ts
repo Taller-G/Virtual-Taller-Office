@@ -13,6 +13,11 @@ export interface JoinOptions {
    * without it you enter through the world's entry spawn.
    */
   spawn?: string
+  /**
+   * How many agent mascots follow you. The server clamps it to a valid count
+   * (see `sanitizeAgentCount`); anything unusable reads as none.
+   */
+  agents?: number
   /** The "away" state you travel with, so crossing a door does not lose it. */
   away?: boolean
   /** `true` if that away state had been set by hand by the user. */

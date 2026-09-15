@@ -13,6 +13,9 @@ if (!serverUrl) {
 /** Folder with the avatars' sprite sheets (`<id>.png`). */
 const avatarsUrl = '/assets/avatars/'
 
+/** Sheet of the agent mascot (the robot that walks behind a player). */
+const mascotUrl = '/assets/mascots/robot.png'
+
 /** Taller logo in pixel art, decoration for the reception. */
 const logoUrl = '/assets/logo/taller-logo-pixel.png'
 
@@ -22,6 +25,7 @@ const debug = new URLSearchParams(window.location.search).has('debug')
 export const config = {
   serverUrl,
   avatarsUrl,
+  mascotUrl,
   logoUrl,
   debug,
 } as const

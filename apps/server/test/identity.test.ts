@@ -1,12 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import {
+  APPEARANCE_BASES,
   AVATAR_IDS,
   AVATARS,
+  DEFAULT_AGENTS,
   DEFAULT_APPEARANCE,
   DEFAULT_AVATAR,
+  FACIAL_HAIR_OPTIONS,
+  HAIR_STYLES,
+  NO_TINT,
+  allLayerSheets,
+  appearanceLayers,
+  layerSheetFile,
   isDirection,
+  MAX_AGENTS,
   NAME_MAX_LENGTH,
   parseAppearance,
+  sanitizeAgentCount,
   sanitizeAppearance,
   sanitizeAvatar,
   sanitizeName,
@@ -61,9 +71,7 @@ describe('appearance', () => {
     expect(parseAppearance('not json')).toBeNull()
     expect(parseAppearance('{"base":"invalid"}')).toBeNull()
     expect(parseAppearance(JSON.stringify({ ...DEFAULT_APPEARANCE, base: 'nope' }))).toBeNull()
-    expect(
-      parseAppearance(JSON.stringify({ ...DEFAULT_APPEARANCE, hairColor: 'neon' })),
-    ).toBeNull()
+    expect(parseAppearance(JSON.stringify({ ...DEFAULT_APPEARANCE, hairColor: 'neon' }))).toBeNull()
   })
 
   it('sanitizeAppearance passes valid JSON through and rejects junk', () => {
@@ -85,5 +93,135 @@ describe('appearance', () => {
     const a = { ...DEFAULT_APPEARANCE, hat: 'none' as const, glasses: 'none' as const }
     const raw = serializeAppearance(a)
     expect(parseAppearance(raw)).toEqual(a)
+  })
+
+  it('accepts every option of the parts added after the first editor', () => {
+    for (const hairStyle of HAIR_STYLES) {
+      for (const facialHair of FACIAL_HAIR_OPTIONS) {
+        const a = { ...DEFAULT_APPEARANCE, hairStyle, facialHair }
+        expect(parseAppearance(serializeAppearance(a))).toEqual(a)
+      }
+    }
+    const legs = { ...DEFAULT_APPEARANCE, pantsColor: 'denim' as const, shoeColor: 'tan' as const }
+    expect(parseAppearance(serializeAppearance(legs))).toEqual(legs)
+  })
+
+  it('loads an appearance saved before hair style, legs and facial hair existed', () => {
+    const old = JSON.stringify({
+      base: 'lucy',
+      skinTone: 'tan',
+      hairColor: 'pink',
+      topColor: 'blue',
+      hat: 'cap',
+      glasses: 'none',
+    })
+    expect(parseAppearance(old)).toEqual({
+      ...DEFAULT_APPEARANCE,
+      base: 'lucy',
+      skinTone: 'tan',
+      hairColor: 'pink',
+      topColor: 'blue',
+      hat: 'cap',
+    })
+    expect(sanitizeAppearance(old)).toBe(old)
+  })
+
+  it('rejects an unknown value in the newer fields', () => {
+    for (const field of ['hairStyle', 'facialHair', 'pantsColor', 'shoeColor']) {
+      const raw = JSON.stringify({ ...DEFAULT_APPEARANCE, [field]: 'nope' })
+      expect(parseAppearance(raw), field).toBeNull()
+      expect(sanitizeAppearance(raw), field).toBe('')
+    }
+  })
+})
+
+describe('appearance layers', () => {
+  it('stacks the parts in draw order', () => {
+    const sheets = appearanceLayers({
+      ...DEFAULT_APPEARANCE,
+      facialHair: 'beard',
+      hat: 'cap',
+      glasses: 'glasses-round',
+      hairStyle: 'long',
+    }).map(layerSheetFile)
+    expect(sheets).toEqual([
+      'adam/body-default.png',
+      'adam/shoes.png',
+      'adam/pants.png',
+      'adam/top.png',
+      'adam/facial-beard.png',
+      'adam/hair-long.png',
+      'accessories/glasses-round.png',
+      'accessories/cap.png',
+    ])
+  })
+
+  it('leaves out the parts set to "none"', () => {
+    const sheets = appearanceLayers(DEFAULT_APPEARANCE).map(layerSheetFile)
+    expect(sheets).toEqual([
+      'adam/body-default.png',
+      'adam/shoes.png',
+      'adam/pants.png',
+      'adam/top.png',
+      'adam/hair-short.png',
+    ])
+  })
+
+  it('tints the legs apart from each other and from the top', () => {
+    const layers = appearanceLayers({
+      ...DEFAULT_APPEARANCE,
+      topColor: 'red',
+      pantsColor: 'blue',
+      shoeColor: 'white',
+    })
+    const tint = (part: string) => layers.find((l) => l.part === part)?.tint
+    expect(new Set([tint('top'), tint('pants'), tint('shoes')]).size).toBe(3)
+    expect(tint('body')).toBe(NO_TINT)
+  })
+
+  it('preloads a sheet for every layer any appearance can ask for', () => {
+    const sheets = allLayerSheets().map(layerSheetFile)
+    expect(new Set(sheets).size).toBe(sheets.length)
+    for (const base of APPEARANCE_BASES) {
+      for (const style of HAIR_STYLES) expect(sheets).toContain(`${base}/hair-${style}.png`)
+      expect(sheets).toContain(`${base}/pants.png`)
+      expect(sheets).toContain(`${base}/shoes.png`)
+    }
+    const used = appearanceLayers({
+      ...DEFAULT_APPEARANCE,
+      base: 'nancy',
+      facialHair: 'stubble',
+      hat: 'beanie',
+      glasses: 'glasses-square',
+    })
+    for (const layer of used) expect(sheets).toContain(layerSheetFile(layer))
+  })
+})
+
+describe('sanitizeAgentCount', () => {
+  it('passes every valid count through untouched', () => {
+    for (let n = 0; n <= MAX_AGENTS; n++) expect(sanitizeAgentCount(n)).toBe(n)
+  })
+
+  it('clamps a count outside the range to the nearest end', () => {
+    expect(sanitizeAgentCount(-1)).toBe(0)
+    expect(sanitizeAgentCount(-99)).toBe(0)
+    expect(sanitizeAgentCount(MAX_AGENTS + 1)).toBe(MAX_AGENTS)
+    expect(sanitizeAgentCount(99)).toBe(MAX_AGENTS)
+  })
+
+  it('truncates a fractional count', () => {
+    expect(sanitizeAgentCount(2.5)).toBe(2)
+    expect(sanitizeAgentCount(0.9)).toBe(0)
+    expect(sanitizeAgentCount(-0.5)).toBe(0)
+  })
+
+  it('reads anything that is not a finite number as no agents', () => {
+    expect(sanitizeAgentCount(undefined)).toBe(DEFAULT_AGENTS)
+    expect(sanitizeAgentCount(null)).toBe(DEFAULT_AGENTS)
+    expect(sanitizeAgentCount('3')).toBe(DEFAULT_AGENTS)
+    expect(sanitizeAgentCount(NaN)).toBe(DEFAULT_AGENTS)
+    expect(sanitizeAgentCount(Infinity)).toBe(DEFAULT_AGENTS)
+    expect(sanitizeAgentCount({ agents: 3 })).toBe(DEFAULT_AGENTS)
   })
 })

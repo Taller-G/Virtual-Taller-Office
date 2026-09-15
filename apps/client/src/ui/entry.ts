@@ -1,28 +1,36 @@
 import {
   APPEARANCE_BASES,
   AVATARS,
+  DEFAULT_AGENTS,
   DEFAULT_APPEARANCE,
   DEFAULT_AVATAR,
+  FACIAL_HAIR_OPTIONS,
   GLASSES_OPTIONS,
   HAIR_COLORS,
   HAIR_COLOR_IDS,
+  HAIR_STYLES,
   HAT_OPTIONS,
+  MAX_AGENTS,
   NAME_MAX_LENGTH,
+  PANTS_COLORS,
+  PANTS_COLOR_IDS,
+  SHOE_COLORS,
+  SHOE_COLOR_IDS,
   SKIN_TONES,
   TOP_COLORS,
   TOP_COLOR_IDS,
   isAvatarId,
   parseAppearance,
+  sanitizeAgentCount,
   sanitizeName,
   serializeAppearance,
   type Appearance,
-  type AppearanceBase,
-  type GlassesOption,
   type HairColorId,
-  type HatOption,
-  type SkinTone,
+  type PantsColorId,
+  type ShoeColorId,
   type TopColorId,
 } from '@vto/shared'
+import { avatarPreview } from './avatarPreview'
 import { avatarThumb } from './avatarThumb'
 
 export interface Identity {
@@ -30,6 +38,13 @@ export interface Identity {
   avatar: string
   /** Appearance JSON (composed look). Empty = use a preset. */
   appearance: string
+  /**
+   * How many agent mascots walk behind you. For now it is set by hand here;
+   * later it will be however many agents Chiron reports. It is part of the
+   * identity like the name is, so it travels to the server on joining (see
+   * `JoinOptions`) and through every door after that.
+   */
+  agents: number
 }
 
 const STORAGE_KEY = 'vto.identity'
@@ -46,6 +61,9 @@ function loadIdentity(): Partial<Identity> {
         typeof parsed.appearance === 'string' && parseAppearance(parsed.appearance)
           ? parsed.appearance
           : undefined,
+      // An identity stored before there were agents has no count: it reads as
+      // none, like anything else unusable.
+      agents: sanitizeAgentCount(parsed.agents),
     }
   } catch {
     return {}
@@ -79,6 +97,14 @@ const LABEL: Record<string, string> = {
   beanie: 'Beanie',
   'glasses-round': 'Round',
   'glasses-square': 'Square',
+  short: 'Short',
+  long: 'Long',
+  bun: 'Bun',
+  curly: 'Curly',
+  ponytail: 'Ponytail',
+  stubble: 'Stubble',
+  mustache: 'Moustache',
+  beard: 'Beard',
 }
 
 function colorHex(n: number): string {
@@ -134,12 +160,17 @@ function optionRow<T extends string>(
 // ---------------------------------------------------------------------------
 
 /**
- * Entry screen: visible name and choice of avatar.
+ * Entry screen: visible name, how many agents walk with you, and choice of
+ * avatar.
  *
- * Two modes (tabs):
+ * The agents stepper sits on its own, above the avatar group and outside it:
+ * it applies whichever tab is open, and it is not part of the look.
+ *
+ * Two modes (tabs) for the avatar:
  * - **Presets**: the 11 avatars in the catalogue (single-sheet), as before.
- * - **Customise**: composed appearance editor with pickers for base, skin
- *   tone, hair colour, clothes colour, hat and glasses.
+ * - **Customise**: composed appearance editor with a row per part — silhouette,
+ *   skin tone, hair style and colour, facial hair, clothes, trousers, shoes,
+ *   hat and glasses.
  *
  * It remembers the last choice in localStorage. It resolves when the user
  * confirms; only then is the room joined.
@@ -164,6 +195,7 @@ export function showEntry(): Promise<Identity> {
   // A role="group" div rather than a fieldset: a fieldset lays its children out
   // in an anonymous content box that keeps height:auto, so a constrained height
   // never reaches them and the panels below could not shrink in order to scroll.
+  const card = form.closest<HTMLElement>('.entry__card') ?? form
   const group = form.querySelector<HTMLElement>('.entry__avatars')!
   group.replaceChildren()
   const groupLabel = document.createElement('span')
@@ -208,42 +240,62 @@ export function showEntry(): Promise<Identity> {
     presetPanel.append(button)
   }
 
-  // -- Custom panel --
+  // -- Custom panel: the option rows, and the avatar they build beside them --
   const customPanel = document.createElement('div')
   customPanel.className = 'appearance-editor'
 
-  customPanel.append(
-    optionRow('Silhouette', APPEARANCE_BASES, appearance.base, (v: AppearanceBase) => {
-      appearance = { ...appearance, base: v }
-    }),
-    optionRow('Skin', SKIN_TONES, appearance.skinTone, (v: SkinTone) => {
-      appearance = { ...appearance, skinTone: v }
-    }),
+  const preview = avatarPreview()
+
+  /**
+   * Handler for one option row. Every row changes the appearance through here,
+   * so none of them can be added later and forget to repaint the preview.
+   */
+  function change<K extends keyof Appearance>(key: K) {
+    return (value: Appearance[K]) => {
+      appearance = { ...appearance, [key]: value }
+      preview.update(appearance)
+    }
+  }
+
+  const rows = document.createElement('div')
+  rows.className = 'appearance-editor__rows'
+  rows.append(
+    optionRow('Silhouette', APPEARANCE_BASES, appearance.base, change('base')),
+    optionRow('Skin', SKIN_TONES, appearance.skinTone, change('skinTone')),
+    optionRow('Hair style', HAIR_STYLES, appearance.hairStyle, change('hairStyle')),
     optionRow(
-      'Hair',
+      'Hair colour',
       HAIR_COLOR_IDS,
       appearance.hairColor,
-      (v: HairColorId) => {
-        appearance = { ...appearance, hairColor: v }
-      },
+      change('hairColor'),
       HAIR_COLORS as Record<HairColorId, number>,
     ),
+    optionRow('Facial hair', FACIAL_HAIR_OPTIONS, appearance.facialHair, change('facialHair')),
     optionRow(
       'Clothes',
       TOP_COLOR_IDS,
       appearance.topColor,
-      (v: TopColorId) => {
-        appearance = { ...appearance, topColor: v }
-      },
+      change('topColor'),
       TOP_COLORS as Record<TopColorId, number>,
     ),
-    optionRow('Hat', HAT_OPTIONS, appearance.hat, (v: HatOption) => {
-      appearance = { ...appearance, hat: v }
-    }),
-    optionRow('Glasses', GLASSES_OPTIONS, appearance.glasses, (v: GlassesOption) => {
-      appearance = { ...appearance, glasses: v }
-    }),
+    optionRow(
+      'Trousers',
+      PANTS_COLOR_IDS,
+      appearance.pantsColor,
+      change('pantsColor'),
+      PANTS_COLORS as Record<PantsColorId, number>,
+    ),
+    optionRow(
+      'Shoes',
+      SHOE_COLOR_IDS,
+      appearance.shoeColor,
+      change('shoeColor'),
+      SHOE_COLORS as Record<ShoeColorId, number>,
+    ),
+    optionRow('Hat', HAT_OPTIONS, appearance.hat, change('hat')),
+    optionRow('Glasses', GLASSES_OPTIONS, appearance.glasses, change('glasses')),
   )
+  customPanel.append(rows, preview.el)
 
   // Both panels share one scroller, so on a short window the avatar area
   // scrolls while the group label, the tabs and the submit button stay put.
@@ -259,11 +311,35 @@ export function showEntry(): Promise<Identity> {
     customTab.setAttribute('aria-selected', String(m === 'custom'))
     presetPanel.hidden = m !== 'preset'
     customPanel.hidden = m !== 'custom'
+    // The customise tab needs room for the preview column beside the options.
+    card.classList.toggle('entry__card--custom', m === 'custom')
+    // Repaint on the way in: a canvas keeps what it drew, but this is also
+    // what puts a remembered appearance on screen before anything is clicked.
+    if (m === 'custom') preview.update(appearance)
     panels.scrollTop = 0
   }
   presetTab.addEventListener('click', () => setMode('preset'))
   customTab.addEventListener('click', () => setMode('custom'))
   setMode(mode)
+
+  // -- Agents stepper --
+  // It is above the avatar group and outside it on purpose: the count applies
+  // to both tabs, and the Customise tab is being worked on elsewhere.
+  let agents = remembered.agents ?? DEFAULT_AGENTS
+  const agentsValue = form.querySelector<HTMLOutputElement>('#entry-agents-value')!
+  const agentsLess = form.querySelector<HTMLButtonElement>('#entry-agents-less')!
+  const agentsMore = form.querySelector<HTMLButtonElement>('#entry-agents-more')!
+
+  const setAgents = (value: number) => {
+    agents = sanitizeAgentCount(value)
+    agentsValue.textContent = String(agents)
+    // At either end the button that cannot do anything says so.
+    agentsLess.disabled = agents === 0
+    agentsMore.disabled = agents === MAX_AGENTS
+  }
+  agentsLess.addEventListener('click', () => setAgents(agents - 1))
+  agentsMore.addEventListener('click', () => setAgents(agents + 1))
+  setAgents(agents)
 
   // -- Submit --
   const refreshSubmit = () => {
@@ -286,6 +362,7 @@ export function showEntry(): Promise<Identity> {
           name,
           avatar: mode === 'preset' ? selectedPreset : DEFAULT_AVATAR,
           appearance: mode === 'custom' ? serializeAppearance(appearance) : '',
+          agents,
         }
         saveIdentity(identity)
         overlay.hidden = true

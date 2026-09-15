@@ -1,14 +1,13 @@
 import Phaser from 'phaser'
 import {
-  APPEARANCE_BASES,
   AVATAR_FRAME,
   AVATAR_IDS,
-  GLASSES_OPTIONS,
-  HAT_OPTIONS,
-  SKIN_TONES,
+  MASCOT_FRAME,
+  allLayerSheets,
   type WorldDefinition,
 } from '@vto/shared'
-import { layerTextureKey, textureKey } from './avatarAnims'
+import { layerSheetUrl, layerTextureKey, textureKey } from './avatarAnims'
+import { MASCOT_TEXTURE } from './mascotAnims'
 import { queueTilesets, queueWorldMap } from './worldAssets'
 
 /** Key of the Taller logo texture (decoration for the reception). */
@@ -23,31 +22,34 @@ const LAYER_KEY_PREFIX = 'layer-'
  * Loads the initial world's map and, by reading its tilesets, queues the
  * images that map needs. That way adding a tileset in Tiled does not require
  * touching code: the image is resolved relative to the map file, just like in
- * Tiled. It also loads the sprite sheets of the catalogue's avatars, which are
- * the same in every world. The maps of the other worlds are loaded when their
- * door is crossed (see `worldAssets.ts`).
+ * Tiled. It also loads the sprite sheets of the catalogue's avatars and of the
+ * agent mascot, which are the same in every world. The maps of the other
+ * worlds are loaded when their door is crossed (see `worldAssets.ts`).
  */
 export class BootScene extends Phaser.Scene {
   private world: WorldDefinition
   private avatarsUrl: string
+  private mascotUrl: string
   private logoUrl: string
   private failed = false
 
-  constructor(world: WorldDefinition, avatarsUrl: string, logoUrl: string) {
+  constructor(world: WorldDefinition, avatarsUrl: string, mascotUrl: string, logoUrl: string) {
     super('boot')
     this.world = world
     this.avatarsUrl = avatarsUrl
+    this.mascotUrl = mascotUrl
     this.logoUrl = logoUrl
   }
 
   preload() {
     this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
-      // An avatar or the logo failing to load is degradable: the office goes
-      // on with a default avatar and without the logo. A missing map or
-      // tileset is fatal.
+      // An avatar, the mascot or the logo failing to load is degradable: the
+      // office goes on with a default avatar, without robots and without the
+      // logo. A missing map or tileset is fatal.
       if (
         file.key.startsWith(AVATAR_KEY_PREFIX) ||
         file.key.startsWith(LAYER_KEY_PREFIX) ||
+        file.key === MASCOT_TEXTURE ||
         file.key === LOGO_KEY
       ) {
         console.warn(`[assets] could not load ${file.src} (carrying on without it)`)
@@ -57,6 +59,11 @@ export class BootScene extends Phaser.Scene {
     })
     queueWorldMap(this, this.world)
     this.load.image(LOGO_KEY, this.logoUrl)
+    // The agent mascot: one sheet for every robot in every world.
+    this.load.spritesheet(MASCOT_TEXTURE, this.mascotUrl, {
+      frameWidth: MASCOT_FRAME.width,
+      frameHeight: MASCOT_FRAME.height,
+    })
     for (const id of AVATAR_IDS) {
       this.load.spritesheet(textureKey(id), `${this.avatarsUrl}${id}.png`, {
         frameWidth: AVATAR_FRAME.width,
@@ -65,28 +72,14 @@ export class BootScene extends Phaser.Scene {
     }
 
     // Layers for composed avatars: body (per skin tone), hair, top, accessories.
-    const layersUrl = `${this.avatarsUrl}layers/`
-    for (const base of APPEARANCE_BASES) {
-      for (const tone of SKIN_TONES) {
-        this.load.spritesheet(
-          layerTextureKey(base, 'body', tone),
-          `${layersUrl}${base}/body-${tone}.png`,
-          { frameWidth: AVATAR_FRAME.width, frameHeight: AVATAR_FRAME.height },
-        )
-      }
-      for (const part of ['hair', 'top'] as const) {
-        this.load.spritesheet(layerTextureKey(base, part), `${layersUrl}${base}/${part}.png`, {
-          frameWidth: AVATAR_FRAME.width,
-          frameHeight: AVATAR_FRAME.height,
-        })
-      }
-    }
-    for (const acc of [...HAT_OPTIONS, ...GLASSES_OPTIONS]) {
-      if (acc === 'none') continue
-      this.load.spritesheet(layerTextureKey('acc', acc), `${layersUrl}accessories/${acc}.png`, {
-        frameWidth: AVATAR_FRAME.width,
-        frameHeight: AVATAR_FRAME.height,
-      })
+    // The catalogue lists them and names their files, so a part added there is
+    // loaded here and drawn by the entry screen's preview without more work.
+    for (const sheet of allLayerSheets()) {
+      this.load.spritesheet(
+        layerTextureKey(sheet.group, sheet.part, sheet.variant),
+        layerSheetUrl(this.avatarsUrl, sheet),
+        { frameWidth: AVATAR_FRAME.width, frameHeight: AVATAR_FRAME.height },
+      )
     }
   }
 
