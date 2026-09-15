@@ -295,12 +295,6 @@ function isGlassesOption(v: unknown): v is GlassesOption {
 // Layer stack of a composed appearance
 // ---------------------------------------------------------------------------
 
-/**
- * Sprite-sheet group the accessories live in — they are shared by every base,
- * unlike body/hair/top which are cut per base.
- */
-export const ACCESSORY_GROUP = 'acc'
-
 /** Untinted: the layer keeps the original colours of its sheet. */
 export const NO_TINT = 0xffffff
 
@@ -309,9 +303,9 @@ export const NO_TINT = 0xffffff
  * to apply over it.
  */
 export interface AppearanceLayer {
-  /** An `AppearanceBase` for the body parts, `ACCESSORY_GROUP` for accessories. */
+  /** The `AppearanceBase` the sheet was cut for. */
   group: string
-  /** `body`, `hair`, `top`, or the accessory's own id. */
+  /** `body`, `hair`, `top`, `hat`, or the accessory's own id. */
   part: string
   /** Distinguishes the sheets of one part (the skin tone of a body). */
   variant?: string
@@ -324,6 +318,10 @@ export interface AppearanceLayer {
  * (first = furthest back).  The order is what keeps the parts readable: the
  * feet go under the legs and the legs under the top, the beard sits on the
  * face but under the glasses, and the hair goes under the hat.
+ *
+ * Every layer, accessories included, is cut for one silhouette: a hat is
+ * measured against the skull it sits on and the glasses against the eyes they
+ * land on, and those are in a different place on each of the four bases.
  *
  * This is the single description of what a composed avatar is made of: the
  * in-game avatar builds Phaser sprites from it and the entry screen's preview
@@ -343,8 +341,8 @@ export function appearanceLayers(a: Appearance): AppearanceLayer[] {
     layers.push({ group: a.base, part: 'facial', variant: a.facialHair, tint: hairTint })
   }
   layers.push({ group: a.base, part: 'hair', variant: a.hairStyle, tint: hairTint })
-  if (a.glasses !== 'none') layers.push({ group: ACCESSORY_GROUP, part: a.glasses, tint: NO_TINT })
-  if (a.hat !== 'none') layers.push({ group: ACCESSORY_GROUP, part: a.hat, tint: NO_TINT })
+  if (a.glasses !== 'none') layers.push({ group: a.base, part: a.glasses, tint: NO_TINT })
+  if (a.hat !== 'none') layers.push({ group: a.base, part: a.hat, tint: NO_TINT })
   return layers
 }
 
@@ -354,15 +352,14 @@ export function appearanceLayers(a: Appearance): AppearanceLayer[] {
  * resolve sheets through this, so a renamed file moves in one place.
  */
 export function layerSheetFile(layer: Pick<AppearanceLayer, 'group' | 'part' | 'variant'>): string {
-  const dir = layer.group === ACCESSORY_GROUP ? 'accessories' : layer.group
   const file = layer.variant ? `${layer.part}-${layer.variant}` : layer.part
-  return `${dir}/${file}.png`
+  return `${layer.group}/${file}.png`
 }
 
 /**
  * Every layer sheet the catalogue can ask for, for preloading: the bodies (one
  * per base and tone), every hair style and facial hair of each base, its top,
- * trousers and shoes, and each accessory.
+ * trousers and shoes, and each of its accessories.
  */
 export function allLayerSheets(): Pick<AppearanceLayer, 'group' | 'part' | 'variant'>[] {
   const sheets: Pick<AppearanceLayer, 'group' | 'part' | 'variant'>[] = []
@@ -374,10 +371,9 @@ export function allLayerSheets(): Pick<AppearanceLayer, 'group' | 'part' | 'vari
     }
     sheets.push({ group: base, part: 'top' }, { group: base, part: 'pants' })
     sheets.push({ group: base, part: 'shoes' })
-  }
-  for (const acc of [...HAT_OPTIONS, ...GLASSES_OPTIONS]) {
-    if (acc === 'none') continue
-    sheets.push({ group: ACCESSORY_GROUP, part: acc })
+    for (const acc of [...HAT_OPTIONS, ...GLASSES_OPTIONS]) {
+      if (acc !== 'none') sheets.push({ group: base, part: acc })
+    }
   }
   return sheets
 }

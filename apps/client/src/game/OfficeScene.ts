@@ -16,6 +16,7 @@ import {
   type SitPayload,
 } from '@vto/shared'
 import type { OfficeConnection, OfficeRoom } from '../network/connection'
+import { clearSelection, selectPerson } from '../ui/selection'
 import { toast } from '../ui/toasts'
 import { Avatar, BODY } from './Avatar'
 import { createAvatarAnims } from './avatarAnims'
@@ -24,6 +25,7 @@ import { MascotTrain } from './MascotTrain'
 import { createMascotAnims } from './mascotAnims'
 import { buildOfficeMap, drawCollisionDebug, type BuiltMap } from './officeMap'
 import { SeatHint, SIT_KEY } from './SeatHint'
+import { buildGrid, findPath, type Grid, type Point } from './pathfinding'
 import { isTyping } from './typingGuard'
 import { loadWorld } from './worldAssets'
 
@@ -35,6 +37,27 @@ const CAMERA_ZOOM = 2
 const SEND_INTERVAL_MS = 50
 /** Duration of the fade when crossing a door (out and in), in ms. */
 const FADE_MS = 220
+/**
+ * How near a click has to land, in world px, for it to count as clicking that
+ * avatar. Roughly the sprite's own width and height: a generous target, since
+ * an avatar is 32 px wide on a map drawn at zoom 2.
+ */
+const PICK_RADIUS_PX = 22
+/** How far up from the feet an avatar's head is, in world px. */
+const HEAD_HEIGHT_PX = 46
+/** A waypoint is reached once the body's centre is this close to it (px). */
+const WAYPOINT_REACHED_PX = 4
+/**
+ * Walking to a person stops this far from them rather than on top of them:
+ * inside the bubble radius, so the conversation opens, but not in their lap.
+ */
+const ARRIVE_NEAR_PX = 40
+/**
+ * A walk that has not got anywhere in this long has been blocked by something
+ * the grid does not know about - another avatar standing in a doorway - so it
+ * gives up instead of pressing against it for ever.
+ */
+const WALK_STUCK_MS = 1200
 
 interface Keys {
   up: Phaser.Input.Keyboard.Key[]
@@ -79,9 +102,10 @@ interface Sent {
  * instead stand the person up. That is why a refused seat (taken a moment
  * ago) needs no reply: nothing changed, so nothing is drawn.
  *
- * Agent mascots: each player carries `agents` robots in the state, and this
- * scene gives every avatar a `MascotTrain` that draws them and walks them
- * along their owner's path. They are decoration and nothing else: they have
+ * Agent mascots: each player carries in the state how many mascots they have
+ * and what they look like (`agents` and `agentType`), and this scene gives
+ * every avatar a `MascotTrain` that draws that many of that type and walks
+ * them along their owner's path. They are decoration and nothing else: they have
  * no physics body, no name and no entry in any list, so nothing here — seats,
  * doors, bubbles, chat — ever asks about them.
  *
@@ -105,6 +129,19 @@ export class OfficeScene extends Phaser.Scene {
   private unbindRoom: Array<() => void> = []
   private offRoom?: () => void
   private offChat?: () => void
+  private offWave?: () => void
+  /** Walkable grid of this map, read off it once in `create`. */
+  private grid?: Grid
+  /** Waypoints left of the walk under way, and what it is walking towards. */
+  private walk?: {
+    points: Point[]
+    /** sessionId being walked to, `''` for a plain point. */
+    follow: string
+    /** Called once, on arriving. */
+    onArrive?: () => void
+    /** Where the body was when it was last seen to be making progress. */
+    lastAt: { x: number; y: number; time: number }
+  }
   private lastSent: Sent = { x: NaN, y: NaN, dir: 'down', moving: false, at: 0 }
   private debug: boolean
   /** True while crossing a door: no other one fires and nobody moves. */
@@ -165,6 +202,13 @@ export class OfficeScene extends Phaser.Scene {
       sit: keyboard.addKey(SIT_KEY),
     }
     this.seatHint = new SeatHint(this)
+    this.grid = buildGrid(this.map)
+
+    // A click on the world picks whoever is under it (and a click on nothing
+    // puts the card away).
+    this.input.on(Phaser.Input.Events.POINTER_DOWN, (pointer: Phaser.Input.Pointer) => {
+      this.pickAt(pointer.worldX, pointer.worldY)
+    })
 
     this.offRoom = this.connection.on('room', (room) => this.bindRoom(room))
     if (this.connection.room) this.bindRoom(this.connection.room)
@@ -174,9 +218,16 @@ export class OfficeScene extends Phaser.Scene {
     this.offChat = this.connection.on('chat', (message) =>
       this.avatars.get(message.from)?.say(message.text),
     )
+    // Somebody waved at me: it rises over their head, wherever in the world
+    // they are, and the notice says who in case they are off screen.
+    this.offWave = this.connection.on('wave', (wave) => {
+      this.avatars.get(wave.from)?.emote()
+      toast(`${wave.name} waved at you`)
+    })
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.offRoom?.()
       this.offChat?.()
+      this.offWave?.()
       this.seatHint?.destroy()
       this.seatHint = undefined
       this.clearRoom()
@@ -199,6 +250,149 @@ export class OfficeScene extends Phaser.Scene {
     for (const area of this.bubbleAreas.values()) area.interpolate(delta)
   }
 
+  /**
+   * Clicking somebody picks them out. It is hit-tested here rather than by
+   * making every avatar an input object: there are only a handful of them, the
+   * test is a distance check, and this way an avatar never has to remember to
+   * register or release itself.
+   */
+  private pickAt(worldX: number, worldY: number) {
+    let best: { sessionId: string; distance: number } | undefined
+    for (const [sessionId, avatar] of this.avatars) {
+      if (avatar.isMe) continue
+      // Measured against the middle of the body, not its top.
+      const distance = Math.hypot(avatar.x - worldX, avatar.y - HEAD_HEIGHT_PX / 2 - worldY)
+      if (distance <= PICK_RADIUS_PX && (!best || distance < best.distance)) {
+        best = { sessionId, distance }
+      }
+    }
+    if (best) selectPerson(best.sessionId)
+    else clearSelection()
+  }
+
+  /**
+   * Where somebody is on screen, in pixels inside the game container, so the
+   * card that floats over them can follow while both of you walk.
+   *
+   * `headY` is the top of their head and `footY` the ground they stand on, so
+   * the card can sit above them and drop below when there is no room.
+   */
+  anchorOf(sessionId: string): { x: number; headY: number; footY: number } | undefined {
+    const avatar = this.avatars.get(sessionId)
+    const camera = this.cameras?.main
+    if (!avatar || !camera) return undefined
+    const view = camera.worldView
+    return {
+      x: (avatar.x - view.x) * camera.zoom,
+      headY: (avatar.y - HEAD_HEIGHT_PX - view.y) * camera.zoom,
+      footY: (avatar.y + BODY.height - view.y) * camera.zoom,
+    }
+  }
+
+  /** Is that person still in this world? The card closes when they are not. */
+  hasPerson(sessionId: string): boolean {
+    return this.avatars.has(sessionId)
+  }
+
+  /** The centre of my body, which is what the grid is addressed in. */
+  private myCentre(): Point {
+    const body = this.me!.body as Phaser.Physics.Arcade.Body
+    return { x: body.center.x, y: body.center.y }
+  }
+
+  /**
+   * Walks me over to somebody and, if asked, does something on arrival.
+   *
+   * It stops `ARRIVE_NEAR_PX` short of them: that is inside the bubble radius,
+   * so the conversation opens by itself, without ending up standing on them.
+   * Returns false when there is no way through, which the caller says out loud
+   * rather than setting off into a wall.
+   */
+  walkTo(sessionId: string, onArrive?: () => void): boolean {
+    const target = this.avatars.get(sessionId)
+    if (!this.me || !this.grid || !target || target.isMe) return false
+    // Sitting down has to end before walking anywhere.
+    if (this.mySeatId !== '') this.stand()
+    const body = target.body as Phaser.Physics.Arcade.Body | undefined
+    const to = body ? { x: body.center.x, y: body.center.y } : { x: target.x, y: target.y }
+    const points = findPath(this.grid, this.myCentre(), to)
+    if (!points) return false
+    this.walk = {
+      points,
+      follow: sessionId,
+      onArrive,
+      lastAt: { ...this.myCentre(), time: this.time.now },
+    }
+    return true
+  }
+
+  /** Abandons the walk under way, if any. Its arrival callback does not run. */
+  cancelWalk() {
+    this.walk = undefined
+  }
+
+  /** Is a walk under way? The card's buttons read this to show their state. */
+  get walking(): boolean {
+    return this.walk !== undefined
+  }
+
+  /**
+   * Steers along the current path. Returns the direction to move in, or
+   * `undefined` when there is nothing left to walk (arrived, gave up, or no
+   * walk at all) - the caller then falls back to the keys.
+   */
+  private steer(time: number): { dx: number; dy: number } | undefined {
+    const walk = this.walk
+    if (!walk) return undefined
+    const here = this.myCentre()
+
+    // Close enough to whoever is being followed: done, wherever the path had
+    // left to run. They may well have walked towards me meanwhile.
+    const target = walk.follow ? this.avatars.get(walk.follow) : undefined
+    if (walk.follow && !target) {
+      // They left the world while I was on my way.
+      this.walk = undefined
+      return undefined
+    }
+    if (target) {
+      const body = target.body as Phaser.Physics.Arcade.Body | undefined
+      const at = body ? { x: body.center.x, y: body.center.y } : { x: target.x, y: target.y }
+      if (Math.hypot(at.x - here.x, at.y - here.y) <= ARRIVE_NEAR_PX) {
+        const done = walk.onArrive
+        this.walk = undefined
+        done?.()
+        return undefined
+      }
+    }
+
+    // Drop every waypoint already reached.
+    while (
+      walk.points.length > 0 &&
+      Math.hypot(walk.points[0].x - here.x, walk.points[0].y - here.y) <= WAYPOINT_REACHED_PX
+    ) {
+      walk.points.shift()
+    }
+    if (walk.points.length === 0) {
+      const done = walk.onArrive
+      this.walk = undefined
+      done?.()
+      return undefined
+    }
+
+    // Pressed against something the grid does not know about (another avatar
+    // in a doorway): give up rather than lean on it for ever.
+    if (Math.hypot(here.x - walk.lastAt.x, here.y - walk.lastAt.y) > 2) {
+      walk.lastAt = { ...here, time }
+    } else if (time - walk.lastAt.time > WALK_STUCK_MS) {
+      this.walk = undefined
+      toast('Could not get there')
+      return undefined
+    }
+
+    const next = walk.points[0]
+    return { dx: next.x - here.x, dy: next.y - here.y }
+  }
+
   private moveMe(time: number) {
     const me = this.me!
     const body = me.body as Phaser.Physics.Arcade.Body
@@ -210,8 +404,19 @@ export class OfficeScene extends Phaser.Scene {
     // With the focus in a text field the keys do not move the avatar.
     const typing = isTyping()
     const down = (keys: Phaser.Input.Keyboard.Key[]) => !typing && keys.some((k) => k.isDown)
-    const dx = (down(this.keys.right) ? 1 : 0) - (down(this.keys.left) ? 1 : 0)
-    const dy = (down(this.keys.down) ? 1 : 0) - (down(this.keys.up) ? 1 : 0)
+    let dx = (down(this.keys.right) ? 1 : 0) - (down(this.keys.left) ? 1 : 0)
+    let dy = (down(this.keys.down) ? 1 : 0) - (down(this.keys.up) ? 1 : 0)
+
+    // Taking hold of the keys cancels the walk: whoever grabs the controls is
+    // in charge, and an avatar that keeps wandering off is worse than none.
+    if (dx || dy) this.cancelWalk()
+    else {
+      const steer = this.steer(time)
+      if (steer) {
+        dx = steer.dx
+        dy = steer.dy
+      }
+    }
 
     if (this.mySeatId !== '') {
       // Sitting: the body stays in the chair and the movement keys are what
@@ -225,8 +430,13 @@ export class OfficeScene extends Phaser.Scene {
     if (dx || dy) {
       const length = Math.hypot(dx, dy)
       body.setVelocity((dx / length) * SPEED, (dy / length) * SPEED)
-      // Diagonally the horizontal axis wins when choosing the sprite's direction.
-      const dir: Direction = dx > 0 ? 'right' : dx < 0 ? 'left' : dy > 0 ? 'down' : 'up'
+      // Diagonally the horizontal axis wins when choosing the sprite's
+      // direction. With the keys dx and dy are 0 or +/-1, so this is exactly
+      // that; steering along a path they are raw distances, and the threshold
+      // stops a two-pixel sideways drift turning the avatar sideways while it
+      // walks straight up.
+      const hx = Math.abs(dx) >= Math.abs(dy) * 0.5 ? dx : 0
+      const dir: Direction = hx > 0 ? 'right' : hx < 0 ? 'left' : dy > 0 ? 'down' : 'up'
       me.playAnim('walk', dir)
     } else {
       body.setVelocity(0, 0)
@@ -297,6 +507,8 @@ export class OfficeScene extends Phaser.Scene {
     const taken = this.sitterAt(seat.name) !== undefined
     hint.show(seat, taken ? 'taken' : 'free')
     if (!taken && this.sitPressed()) {
+      // Sitting down ends a walk: it is a decision about where to be.
+      this.cancelWalk()
       const payload: SitPayload = { seat: seat.name }
       this.room?.send(Message.SIT, payload)
     }
@@ -372,6 +584,8 @@ export class OfficeScene extends Phaser.Scene {
     if (!world) return
     this.traveling = true
     this.doorArmed = false
+    // The path belonged to the world being left.
+    this.cancelWalk()
     const camera = this.cameras.main
     camera.fadeOut(FADE_MS)
     // While travelling, the room being left must not replace this scene: the
@@ -413,6 +627,12 @@ export class OfficeScene extends Phaser.Scene {
           $.listen(player, 'appearance', (raw) => avatar.setAppearance(raw)),
           $.listen(player, 'agents', (agents) =>
             this.mascots.get(sessionId)?.setCount(agents, avatar),
+          ),
+          // Everyone's mascots are drawn as their owner chose, mine included:
+          // the type is in the state beside the count, and it is read the same
+          // way for every player in the room.
+          $.listen(player, 'agentType', (type) =>
+            this.mascots.get(sessionId)?.setType(type, avatar),
           ),
           $.listen(player, 'bubbleId', () => this.refreshBubbles()),
         )
@@ -519,7 +739,7 @@ export class OfficeScene extends Phaser.Scene {
     avatar.setAway(player.away)
     this.syncAnim(avatar, player)
     this.avatars.set(sessionId, avatar)
-    this.mascots.set(sessionId, new MascotTrain(this, avatar, player.agents))
+    this.mascots.set(sessionId, new MascotTrain(this, avatar, player.agents, player.agentType))
     this.refreshBubbles()
 
     if (isMe) {

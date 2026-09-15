@@ -6,7 +6,7 @@ import { OVERLAY_DEPTH } from './officeMap'
 export const SIT_KEY = 'E'
 
 const FREE = { text: `Press ${SIT_KEY} to sit`, background: '#4c1d95dd', color: '#ede9fe' }
-const TAKEN = { text: 'Seat taken', background: '#1b1f2add', color: '#9aa3b5' }
+const TAKEN = { text: 'Seat taken', background: '#0b0b0ee0', color: '#a1a1aa' }
 
 /** What the person standing at a seat can do with it. */
 export type SeatOffer = 'free' | 'taken'

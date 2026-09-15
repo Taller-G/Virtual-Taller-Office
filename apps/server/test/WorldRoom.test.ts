@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { boot, type ColyseusTestServer } from '@colyseus/testing'
 import { CloseCode, type Room as SdkRoom } from '@colyseus/sdk'
 import {
+  DEFAULT_AGENT_TYPE,
   DEFAULT_AVATAR,
   DEFAULT_WORLD_ID,
   MAX_AGENTS,
@@ -250,6 +251,49 @@ describe('A world\'s room: connect / disconnect cycle', () => {
       1_000,
       'the observer sees the agents',
     )
+  })
+
+  it('joins with the chosen agent type, and everyone sees it', async () => {
+    await createRoom()
+    const observer = await connect()
+    const client = await connect({ name: 'Ana', agents: 3, agentType: 'duck' })
+    await client.waitForInitialState()
+
+    expect(room.state.players.get(client.sessionId)?.agentType).toBe('duck')
+    await waitFor(
+      () => observer.state.players.get(client.sessionId)?.agentType === 'duck',
+      1_000,
+      'the observer sees the agent type',
+    )
+  })
+
+  it('a join without an agent type enters with the default robot', async () => {
+    await createRoom()
+    const client = await connect({ name: 'Ana', agents: 2 })
+    await client.waitForInitialState()
+
+    expect(room.state.players.get(client.sessionId)?.agentType).toBe(DEFAULT_AGENT_TYPE)
+  })
+
+  it('an invalid agent type falls back to the robot and the player enters normally', async () => {
+    await createRoom()
+    // An unknown id, an empty string, and things that are not strings at all.
+    const cases: unknown[] = ['dragon', '', 42, null, { id: 'duck' }]
+    const joined = []
+    for (const sent of cases) {
+      joined.push(await connect({ name: 'Ana', agents: 2, agentType: sent as never }))
+    }
+    await joined[joined.length - 1].waitForInitialState()
+
+    for (const client of joined) {
+      const player = room.state.players.get(client.sessionId)
+      expect(player).toBeDefined()
+      expect(player?.agentType).toBe(DEFAULT_AGENT_TYPE)
+      // Entering normally is the point: a junk type is not a rejected join.
+      expect(player?.name).toBe('Ana')
+      expect(player?.agents).toBe(2)
+      expect(player?.connected).toBe(true)
+    }
   })
 
   it('a join without an agent count enters with none', async () => {

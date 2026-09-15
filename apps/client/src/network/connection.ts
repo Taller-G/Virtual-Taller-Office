@@ -15,6 +15,8 @@ import {
   type RoomInfoPayload,
   type SetAwayPayload,
   type SetNamePayload,
+  type WavePayload,
+  type WaveSendPayload,
 } from '@vto/shared'
 import type { WorldRoom } from '@vto/server/rooms/WorldRoom'
 
@@ -40,6 +42,8 @@ export interface ConnectionEvents {
   chat: (message: ChatMessagePayload) => void
   /** The server did not accept one of my messages (`id` to recognise it). */
   chatError: (error: ChatErrorPayload) => void
+  /** Somebody waved at me. */
+  wave: (wave: WavePayload) => void
   /** I changed world: the room in `room` is already the new world's. */
   world: (worldId: string) => void
 }
@@ -82,6 +86,7 @@ export class OfficeConnection {
     roomInfo: new Set(),
     chat: new Set(),
     chatError: new Set(),
+    wave: new Set(),
     world: new Set(),
   }
   private rejoinAttempts = 0
@@ -144,6 +149,18 @@ export class OfficeConnection {
     const payload: ChatSendPayload = { id, text: valid.text }
     this.room.send(Message.CHAT_SEND, payload)
     return { ok: true, id, text: valid.text }
+  }
+
+  /**
+   * Waves at somebody. Fire and forget: the server answers a wave it will not
+   * relay with silence, so the cooldown below is what the button leans on -
+   * the server holds the same one as the authority.
+   */
+  sendWave(to: string): boolean {
+    if (!this.room || !to || to === this.room.sessionId) return false
+    const payload: WaveSendPayload = { to }
+    this.room.send(Message.WAVE_SEND, payload)
+    return true
   }
 
   /** Sets or clears my "away" state by hand. */
@@ -263,6 +280,7 @@ export class OfficeConnection {
     room.onMessage(Message.ROOM_INFO, (info) => this.emit('roomInfo', info))
     room.onMessage(Message.CHAT_MESSAGE, (message) => this.emit('chat', message))
     room.onMessage(Message.CHAT_ERROR, (error) => this.emit('chatError', error))
+    room.onMessage(Message.WAVE, (wave) => this.emit('wave', wave))
 
     room.onDrop((code, reason) => {
       if (this.room !== room) return

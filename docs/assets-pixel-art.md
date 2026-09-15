@@ -87,8 +87,8 @@ declared there, not wired into each renderer.
 | top         | `<base>/top.png`              | `topColor`   |
 | facial hair | `<base>/facial-<style>.png`   | `hairColor`  |
 | hair        | `<base>/hair-<style>.png`     | `hairColor`  |
-| glasses     | `accessories/<glasses>.png`   | —            |
-| hat         | `accessories/<hat>.png`       | —            |
+| glasses     | `<base>/<glasses>.png`        | —            |
+| hat         | `<base>/<hat>.png`            | —            |
 
 Everything but the body is greyscale so Phaser's `setTint()` can colour it, and each greyscale
 sheet is stretched so its brightest shade is white: a tint multiplies the texel, so a layer that
@@ -104,7 +104,31 @@ The tools that write these sheets are in `tools/`, and they run in this order:
    smaller style would leave an empty outline over a hole.
 3. `gen-facial-hair.py` — draws stubble, moustache and beard, hung off the face it measures in
    each frame.
-4. `gen-accessories.py` — draws the hats and glasses, hung off the head of a reference avatar.
+4. `gen-accessories.py` — draws the caps, beanies and glasses, cut to the head it measures in each
+   frame. Accessories are per silhouette like every other layer: adam's crown is a drawn row higher
+   than ash's, lucy's and nancy's, so one shared sheet cannot fit all four. A hat's crown is cut
+   from the _envelope_ — the head together with all five hair styles — which is what lets one hat
+   sheet per base hide the bun as well as it sits on short hair, and the glasses land on the eye
+   pixels rather than on a fixed offset, so they follow the head through the walk cycle.
 
 `tools/avatar_frames.py` holds what all four agree on: the frame size, the 2x grid and which way
-the character faces in each frame.
+the character faces in each frame; `tools/avatar_head.py` holds the measurements the accessories
+need (head top and width per row, the hair envelope, the eyes).
+
+`gen-accessories.py` checks its own output before it finishes: every silhouette against every hair
+style on all 52 frames, asserting that no hair escapes over or through a crown, that the crown
+never drifts off the head between frames, and that the glasses sit on the measured eye row and are
+never drawn on a face turned away. It exits non-zero if any of that stops holding.
+
+## Looking at the result
+
+`tools/contact-sheet.py` composes avatars into a labelled grid, in the same layer order
+`appearanceLayers()` defines, so a change can be checked by looking at it:
+
+```sh
+# every hair style under each hat, on one silhouette
+python3 tools/contact-sheet.py --base ash --rows hairStyle --cols hat --frames 18 -o /tmp/hats.png
+# one silhouette walking in all four directions, with cap and glasses
+python3 tools/contact-sheet.py --base ash --hat cap --glasses glasses-round \
+    --rows dir --frames walk -o /tmp/walk.png
+```

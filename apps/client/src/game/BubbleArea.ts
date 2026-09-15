@@ -2,8 +2,8 @@ import Phaser from 'phaser'
 import type { Bubble } from '@vto/shared'
 
 /** Colours of the area: mine highlighted, the others barely visible. */
-const MINE = { fill: 0x1b6ef3, fillAlpha: 0.16, line: 0x6ea8ff, lineAlpha: 0.9 }
-const OTHER = { fill: 0x9aa3b5, fillAlpha: 0.06, line: 0x9aa3b5, lineAlpha: 0.35 }
+const MINE = { fill: 0x5b5bd6, fillAlpha: 0.18, line: 0xa5a6f6, lineAlpha: 0.9 }
+const OTHER = { fill: 0xa1a1aa, fillAlpha: 0.07, line: 0xa1a1aa, lineAlpha: 0.35 }
 /** Smoothing of the centre, the same as the avatars' (ms). */
 const LERP_TAU_MS = 80
 /** Further than this, the centre snaps instead of sliding. */
@@ -32,8 +32,8 @@ export class BubbleArea extends Phaser.GameObjects.Graphics {
       .text(bubble.x, bubble.y - radius - 2, '', {
         fontFamily: 'system-ui, sans-serif',
         fontSize: '7px',
-        color: '#e8ecf3',
-        backgroundColor: '#1b6ef3cc',
+        color: '#f4f4f5',
+        backgroundColor: '#5b5bd6e0',
         padding: { x: 2, y: 1 },
       })
       .setResolution(4)

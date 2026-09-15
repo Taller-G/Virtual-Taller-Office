@@ -1,10 +1,16 @@
 import Phaser from 'phaser'
 import { MAX_AGENTS, type Direction } from '@vto/shared'
 import { BODY } from './Avatar'
-import { MASCOT_TEXTURE, mascotAnimKey } from './mascotAnims'
+import { drawableMascotType, mascotAnimKey, mascotTextureKey } from './mascotAnims'
 
 /**
- * The robots that walk behind one player.
+ * The mascots that walk behind one player.
+ *
+ * What they look like is their owner's choice (see `AGENT_TYPES`): the train
+ * draws every one of them with that type's sheet and nothing else about it
+ * changes — following, trailing, idling while their player is away, the depth
+ * they are drawn at and the fact that they collide with nothing are the same
+ * for a robot, a duck and a cat.
  *
  * They follow the **owner's path**, not the owner: the train keeps a trail of
  * breadcrumbs of where their player has been and puts each robot at a fixed
@@ -76,32 +82,77 @@ export class MascotTrain {
   private robots: Robot[] = []
   /** Breadcrumbs of the owner's path, newest first. */
   private trail: Point[] = []
+  /** How many the owner asked for, before the sheets have a say. */
+  private wantedCount = 0
+  /** The type the owner chose, which is not always the one that can be drawn. */
+  private wantedType: string
+  /**
+   * The type actually on screen: the chosen one, the default robot if its
+   * sheet is missing, or nothing at all if even that one is (see
+   * `drawableMascotType`).
+   */
+  private drawn?: string
 
-  constructor(scene: Phaser.Scene, owner: MascotOwner, count: number) {
+  constructor(scene: Phaser.Scene, owner: MascotOwner, count: number, type: string) {
     this.scene = scene
     this.trail = [{ x: owner.x, y: owner.y }]
+    this.wantedType = type
     this.setCount(count, owner)
   }
 
-  /** How many robots are on screen right now. */
+  /** How many mascots are on screen right now. */
   get count(): number {
     return this.robots.length
   }
 
+  /** What they are being drawn as, or `undefined` while there are none. */
+  get type(): string | undefined {
+    return this.drawn
+  }
+
   /**
-   * Grows or shrinks the train to `count` robots. A new one appears at its
+   * Grows or shrinks the train to `count` mascots. A new one appears at its
    * place in the line rather than flying in from wherever the last one was.
    */
   setCount(count: number, owner: MascotOwner): void {
-    const wanted = Math.min(MAX_AGENTS, Math.max(0, Math.floor(count)))
-    // Without the sheet there are no robots: the office runs on regardless.
-    const available = this.scene.textures.exists(MASCOT_TEXTURE) ? wanted : 0
+    this.wantedCount = Math.min(MAX_AGENTS, Math.max(0, Math.floor(count)))
+    this.apply(owner)
+  }
+
+  /**
+   * Changes what they look like, keeping them where they are: the line does
+   * not reassemble, each mascot takes the new sheet where it stands.
+   */
+  setType(type: string, owner: MascotOwner): void {
+    this.wantedType = type
+    this.apply(owner)
+  }
+
+  /**
+   * Brings the sprites in line with the wanted count and type. Without a
+   * drawable sheet there are no mascots at all: the office runs on regardless.
+   */
+  private apply(owner: MascotOwner): void {
+    const drawn = drawableMascotType(this.scene, this.wantedType)
+    const available = drawn ? this.wantedCount : 0
+    if (drawn !== this.drawn) {
+      this.drawn = drawn
+      // The ones already walking swap sheets on the spot; `play` notices the
+      // animation key changed with them and starts the new one.
+      if (drawn) {
+        const texture = mascotTextureKey(drawn)
+        for (const robot of this.robots) {
+          robot.sprite.setTexture(texture)
+          this.play(robot, robot.moving ? 'walk' : 'idle', robot.dir)
+        }
+      }
+    }
 
     while (this.robots.length > available) this.robots.pop()?.sprite.destroy()
     while (this.robots.length < available) {
       const place = this.placeFor(this.robots.length, owner)
       const sprite = this.scene.add
-        .sprite(place.x, place.y + BODY.height, MASCOT_TEXTURE)
+        .sprite(place.x, place.y + BODY.height, mascotTextureKey(this.drawn!))
         .setOrigin(0.5, 1)
       const robot: Robot = { sprite, dir: owner.dir, moving: false }
       this.robots.push(robot)
@@ -164,7 +215,7 @@ export class MascotTrain {
     }
   }
 
-  /** Every robot goes, with no trace left in the scene. */
+  /** Every mascot goes, with no trace left in the scene. */
   destroy(): void {
     for (const robot of this.robots) robot.sprite.destroy()
     this.robots = []
@@ -254,11 +305,14 @@ export class MascotTrain {
   // -------------------------------------------------------------------------
 
   private play(robot: Robot, state: 'idle' | 'walk', dir: Direction): void {
-    const moving = state === 'walk'
-    if (robot.moving === moving && robot.dir === dir && robot.sprite.anims.currentAnim) return
-    robot.moving = moving
+    // The key carries the type as well as the state and the direction, so
+    // comparing it is also what notices that the owner changed their mascots
+    // for ducks while these ones were standing still.
+    const key = mascotAnimKey(this.drawn!, state, dir)
+    if (robot.sprite.anims.currentAnim?.key === key) return
+    robot.moving = state === 'walk'
     robot.dir = dir
-    robot.sprite.play(mascotAnimKey(state, dir), true)
+    robot.sprite.play(key, true)
   }
 
   /**
@@ -270,7 +324,7 @@ export class MascotTrain {
     robot.sprite.setDepth(robot.sprite.y)
   }
 
-  /** The robots fade with their player: dimmed while away, ghostly if offline. */
+  /** The mascots fade with their player: dimmed while away, ghostly if offline. */
   private applyAlpha(owner: MascotOwner): void {
     const alpha = !owner.connected ? 0.35 : owner.away ? 0.6 : 1
     for (const robot of this.robots) robot.sprite.setAlpha(alpha)

@@ -1,4 +1,5 @@
 import { schema, t, type SchemaType } from '@colyseus/schema'
+import { DEFAULT_AGENT_TYPE } from './agents'
 
 /**
  * Synchronised state of a player inside the room.
@@ -29,6 +30,14 @@ export const Player = schema(
      * knows nothing about agents join a room that does.
      */
     agents: t.number().default(0),
+    /**
+     * What those mascots look like: an id from `AGENT_TYPES`, the same for all
+     * of this player's agents. The server validates it on joining (see
+     * `sanitizeAgentType`); `default` is the classic robot, which is what a
+     * client that knows nothing about types draws and what an older client
+     * joining a newer room is given.
+     */
+    agentType: t.string().default(DEFAULT_AGENT_TYPE),
     x: t.number().default(0),
     y: t.number().default(0),
     /** Which way it faces: 'down' | 'up' | 'left' | 'right'. */

@@ -20,7 +20,7 @@ export function textureKey(avatar: string): string {
 
 /**
  * Texture key for a layer of a composed avatar.
- * Examples: `layer-adam-body-default`, `layer-ash-hair`, `layer-acc-beanie`.
+ * Examples: `layer-adam-body-default`, `layer-ash-hair`, `layer-ash-beanie`.
  */
 export function layerTextureKey(group: string, part: string, variant?: string): string {
   return variant ? `layer-${group}-${part}-${variant}` : `layer-${group}-${part}`
@@ -122,6 +122,7 @@ export function createAvatarAnims(scene: Phaser.Scene) {
   }
 
   // Layers: body (per tone), hair, top, accessories — the catalogue's list.
+  // All of them are cut per silhouette, accessories included.
   for (const sheet of allLayerSheets()) {
     registerLayerAnims(scene, layerTextureKey(sheet.group, sheet.part, sheet.variant))
   }

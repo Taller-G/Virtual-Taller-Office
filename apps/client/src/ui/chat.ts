@@ -66,6 +66,30 @@ const HINT_KEYS: { keys: string[]; does: string }[] = [
 const time = new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit' })
 
 /**
+ * Puts the keyboard in the chat field as soon as there is a conversation to
+ * type into.
+ *
+ * It waits because the two things that lead here - walking up to somebody, and
+ * the card's Chat button - both land before the server has said the bubble
+ * exists, and the field stays disabled until it has. It gives up quietly after
+ * `timeoutMs`: arriving and finding no conversation is an ordinary outcome
+ * (they walked off), not an error to report.
+ */
+export function focusChatInput(timeoutMs = 4000) {
+  const input = document.getElementById('chat-input') as HTMLInputElement | null
+  if (!input) return
+  const deadline = Date.now() + timeoutMs
+  const attempt = () => {
+    if (!input.disabled) {
+      input.focus()
+      return
+    }
+    if (Date.now() < deadline) window.setTimeout(attempt, 100)
+  }
+  attempt()
+}
+
+/**
  * Is the keyboard on the game, that is, is nothing focused? Tab is the
  * browser's way of walking the controls, so it is only taken over from here;
  * from a button or any other control it keeps moving the focus as always.
@@ -466,13 +490,16 @@ export function mountChat(connection: OfficeConnection) {
     // If something is already being typed in a field (the chat's, my name,
     // the entry screen), the key belongs to that field, not to this.
     if (isTyping()) return
-    if (event.key === 'Tab') {
-      // Shift+Tab and the browser's own combinations are left alone, and the
-      // shortcut is only taken from the game: from a control, Tab goes on
-      // walking the panel as it always has.
-      if (event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return
-      if (!onGame()) return
+    // Shift+Tab and the browser's own combinations are left alone.
+    if (event.key === 'Tab' && (event.shiftKey || event.ctrlKey || event.altKey || event.metaKey)) {
+      return
     }
+    // Neither key is taken from a control that has the focus: Tab is the
+    // browser's way of walking them and Enter is how a button is pressed, so
+    // both are only borrowed from the one place that has no controls - the
+    // game. Without this, Enter on any button (the card's, the away toggle)
+    // would fire it and steal the keyboard for the chat field at once.
+    if (!onGame()) return
     if (!canChat()) return
     event.preventDefault()
     inputEl.focus()

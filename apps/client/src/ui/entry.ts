@@ -1,7 +1,9 @@
 import {
+  AGENT_TYPES,
   APPEARANCE_BASES,
   AVATARS,
   DEFAULT_AGENTS,
+  DEFAULT_AGENT_TYPE,
   DEFAULT_APPEARANCE,
   DEFAULT_AVATAR,
   FACIAL_HAIR_OPTIONS,
@@ -22,6 +24,7 @@ import {
   isAvatarId,
   parseAppearance,
   sanitizeAgentCount,
+  sanitizeAgentType,
   sanitizeName,
   serializeAppearance,
   type Appearance,
@@ -32,6 +35,7 @@ import {
 } from '@vto/shared'
 import { avatarPreview } from './avatarPreview'
 import { avatarThumb } from './avatarThumb'
+import { mascotThumb } from './mascotThumb'
 
 export interface Identity {
   name: string
@@ -45,6 +49,12 @@ export interface Identity {
    * `JoinOptions`) and through every door after that.
    */
   agents: number
+  /**
+   * What those agents look like: an id from `AGENT_TYPES`. One choice covers
+   * all of them, and like the count it travels to the server on joining and
+   * through every door after that.
+   */
+  agentType: string
 }
 
 const STORAGE_KEY = 'vto.identity'
@@ -62,8 +72,11 @@ function loadIdentity(): Partial<Identity> {
           ? parsed.appearance
           : undefined,
       // An identity stored before there were agents has no count: it reads as
-      // none, like anything else unusable.
+      // none, like anything else unusable. One stored before they could be
+      // chosen has no type either, and reads as the classic robot — which is
+      // exactly what it was drawn as back then.
       agents: sanitizeAgentCount(parsed.agents),
+      agentType: sanitizeAgentType(parsed.agentType),
     }
   } catch {
     return {}
@@ -160,11 +173,12 @@ function optionRow<T extends string>(
 // ---------------------------------------------------------------------------
 
 /**
- * Entry screen: visible name, how many agents walk with you, and choice of
- * avatar.
+ * Entry screen: visible name, how many agents walk with you and what they look
+ * like, and choice of avatar.
  *
- * The agents stepper sits on its own, above the avatar group and outside it:
- * it applies whichever tab is open, and it is not part of the look.
+ * The agents block sits on its own, above the avatar group and outside it: the
+ * count and the type apply whichever tab is open, and neither is part of one's
+ * own look.
  *
  * Two modes (tabs) for the avatar:
  * - **Presets**: the 11 avatars in the catalogue (single-sheet), as before.
@@ -341,6 +355,34 @@ export function showEntry(): Promise<Identity> {
   agentsMore.addEventListener('click', () => setAgents(agents + 1))
   setAgents(agents)
 
+  // -- Agent type picker --
+  // Beside the stepper, one thumbnail per type so the choice is made by
+  // looking rather than by reading. It stays enabled at a count of zero: one
+  // picks what the agents will be and then how many, as often as the other way
+  // round, and a control that greys itself out reads as broken.
+  let agentType = remembered.agentType ?? DEFAULT_AGENT_TYPE
+  const agentTypes = form.querySelector<HTMLElement>('#entry-agent-types')!
+  agentTypes.replaceChildren()
+  for (const { id, label } of AGENT_TYPES) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'mascot-pick'
+    button.dataset.agentType = id
+    button.title = label
+    button.setAttribute('aria-pressed', String(id === agentType))
+    button.append(
+      mascotThumb(id, 2),
+      Object.assign(document.createElement('span'), { textContent: label }),
+    )
+    button.addEventListener('click', () => {
+      agentType = id
+      for (const other of agentTypes.querySelectorAll<HTMLButtonElement>('.mascot-pick')) {
+        other.setAttribute('aria-pressed', String(other.dataset.agentType === agentType))
+      }
+    })
+    agentTypes.append(button)
+  }
+
   // -- Submit --
   const refreshSubmit = () => {
     submit.disabled = sanitizeName(nameInput.value) === undefined
@@ -363,6 +405,7 @@ export function showEntry(): Promise<Identity> {
           avatar: mode === 'preset' ? selectedPreset : DEFAULT_AVATAR,
           appearance: mode === 'custom' ? serializeAppearance(appearance) : '',
           agents,
+          agentType,
         }
         saveIdentity(identity)
         overlay.hidden = true

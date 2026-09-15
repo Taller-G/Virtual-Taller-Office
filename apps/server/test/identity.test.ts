@@ -1,9 +1,15 @@
+import { existsSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  AGENT_TYPES,
+  AGENT_TYPE_IDS,
   APPEARANCE_BASES,
   AVATAR_IDS,
   AVATARS,
   DEFAULT_AGENTS,
+  DEFAULT_AGENT_TYPE,
   DEFAULT_APPEARANCE,
   DEFAULT_AVATAR,
   FACIAL_HAIR_OPTIONS,
@@ -17,6 +23,7 @@ import {
   NAME_MAX_LENGTH,
   parseAppearance,
   sanitizeAgentCount,
+  sanitizeAgentType,
   sanitizeAppearance,
   sanitizeAvatar,
   sanitizeName,
@@ -151,8 +158,8 @@ describe('appearance layers', () => {
       'adam/top.png',
       'adam/facial-beard.png',
       'adam/hair-long.png',
-      'accessories/glasses-round.png',
-      'accessories/cap.png',
+      'adam/glasses-round.png',
+      'adam/cap.png',
     ])
   })
 
@@ -186,6 +193,12 @@ describe('appearance layers', () => {
       for (const style of HAIR_STYLES) expect(sheets).toContain(`${base}/hair-${style}.png`)
       expect(sheets).toContain(`${base}/pants.png`)
       expect(sheets).toContain(`${base}/shoes.png`)
+      // Accessories are cut per silhouette too: a hat is measured against the
+      // skull it sits on, so there is no sheet shared between the four bases.
+      expect(sheets).toContain(`${base}/cap.png`)
+      expect(sheets).toContain(`${base}/beanie.png`)
+      expect(sheets).toContain(`${base}/glasses-round.png`)
+      expect(sheets).toContain(`${base}/glasses-square.png`)
     }
     const used = appearanceLayers({
       ...DEFAULT_APPEARANCE,
@@ -195,6 +208,21 @@ describe('appearance layers', () => {
       glasses: 'glasses-square',
     })
     for (const layer of used) expect(sheets).toContain(layerSheetFile(layer))
+  })
+
+  it('has a file on disk for every sheet it preloads', () => {
+    // The catalogue names the files and nothing checks the name against the
+    // folder, so a layer that is renamed or moved — as the accessories were,
+    // from one shared sheet to one per silhouette — fails silently: Phaser
+    // skips the texture and the part just never appears on the avatar.
+    const layers = resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      '../../client/public/assets/avatars/layers',
+    )
+    const missing = allLayerSheets()
+      .map(layerSheetFile)
+      .filter((file) => !existsSync(resolve(layers, file)))
+    expect(missing).toEqual([])
   })
 })
 
@@ -223,5 +251,35 @@ describe('sanitizeAgentCount', () => {
     expect(sanitizeAgentCount(NaN)).toBe(DEFAULT_AGENTS)
     expect(sanitizeAgentCount(Infinity)).toBe(DEFAULT_AGENTS)
     expect(sanitizeAgentCount({ agents: 3 })).toBe(DEFAULT_AGENTS)
+  })
+})
+
+describe('agent types', () => {
+  it('offers exactly four types with unique ids, the robot first', () => {
+    expect(AGENT_TYPES).toHaveLength(4)
+    expect(new Set(AGENT_TYPE_IDS).size).toBe(4)
+    // The default is the look every identity from before the picker keeps.
+    expect(DEFAULT_AGENT_TYPE).toBe('robot')
+    expect(AGENT_TYPE_IDS).toContain(DEFAULT_AGENT_TYPE)
+  })
+
+  it('every type has a label to show in the picker', () => {
+    for (const type of AGENT_TYPES) expect(type.label.trim().length).toBeGreaterThan(0)
+  })
+
+  it('sanitizeAgentType accepts only ids from the catalogue', () => {
+    for (const id of AGENT_TYPE_IDS) expect(sanitizeAgentType(id)).toBe(id)
+  })
+
+  it('reads an unknown, empty or malformed type as the default robot', () => {
+    expect(sanitizeAgentType('dragon')).toBe(DEFAULT_AGENT_TYPE)
+    expect(sanitizeAgentType('')).toBe(DEFAULT_AGENT_TYPE)
+    expect(sanitizeAgentType('   ')).toBe(DEFAULT_AGENT_TYPE)
+    expect(sanitizeAgentType('Duck')).toBe(DEFAULT_AGENT_TYPE)
+    expect(sanitizeAgentType(undefined)).toBe(DEFAULT_AGENT_TYPE)
+    expect(sanitizeAgentType(null)).toBe(DEFAULT_AGENT_TYPE)
+    expect(sanitizeAgentType(3)).toBe(DEFAULT_AGENT_TYPE)
+    expect(sanitizeAgentType(['duck'])).toBe(DEFAULT_AGENT_TYPE)
+    expect(sanitizeAgentType({ agentType: 'duck' })).toBe(DEFAULT_AGENT_TYPE)
   })
 })

@@ -32,6 +32,14 @@ export const Message = {
   CHAT_MESSAGE: 'chat_message',
   /** Server -> sender: the message was not accepted (with the reason). */
   CHAT_ERROR: 'chat_error',
+  /**
+   * Client -> server: wave at somebody. Unlike chat it needs no bubble - a
+   * wave is how you get the attention of someone across the room, so it works
+   * at any distance, to anyone in the same world.
+   */
+  WAVE_SEND: 'wave_send',
+  /** Server -> the person waved at: somebody waved. */
+  WAVE: 'wave',
 } as const
 
 export type MessageType = (typeof Message)[keyof typeof Message]
@@ -64,6 +72,18 @@ export interface SetAwayPayload {
 export interface SitPayload {
   /** Name of the seat in the map (see `Seat`). */
   seat: string
+}
+
+export interface WaveSendPayload {
+  /** sessionId of whoever the wave is for. */
+  to: string
+}
+
+export interface WavePayload {
+  /** sessionId of whoever waved. */
+  from: string
+  /** Their visible name at the moment they waved. */
+  name: string
 }
 
 export interface ChatSendPayload {

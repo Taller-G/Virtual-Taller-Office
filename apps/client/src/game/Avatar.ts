@@ -119,9 +119,9 @@ export class Avatar extends Phaser.GameObjects.Container {
 
     // Ring (behind everything)
     this.ring = scene.add.graphics()
-    this.ring.fillStyle(0x1b6ef3, 0.28)
+    this.ring.fillStyle(0x5b5bd6, 0.3)
     this.ring.fillEllipse(0, feetY - 2, BODY.width + 6, 8)
-    this.ring.lineStyle(1, 0x6ea8ff, 0.9)
+    this.ring.lineStyle(1, 0xa5a6f6, 0.9)
     this.ring.strokeEllipse(0, feetY - 2, BODY.width + 6, 8)
     this.ring.setVisible(false)
 
@@ -130,8 +130,8 @@ export class Avatar extends Phaser.GameObjects.Container {
       .text(0, feetY - AVATAR_FRAME.height - 1, options.name, {
         fontFamily: 'system-ui, sans-serif',
         fontSize: '7px',
-        color: options.isMe ? '#ffffff' : '#e8ecf3',
-        backgroundColor: options.isMe ? '#1b6ef3cc' : '#000000aa',
+        color: options.isMe ? '#ffffff' : '#f4f4f5',
+        backgroundColor: options.isMe ? '#5b5bd6e0' : '#0b0b0ec4',
         padding: { x: 2, y: 1 },
       })
       .setResolution(4)
@@ -142,7 +142,7 @@ export class Avatar extends Phaser.GameObjects.Container {
       .text(0, this.label.y - this.label.height - 1, 'away', {
         fontFamily: 'system-ui, sans-serif',
         fontSize: '6px',
-        color: '#1b1f2a',
+        color: '#0b0b0e',
         backgroundColor: '#f5c451',
         padding: { x: 2, y: 1 },
       })
@@ -155,8 +155,8 @@ export class Avatar extends Phaser.GameObjects.Container {
       .text(0, 0, '', {
         fontFamily: 'system-ui, sans-serif',
         fontSize: '7px',
-        color: '#1b1f2a',
-        backgroundColor: '#f7f9fc',
+        color: '#0b0b0e',
+        backgroundColor: '#f4f4f5',
         align: 'center',
         padding: { x: 3, y: 2 },
         wordWrap: { width: SAY.width },
@@ -241,6 +241,38 @@ export class Avatar extends Phaser.GameObjects.Container {
   // -------------------------------------------------------------------------
   // Public API
   // -------------------------------------------------------------------------
+
+  /**
+   * A wave over the head: it rises and fades, and unlike `say` it does not
+   * take the balloon, so a wave can land on somebody who is mid-sentence
+   * without cutting them off.
+   *
+   * It is a `Text` created for the occasion and destroyed with the tween
+   * rather than a member of the container: waves are rare, and one that
+   * outlives its avatar (whoever waved walked out of the world) would have to
+   * be cleaned up in the avatar's teardown too.
+   */
+  emote(glyph = '\u{1F44B}') {
+    const top = this.badge.visible
+      ? this.badge.y - this.badge.height
+      : this.label.y - this.label.height
+    const text = this.scene.add
+      .text(this.x, this.y + top - 2, glyph, {
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: '12px',
+      })
+      .setResolution(4)
+      .setOrigin(0.5, 1)
+      .setDepth(this.depth + 1)
+    this.scene.tweens.add({
+      targets: text,
+      y: text.y - 14,
+      alpha: { from: 1, to: 0 },
+      ease: 'Quad.easeOut',
+      duration: 1100,
+      onComplete: () => text.destroy(),
+    })
+  }
 
   say(text: string) {
     const shown = text.length > SAY.maxChars ? `${text.slice(0, SAY.maxChars)}…` : text
