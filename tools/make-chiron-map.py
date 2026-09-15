@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -42,6 +43,12 @@ from chiron_tiles import (  # noqa: E402
     TILESET_IMAGE,
     TILESET_NAME,
     collides_tiles,
+)
+from tileset_pieces import (  # noqa: E402
+    blank_lines,
+    cut_sides,
+    ink_fraction,
+    sheet_rect,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -99,11 +106,25 @@ MARK_TILE = (4, 1)
 
 #: The six focus desks: left-hand column of each three-tile desk unit, and the
 #: rows their seats are on. Each unit draws its chair one tile above the seat
-#: and its desk on the two tiles below, so a bank occupies rows seat-1..seat+2
-#: and the gaps between units (cols 14 and 18) stay clear from the gallery all
-#: the way to the north wall: nobody sitting down blocks a way through.
+#: and its desk on the two tiles below, so a bank occupies rows seat-1..seat+2:
+#: the north bank fills rows 2-5 and the south bank rows 7-10.
+#:
+#: That leaves **row 6 empty from col 11 to col 21** — the one thing this alcove
+#: has to have. The desk area is nine rows deep and two banks of workstations
+#: want eight of them, so there is exactly one row to spend, and spending it
+#: between the banks rather than behind them is what decides whether crossing
+#: the desks means walking through the seats. It used to be spent behind: the
+#: only way east was along the row the south bank sits in, so three people at
+#: their desks were three people in the corridor.
+#:
+#: The gaps between the units (cols 14 and 18) run unbroken from the north wall
+#: to the gallery and cross that corridor, so every seat is a pocket you step
+#: into off a lane, and nobody sitting down is in anybody's way.
 DESK_COLS = (11, 15, 19)
-DESK_SEAT_ROWS = (4, 8)
+DESK_SEAT_ROWS = (3, 8)
+#: The lane the arrival hall's chevrons point down: the row that comes through
+#: the gap beside the stub wall and meets the corridor. Not the seat row.
+DESK_LANE_ROW = 7
 
 #: Ambient colour (#AARRGGBB). Low on purpose: floors and walls are already
 #: dark, so the veil only has to tone down the furniture, which comes from
@@ -221,7 +242,7 @@ def build_lights(firstgid: int) -> list[int]:
     for row in DESK_SEAT_ROWS:
         for col in DESK_COLS:
             pool(col, row - 1)
-    for col, row in [(5, 18), (15, 17), (26, 17)]:
+    for col, row in [(5, 18), (16, 17), (26, 19)]:
         pool(col, row)
 
     # Single lamps: warm over the gallery, cold over the Archive.
@@ -234,11 +255,12 @@ def build_lights(firstgid: int) -> list[int]:
     lights.put(DOOR_TILE[0], DOOR_TILE[1], 'threshold')
 
     # Signposting, so nobody arriving has to wander: a chevron between where
-    # you land and the door you came through, and a line of them along the
-    # clear lane that leads east into the desks.
+    # you land and the door you came through, and a line of them along the lane
+    # that leads east into the desks — the lane, not the row the desks' chairs
+    # are on, or the signs would be walking people into somebody's seat.
     lights.put(DOOR_TILE[0], DOOR_TILE[1] + 1, 'arrow_n')
     for col in range(6, 10):
-        lights.put(col, 8, 'arrow_e')
+        lights.put(col, DESK_LANE_ROW, 'arrow_e')
     return lights.data
 
 
@@ -293,8 +315,10 @@ def place(objects: list[dict], col: int, row: int) -> list[dict]:
 
 def block(col: int, row: int, grid: list[list[int]], solid: bool = False) -> list[dict]:
     """
-    A piece of furniture described as a grid of gids, with its top-left corner
-    at (col, row). A 0 leaves the tile empty.
+    A grid of gids drawn with its top-left corner at (col, row). A 0 leaves the
+    tile empty. Raw: this is what `Piece.at()` is built on, and what the tiles
+    of our own dark tileset (the doorway, the letters of the mark) use — they
+    are single tiles by design and have no piece to be part of.
     """
     out = []
     for j, line in enumerate(grid):
@@ -314,31 +338,211 @@ def block(col: int, row: int, grid: list[list[int]], solid: bool = False) -> lis
     return out
 
 
-# Furniture from the packs the First Office already uses (absolute gids: the
-# tilesets are the same and start at the same firstgid).
-DARK_SCREEN = [[5180, 5181], [5196, 5197]]  # wall screen, switched off
-LIT_SCREEN = [[5178, 5179], [5196, 5197]]  # wall screen, switched on
-SOFA = [[4691, 4692, 4693], [4707, 4708, 4709]]
-BENCH = [[4823, 4824, 4825], [4839, 4840, 4841]]
-LOW_TABLE = [[4801, 4802], [4817, 4818]]
-COLD_ARMCHAIR = [[5223], [5239]]
-WARM_ARMCHAIR = [[5224], [5240]]
-POOL_TABLE = [[5140, 5141, 5142, 5143], [5156, 5157, 5158, 5159], [5172, 5173, 5174, 5175]]
-CABINET = [[4772, 4773, 4774], [4788, 4789, 4790], [4804, 4805, 4806]]
-CABINET_2 = [[4776, 4777, 4778], [4792, 4793, 4794], [4808, 4809, 4810]]
-COUNTER = [[4536, 4537], [4563, 4564]]  # base unit with sink and microwave
-VENDING = [[5360, 5361], [5376, 5377]]
-CAFE_TABLE = [[4919, 4920, 4921], [4935, 4936, 4937]]
-RED_STOOL = [[5099], [5115]]
-BLUE_STOOL = [[5100], [5116]]
+# ---------------------------------------------------------------------------
+# The furniture palette
+# ---------------------------------------------------------------------------
+#
+# Every piece comes from the packs the First Office already uses (absolute
+# gids: the tilesets are the same and start at the same firstgid), and every
+# one of them is stated as the WHOLE object, not as however many of its tiles
+# happen to be wanted. These sheets draw one sofa across six tiles and park an
+# unrelated lamp in the seventh, so a block picked by eye is a coin toss that
+# loses quietly: the map still renders, it just renders half a chair. Half of
+# this palette used to be exactly that.
+#
+# `tools/tileset_pieces.py` is what settles it, and `check_palette()` below
+# runs it on every piece at build time, so a cut one cannot be committed.
+
+
+@dataclass(frozen=True)
+class Piece:
+    """
+    One object of furniture: the tiles that draw it, and which of them block.
+
+    `solid_rows` counts rows from the bottom — a cabinet three rows tall blocks
+    only the row it stands on, so avatars pass behind it (the First Office's
+    idiom; blocking all of it would wall a room off). Within those rows only
+    the tiles that are actually drawn on become solid, which is what keeps the
+    other half of the bargain: no invisible body over bare floor.
+    """
+
+    name: str
+    #: Sheet it is cut from; the build checks the piece against this one.
+    sheet: str
+    grid: list[list[int]]
+    #: How many rows, counted from the bottom, stand on the floor.
+    solid_rows: int = 0
+    #: Sides where the sheet packs the next object flush against this one, with
+    #: no transparent seam. Only the sofa row of `Basement` does this. Listing
+    #: a side here says "I have looked at this one"; a cut anywhere else fails
+    #: the build.
+    abuts: tuple[str, ...] = ()
+    #: Fraction of a tile that has to be drawn on before it may block the way.
+    #: Low, because what it has to keep out is the empty corner of a bounding
+    #: box, not the overhanging end of a bench: a fifth of a tile of ink is a
+    #: piece of furniture you would expect to walk into.
+    ink: float = 0.2
+
+    @property
+    def width(self) -> int:
+        return len(self.grid[0])
+
+    @property
+    def height(self) -> int:
+        return len(self.grid)
+
+    def at(self, col: int, row: int) -> list[dict]:
+        """The objects that put this piece with its top-left corner at (col, row)."""
+        firstgid, columns = SHEETS[self.sheet]
+        out: list[dict] = []
+        for j, line in enumerate(self.grid):
+            solid_row = j >= self.height - self.solid_rows
+            for i, gid in enumerate(line):
+                solid = solid_row and ink_fraction(self.sheet, firstgid, columns, gid) >= self.ink
+                out += block(col + i, row + j, [[gid]], solid=solid)
+        return out
+
+
+#: Where each sheet starts and how wide it is, read off the First Office's own
+#: tilesets at build time (see `sheets_from`), so the palette cannot drift out
+#: of step with the map it is written into.
+SHEETS: dict[str, tuple[int, int]] = {}
+
+
+def sheets_from(source: dict) -> None:
+    for tileset in source['tilesets']:
+        SHEETS[tileset['name']] = (tileset['firstgid'], tileset['columns'])
+
+
+BASEMENT = 'Basement'
+GENERIC = 'Generic'
+OFFICE = 'Modern_Office_Black_Shadow'
+
+#: Wall screen, switched off. Goes on the wall, which already blocks the way.
+SCREEN = Piece('screen', BASEMENT, [[5164, 5165], [5180, 5181]])
+#: Three-seat sofa. The sheet parks the next sofa flush against its right and
+#: the armchairs flush under its base; both have been looked at.
+SOFA = Piece(
+    'sofa',
+    BASEMENT,
+    [[4691, 4692, 4693], [4707, 4708, 4709]],
+    solid_rows=2,
+    abuts=('right', 'bottom'),
+)
+#: Bench for the gallery and the arrival hall: cold, low, and four tiles long.
+BENCH = Piece('bench', BASEMENT, [[4970, 4971, 4972, 4973], [4986, 4987, 4988, 4989]], solid_rows=1)
+#: Round wooden table. Drawn in the middle of its three-by-three, so only the
+#: tiles it actually stands on end up blocking.
+LOW_TABLE = Piece(
+    'low table',
+    BASEMENT,
+    [[4784, 4785, 4786], [4800, 4801, 4802], [4816, 4817, 4818]],
+    solid_rows=2,
+)
+COLD_ARMCHAIR = Piece('cold armchair', BASEMENT, [[5222, 5223], [5238, 5239]], solid_rows=2)
+WARM_ARMCHAIR = Piece('warm armchair', BASEMENT, [[5224, 5225], [5240, 5241]], solid_rows=2)
+POOL_TABLE = Piece(
+    'pool table',
+    BASEMENT,
+    [[5140, 5141, 5142, 5143], [5156, 5157, 5158, 5159], [5172, 5173, 5174, 5175]],
+    solid_rows=2,
+)
+#: Glass-fronted cabinet: what the Archive is furnished with, over and over.
+#: Pale, so the Archive's cold spots have something to catch.
+CABINET = Piece('cabinet', BASEMENT, [[5034, 5035], [5050, 5051]], solid_rows=1)
+#: Kitchen run for the Night Café, and the sink unit that goes beside it.
+COUNTER = Piece(
+    'counter',
+    GENERIC,
+    [[4536, 4537, 4538], [4552, 4553, 4554], [4568, 4569, 4570]],
+    solid_rows=2,
+)
+SINK_UNIT = Piece('sink unit', GENERIC, [[4563, 4564], [4579, 4580]], solid_rows=2)
+VENDING = Piece(
+    'vending machines',
+    BASEMENT,
+    [[5344, 5345, 5346, 5347], [5360, 5361, 5362, 5363], [5376, 5377, 5378, 5379]],
+    solid_rows=1,
+)
+CAFE_TABLE = Piece(
+    'cafe table',
+    BASEMENT,
+    [[4902, 4903, 4904, 4905], [4918, 4919, 4920, 4921], [4934, 4935, 4936, 4937]],
+    solid_rows=2,
+)
+STOOL = Piece('stool', BASEMENT, [[5006], [5022]], solid_rows=1)
+#: Tall plant: drawn over three tiles, blocking only the one it stands in, so
+#: you can walk behind it. Same piece the First Office uses.
+PLANT = Piece('plant', OFFICE, [[2782], [2798], [2814]], solid_rows=1)
+
+PALETTE = [
+    SCREEN,
+    SOFA,
+    BENCH,
+    LOW_TABLE,
+    COLD_ARMCHAIR,
+    WARM_ARMCHAIR,
+    POOL_TABLE,
+    CABINET,
+    COUNTER,
+    SINK_UNIT,
+    VENDING,
+    CAFE_TABLE,
+    STOOL,
+    PLANT,
+]
+
+
+def check_palette() -> None:
+    """
+    Every piece has to be a whole object of its sheet. Three ways it can fail,
+    all of which have actually happened in this map:
+
+    - its tiles are not one rectangle of the sheet (the Night Café's counter
+      was a worktop glued to a sink from eleven columns away);
+    - a whole column or row of it is blank (the Archive's cabinets were a
+      three-wide slice of a two-wide locker, so every one of them had an empty
+      column);
+    - ink crosses its border (both armchairs were one half of a chair).
+    """
+    for piece in PALETTE:
+        firstgid, columns = SHEETS[piece.sheet]
+        where = f'{piece.name} ({piece.sheet} {piece.grid[0][0]})'
+        try:
+            sheet_rect(firstgid, columns, piece.grid)
+        except ValueError as wrong:
+            raise SystemExit(f'{where}: {wrong}') from wrong
+        blank = blank_lines(piece.sheet, firstgid, columns, piece.grid)
+        if blank:
+            raise SystemExit(
+                f'{where}: nothing is drawn on its {", ".join(blank)} — the block covers '
+                'more tiles than the object does'
+            )
+        cuts = {
+            side: n
+            for side, n in cut_sides(piece.sheet, firstgid, columns, piece.grid).items()
+            if side not in piece.abuts
+        }
+        if cuts:
+            raise SystemExit(
+                f'{where}: the block is drawn through on its {", ".join(cuts)} — it is a '
+                'piece of an object, not an object. Run '
+                f'`python3 tools/tileset_pieces.py {piece.sheet} {firstgid} {columns} '
+                f'{piece.grid[0][0]}` to see the whole one.'
+            )
+        if piece.solid_rows > piece.height:
+            raise SystemExit(f'{where}: it is {piece.height} rows tall, not {piece.solid_rows}')
 
 
 def furniture(source: dict, firstgid: int) -> tuple[list[dict], list[dict]]:
     """All the furniture in the world; returns (decorative, solid)."""
+    check_palette()
     objects: list[dict] = []
 
     # Pieces reused from the First Office: the same assets, already assembled.
-    long_table = piece(source, 8, 19, 9, 5)  # meeting table with its chairs
+    # `piece()` copies whole objects, so unlike a block of gids these cannot
+    # come out cut — only over-collected, which is what its filters are for.
+    meeting_table = piece(source, 28, 32, 8, 5)  # table with its six chairs
     # A workstation for one: the First Office desk cut short of its second
     # chair, so the chair that is left is unambiguously *this* desk's seat.
     focus_desk = piece(source, 25, 14, 3, 3)
@@ -348,58 +552,61 @@ def furniture(source: dict, firstgid: int) -> tuple[list[dict], list[dict]]:
     # where people appear.
     objects += portal(DOOR_TILE[0], 0, firstgid)
     objects += mark(MARK_TILE[0], MARK_TILE[1], firstgid)
-    objects += plant(DOOR_TILE[0] - 1, 3)
-    objects += plant(DOOR_TILE[0] + 1, 3)
+    objects += PLANT.at(DOOR_TILE[0] - 1, 3)
+    objects += PLANT.at(DOOR_TILE[0] + 1, 3)
     # Everything else hugs the edges: a hall you arrive in has to read as open
-    # floor, and the lane east to the desks must not be furnished shut.
-    objects += block(7, 3, BENCH, solid=True)
-    objects += block(1, 9, SOFA, solid=True)
-    objects += block(4, 9, LOW_TABLE, solid=True)
-    objects += block(6, 9, WARM_ARMCHAIR, solid=True)
+    # floor, and the lane east to the desks must not be furnished shut. The
+    # lounge stops at col 6 on purpose: rows 9-10 are the only way from the
+    # hall into the gallery, and one more armchair would halve it.
+    objects += BENCH.at(6, 3)
+    objects += SOFA.at(1, 9)
+    objects += LOW_TABLE.at(4, 8)
 
-    # --- Focus desks: six workstations in two banks, each with its own seat,
-    # under a wall of screens. The aisles between the banks are left open on
-    # purpose (see DESK_COLS).
+    # --- Focus desks: six workstations in two banks of three, each with its
+    # own seat, under a wall of screens. What the banks are placed around is
+    # the circulation rather than the furniture — see DESK_SEAT_ROWS.
     for col in DESK_COLS:
-        objects += block(col, 1, DARK_SCREEN)
+        objects += SCREEN.at(col, 0)
         for row in DESK_SEAT_ROWS:
             objects += place(focus_desk, col, row)
 
-    # --- Archive: cabinets against the wall and two islands with an aisle.
+    # --- Archive: one cabinet repeated, against the north wall and then as two
+    # islands with an aisle between them. Row upon row of the same unit is what
+    # an archive looks like; three different cupboards would read as a junk room.
     for col in (23, 26, 29):
-        objects += shelf(col, 1, CABINET)
+        objects += CABINET.at(col, 2)
     for col in (24, 28):
-        objects += block(col, 6, CABINET_2, solid=True)
+        objects += CABINET.at(col, 6)
 
     # --- The Pit: the lounge, on the rug, with the pool table to the east.
-    objects += block(2, 16, SOFA, solid=True)
-    objects += block(5, 18, LOW_TABLE, solid=True)
-    objects += block(1, 19, COLD_ARMCHAIR)
-    objects += block(8, 16, WARM_ARMCHAIR)
-    objects += block(7, 18, POOL_TABLE, solid=True)
+    objects += SOFA.at(2, 16)
+    objects += LOW_TABLE.at(4, 18)
+    objects += COLD_ARMCHAIR.at(1, 19)
+    objects += WARM_ARMCHAIR.at(8, 16)
+    objects += POOL_TABLE.at(7, 18)
 
-    # --- War Room: the long table, facing the gallery.
-    objects += place(long_table, 12, 16)
-    objects += plant(13, 20)
-    objects += plant(20, 20)
+    # --- War Room: the table, facing the gallery. Eight tiles wide, which is
+    # exactly the span between the two stub walls — the nine-wide one the First
+    # Office uses puts its end chair inside the stub at col 12.
+    objects += place(meeting_table, 13, 16)
 
     # --- Gallery: benches and plants between the columns, so the axis is not
-    # an empty 32-tile corridor.
+    # an empty 32-tile corridor. Both keep clear of the pillars (cols 6, 17, 28).
     for col in (9, 20, 31):
-        objects += plant(col, 12)
-    for col in (3, 13, 24):
-        objects += block(col, 12, BENCH, solid=True)
+        objects += PLANT.at(col, 12)
+    for col in (2, 12, 23):
+        objects += BENCH.at(col, 12)
 
-    # --- Night Café: the counter to the east and a table with stools.
-    objects += block(23, 16, COUNTER, solid=True)
-    objects += block(25, 16, COUNTER, solid=True)
-    objects += block(28, 16, VENDING, solid=True)
-    objects += block(23, 19, RED_STOOL)
-    objects += block(25, 19, BLUE_STOOL)
-    objects += block(27, 19, CAFE_TABLE, solid=True)
-    objects += block(26, 19, BLUE_STOOL)
-    objects += block(30, 19, RED_STOOL)
-    objects += plant(32, 16)
+    # --- Night Café: the counter run along the north side and the table with
+    # its stools below it, so the whole café reads as one place to stand and
+    # one place to sit rather than as furniture dropped on a floor.
+    objects += COUNTER.at(23, 15)
+    objects += SINK_UNIT.at(26, 16)
+    objects += VENDING.at(29, 15)
+    objects += CAFE_TABLE.at(25, 19)
+    objects += STOOL.at(24, 19)
+    objects += STOOL.at(29, 19)
+    objects += PLANT.at(32, 19)
 
     decor = [o for o in objects if not o['_solid']]
     solid = [o for o in objects if o['_solid']]
@@ -450,25 +657,6 @@ def portal(col: int, row: int, firstgid: int) -> list[dict]:
     `door` rectangle, on the floor, right in front of the opening.
     """
     return block(col, row, [[firstgid + INDEX['portal_top']], [firstgid + INDEX['portal_bottom']]])
-
-
-def plant(col: int, row: int) -> list[dict]:
-    """
-    A tall plant: drawn over two tiles and blocking only the bottom one, so you
-    can walk behind it. Same piece the First Office uses.
-    """
-    return block(col, row, [[2782], [2798]]) + block(col, row + 2, [[2814]], solid=True)
-
-
-def shelf(col: int, row: int, grid: list[list[int]]) -> list[dict]:
-    """
-    A tall cabinet: the body is drawn but does not block (avatars pass in front
-    of it and behind it) and only its base cuts the way, as in the First
-    Office. Blocking the whole thing would kill three rows of tiles.
-    """
-    body = block(col, row, grid[:-1])
-    base = block(col, row + len(grid) - 1, [grid[-1]], solid=True)
-    return body + base
 
 
 # ---------------------------------------------------------------------------
@@ -532,6 +720,7 @@ def object_layer(layer_id: int, name: str, objects: list[dict], collides: bool |
 
 def build() -> dict:
     source = json.loads(SOURCE.read_text(encoding='utf-8'))
+    sheets_from(source)
 
     # The First Office's tilesets, so its furniture can be copied by gid --
     # except its copy of ours (it embeds ChironDark for the doorway). Two

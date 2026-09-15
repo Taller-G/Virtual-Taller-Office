@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  AVATAR_FRAME,
   CLASS_ZONE,
   doorAt,
   findDoors,
@@ -11,6 +12,7 @@ import {
   findSpawnPoints,
   getZones,
   isSolidAt,
+  objectClass,
   objectCollides,
   objectLayers,
   PROP_COLLIDES,
@@ -23,6 +25,7 @@ import {
   WORLDS,
   type SpawnPoint,
   type TiledMap,
+  type TiledObject,
   type Zone,
 } from '@vto/shared'
 import { DEFAULT_MAP_FILE, loadOfficeMap, loadWorldMaps } from '../src/map'
@@ -452,6 +455,216 @@ describe('Chiron Office (real file)', () => {
     })
   })
 
+  /**
+   * The furniture. These do not check that the office is pretty — they check
+   * the two ways it has actually been broken: a block of gids that draws part
+   * of an object (a worktop with no cupboard under it, half an armchair, a
+   * cabinet with an empty column), and a collision that does not agree with
+   * what is drawn. The first kind is caught at the source by
+   * `tools/tileset_pieces.py` when the map is generated; what is left for here
+   * is everything that can be seen in the map file itself.
+   */
+  describe('the furniture', () => {
+    const solids = tilesBlockedByFurniture(map)
+    const drawn = tilesDrawnOnByFurniture(map)
+
+    it('every piece uses tiles that exist in an embedded tileset', () => {
+      for (const layer of objectLayers(map)) {
+        for (const obj of layer.objects) {
+          if (!obj.gid) continue
+          const tileset = tilesetForGid(map, obj.gid)
+          expect(
+            tileset,
+            `object ${obj.id} uses gid ${obj.gid}, which no tileset covers`,
+          ).toBeDefined()
+          const id = (obj.gid & 0x1fffffff) - tileset!.firstgid
+          expect(
+            id < tileset!.tilecount,
+            `object ${obj.id} asks "${tileset!.name}" for tile ${id} of ${tileset!.tilecount}`,
+          ).toBe(true)
+        }
+      }
+    })
+
+    /** A piece off the grid is a piece drawn a few pixels into its neighbour. */
+    it('every piece sits on the tile grid', () => {
+      for (const layer of objectLayers(map)) {
+        for (const obj of layer.objects) {
+          if (!obj.gid) continue
+          expect(obj.x % map.tilewidth, `object ${obj.id} is off the grid`).toBe(0)
+          expect(obj.y % map.tileheight, `object ${obj.id} is off the grid`).toBe(0)
+        }
+      }
+    })
+
+    /**
+     * Everything that blocks the way is a piece of furniture you can see.
+     *
+     * The client draws a colliding object with the very same sprite as a
+     * decorative one (`addTileObject`), so in this map a body and its drawing
+     * are one thing — as long as the object really is a tile object that is
+     * really drawn. The two ways to break that, both of them ordinary things
+     * to do in Tiled, are a bare rectangle dropped in the colliding layer and
+     * an object switched to invisible: the client then draws nothing and walks
+     * through, while the server (and everything here that walks the map) still
+     * treats the tile as blocked. The two halves of the office would disagree
+     * about where the walls are, and only one of them is on screen.
+     *
+     * Whether the sprite's own tile has any ink on it is a question about the
+     * PNG rather than the map, and it is settled where the map is built:
+     * `tools/make-chiron-map.py` only lets a tile block the way once enough of
+     * it is drawn on (`Piece.ink`).
+     */
+    it('everything that blocks the way is drawn', () => {
+      for (const layer of objectLayers(map)) {
+        for (const obj of layer.objects) {
+          if (!objectCollides(layer, obj)) continue
+          if (objectClass(obj) !== '') continue // zones, seats, doors and spawns are not furniture
+          expect(
+            obj.gid,
+            `object ${obj.id} in "${layer.name}" blocks the way but draws no tile`,
+          ).toBeDefined()
+          expect(
+            obj.visible !== false,
+            `object ${obj.id} in "${layer.name}" blocks the way but is hidden`,
+          ).toBe(true)
+        }
+      }
+      // And, the other way round, nothing is blocked that no object covers.
+      for (const key of solids) {
+        expect(
+          drawn.has(key),
+          `something blocks the way at (${key}) with nothing drawn on it`,
+        ).toBe(true)
+      }
+    })
+
+    /** A body over a wall is a body nobody could have walked into anyway. */
+    it('no piece stands on a wall or in a doorway', () => {
+      for (const key of solids) {
+        const [col, row] = key.split(',').map(Number)
+        const x = col * map.tilewidth + map.tilewidth / 2
+        const y = row * map.tileheight + map.tileheight / 2
+        expect(
+          isSolidAt(map, x, y),
+          `a piece of furniture is drawn over the wall at (${key})`,
+        ).toBe(false)
+        expect(
+          doorAt(map, x, y),
+          `a piece of furniture blocks the door at (${key})`,
+        ).toBeUndefined()
+      }
+    })
+
+    /**
+     * No pocket: every tile the map paints a floor on has to be walkable to.
+     * Furniture is what closes one — a run of cabinets across an alcove seals
+     * the strip behind it, and nothing else in the suite would notice.
+     * (Tiles with no floor under them are outside the office and are not
+     * anybody's to reach.)
+     */
+    it('no piece of furniture closes off a piece of floor', () => {
+      const reachable = reachableTiles(map, {
+        col: Math.floor(chiron.spawn.x / map.tilewidth),
+        row: Math.floor(chiron.spawn.y / map.tileheight),
+      })
+      for (const { col, row } of flooredTiles(map)) {
+        const x = col * map.tilewidth + map.tilewidth / 2
+        const y = row * map.tileheight + map.tileheight / 2
+        if (isSolidAt(map, x, y) || solids.has(`${col},${row}`)) continue
+        expect(
+          reachable.has(`${col},${row}`),
+          `the floor at (${col},${row}) cannot be reached on foot`,
+        ).toBe(true)
+      }
+    })
+  })
+
+  /**
+   * Getting to a desk and getting away from it again. Avatars do not collide
+   * with each other (only with the tile layers and the solid furniture — see
+   * `OfficeScene`), so "with the other five occupied" is the same walk as with
+   * the office empty; what has to hold is that the route exists at all, from
+   * both ways into the world, and that it does not go through anybody's chair.
+   */
+  describe('getting to the focus desks', () => {
+    const seats = findSeats(map)
+
+    it('every seat is reachable from the entrance and from the arrival door', () => {
+      for (const from of ['default', 'from-first-office']) {
+        const spawn = findSpawnPoint(map, from)
+        const reachable = reachableTiles(map, {
+          col: Math.floor(spawn.x / map.tilewidth),
+          row: Math.floor(spawn.y / map.tileheight),
+        })
+        for (const seat of seats) {
+          const { x, y } = seatAnchor(seat)
+          expect(
+            reachable.has(tileKey(map, x, y)),
+            `seat "${seat.name}" cannot be reached from the "${from}" spawn`,
+          ).toBe(true)
+        }
+        // And back out again: the way to the door is the same walk in reverse.
+        for (const door of findDoors(map)) {
+          const key = tileKey(map, door.x + door.width / 2, door.y + door.height / 2)
+          expect(reachable.has(key), `the door cannot be reached from "${from}"`).toBe(true)
+        }
+      }
+    })
+
+    /**
+     * Two people at neighbouring desks have to be two people, not one smudge:
+     * an avatar is `AVATAR_FRAME.width` across, so seats closer than that
+     * would overlap on screen even though the map lets both be sat in.
+     */
+    it('no two seats are close enough for their avatars to overlap', () => {
+      for (const seat of seats) {
+        for (const other of seats) {
+          if (other === seat) continue
+          const a = seatAnchor(seat)
+          const b = seatAnchor(other)
+          expect(
+            Math.abs(a.x - b.x) >= AVATAR_FRAME.width || Math.abs(a.y - b.y) >= AVATAR_FRAME.width,
+            `"${seat.name}" and "${other.name}" are drawn on top of each other`,
+          ).toBe(true)
+        }
+      }
+    })
+
+    /**
+     * Sitting down must not put you in the way. A seat whose tile is the only
+     * way past is a seat that closes off part of the office every time
+     * somebody uses it. (Avatars do not collide with each other, so this is
+     * about the shape of the layout, not about being physically stuck: it is
+     * the difference between a seat in an alcove and a seat in a doorway.)
+     */
+    it('no seat is the only way through: the office holds together without it', () => {
+      const withoutSeats = reachableTiles(map, {
+        col: Math.floor(chiron.spawn.x / map.tilewidth),
+        row: Math.floor(chiron.spawn.y / map.tileheight),
+      })
+      for (const seat of seats) {
+        const anchor = seatAnchor(seat)
+        const blocked = new Set([tileKey(map, anchor.x, anchor.y)])
+        const stillReachable = reachableTiles(
+          map,
+          {
+            col: Math.floor(chiron.spawn.x / map.tilewidth),
+            row: Math.floor(chiron.spawn.y / map.tileheight),
+          },
+          blocked,
+        )
+        for (const key of withoutSeats) {
+          if (blocked.has(key)) continue
+          expect(
+            stillReachable.has(key),
+            `somebody sitting at "${seat.name}" cuts (${key}) off from the rest of the office`,
+          ).toBe(true)
+        }
+      }
+    })
+  })
+
   it('has its lights layer, and it does not block the way', () => {
     const layers = tileLayers(map)
     expect(layers.length).toBeGreaterThanOrEqual(3)
@@ -521,37 +734,69 @@ function tilesOf(map: TiledMap, zone: Zone) {
   return out
 }
 
+/** Tiles a tile object covers. In Tiled the `y` of a tile object is its bottom edge. */
+function tilesUnder(map: TiledMap, obj: TiledObject): string[] {
+  const tileset = tilesetForGid(map, obj.gid!)
+  const width = obj.width ?? tileset?.tilewidth ?? map.tilewidth
+  const height = obj.height ?? tileset?.tileheight ?? map.tileheight
+  const out: string[] = []
+  for (let row = Math.floor((obj.y - height) / map.tileheight); row * map.tileheight < obj.y; row++)
+    for (let col = Math.floor(obj.x / map.tilewidth); col * map.tilewidth < obj.x + width; col++)
+      out.push(`${col},${row}`)
+  return out
+}
+
 /** Tiles blocked by a colliding piece of furniture (tiles are covered by `isSolidAt`). */
 function tilesBlockedByFurniture(map: TiledMap): Set<string> {
   const blocked = new Set<string>()
   for (const layer of objectLayers(map)) {
     for (const obj of layer.objects) {
       if (!obj.gid || !objectCollides(layer, obj)) continue
-      const tileset = tilesetForGid(map, obj.gid)
-      const width = obj.width ?? tileset?.tilewidth ?? map.tilewidth
-      const height = obj.height ?? tileset?.tileheight ?? map.tileheight
-      // In Tiled the `y` of a tile object is its bottom edge.
-      for (
-        let row = Math.floor((obj.y - height) / map.tileheight);
-        row * map.tileheight < obj.y;
-        row++
-      )
-        for (
-          let col = Math.floor(obj.x / map.tilewidth);
-          col * map.tilewidth < obj.x + width;
-          col++
-        )
-          blocked.add(`${col},${row}`)
+      for (const key of tilesUnder(map, obj)) blocked.add(key)
     }
   }
   return blocked
+}
+
+/** Tiles a piece of furniture is drawn on, whether or not it blocks the way. */
+function tilesDrawnOnByFurniture(map: TiledMap): Set<string> {
+  const drawn = new Set<string>()
+  for (const layer of objectLayers(map)) {
+    for (const obj of layer.objects) {
+      if (!obj.gid) continue
+      for (const key of tilesUnder(map, obj)) drawn.add(key)
+    }
+  }
+  return drawn
+}
+
+/**
+ * Tiles the map paints a floor on: the inside of the world. A map is a
+ * rectangle and the room is not, so the strip outside the walls has no floor
+ * under it and is nobody's to walk to.
+ */
+function flooredTiles(map: TiledMap): { col: number; row: number }[] {
+  const floored = new Set<string>()
+  for (const layer of tileLayers(map))
+    for (const [i, gid] of layer.data.entries())
+      if (gid && !tileCollides(map, gid))
+        floored.add(`${i % layer.width},${Math.floor(i / layer.width)}`)
+  return [...floored].map((key) => {
+    const [col, row] = key.split(',').map(Number)
+    return { col, row }
+  })
 }
 
 /**
  * Tiles reachable on foot from `start`, with the same notion of "blocked"
  * the game uses: tiles with `collides` and colliding furniture.
  */
-function reachableTiles(map: TiledMap, start: { col: number; row: number }): Set<string> {
+function reachableTiles(
+  map: TiledMap,
+  start: { col: number; row: number },
+  /** Extra tiles to treat as blocked — somebody standing there, say. */
+  occupied: ReadonlySet<string> = new Set(),
+): Set<string> {
   const furniture = tilesBlockedByFurniture(map)
   const blocked = (col: number, row: number) =>
     col < 0 ||
@@ -559,6 +804,7 @@ function reachableTiles(map: TiledMap, start: { col: number; row: number }): Set
     col >= map.width ||
     row >= map.height ||
     furniture.has(`${col},${row}`) ||
+    occupied.has(`${col},${row}`) ||
     isSolidAt(
       map,
       col * map.tilewidth + map.tilewidth / 2,
