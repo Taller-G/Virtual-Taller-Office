@@ -1,7 +1,9 @@
 import { isFocused } from '@vto/shared'
 import type { OfficeConnection, OfficeRoom } from '../network/connection'
-import { avatarThumb } from './avatarThumb'
+import { avatarBadge } from './avatarThumb'
+import { personColors } from './personColor'
 import { toast } from './toasts'
+import { youTag } from './youTag'
 
 interface Member {
   sessionId: string
@@ -83,7 +85,7 @@ export function mountBubble(connection: OfficeConnection) {
     return { bubbleId: me.bubbleId, members, fullNearby: false, focused, maxMembers }
   }
 
-  function render(next: BubbleView, mySessionId: string) {
+  function render(next: BubbleView, mySessionId: string, room?: OfficeRoom) {
     const others = next.members.filter((m) => m.sessionId !== mySessionId)
     panel.dataset.state = next.bubbleId
       ? 'in'
@@ -104,21 +106,20 @@ export function mountBubble(connection: OfficeConnection) {
         : next.fullNearby
           ? `That bubble is full (cap ${next.maxMembers}).`
           : 'Walk up to someone to open a bubble.'
+    const colors = personColors(room)
     listEl.replaceChildren(
       ...next.members.map((member) => {
+        const color = colors.get(member.sessionId) ?? 'var(--accent-bright)'
         const li = document.createElement('li')
         li.className = 'bubble__row'
         li.dataset.session = member.sessionId
+        li.dataset.me = String(member.sessionId === mySessionId)
+        li.style.setProperty('--person', color)
         const name = document.createElement('span')
         name.className = 'bubble__name'
         name.textContent = member.name
-        if (member.sessionId === mySessionId) {
-          const you = document.createElement('span')
-          you.className = 'presence__you'
-          you.textContent = 'you'
-          name.append(' ', you)
-        }
-        li.append(avatarThumb(member.avatar, 1), name)
+        if (member.sessionId === mySessionId) name.append(' ', youTag())
+        li.append(avatarBadge(member.avatar, color, 26), name)
         return li
       }),
     )
@@ -173,7 +174,7 @@ export function mountBubble(connection: OfficeConnection) {
     const refresh = () => {
       const next = view(room)
       announce(next, room.sessionId, room)
-      render(next, room.sessionId)
+      render(next, room.sessionId, room)
       previous = next
     }
     const handler = () => refresh()

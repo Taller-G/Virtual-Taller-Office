@@ -7,7 +7,10 @@ import {
 } from '@vto/shared'
 import { isTyping } from '../game/typingGuard'
 import type { OfficeConnection, OfficeRoom } from '../network/connection'
+import { avatarBadge } from './avatarThumb'
 import { clearUnread, isWindowUnfocused, notifyUnread, watchFocus } from './notify'
+import { personColor } from './personColor'
+import { youTag } from './youTag'
 
 /** A message in the panel's local history. */
 interface Entry {
@@ -15,6 +18,8 @@ interface Entry {
   /** Session that sent it: messages are grouped by this, never by the name. */
   from: string
   name: string
+  /** Sheet of the author when they said it, for the portrait beside the group. */
+  avatar: string
   text: string
   /** Server time; on one's own not yet acknowledged, the local time. */
   at: number
@@ -35,6 +40,8 @@ const INPUT_MAX_LENGTH = CHAT_MAX_LENGTH * 2
 const GROUP_WINDOW_MS = 3 * 60_000
 /** How long the panel stays lit after a bubble opens or after coming back. */
 const SPARK_MS = 1600
+/** Side of the portrait beside a group of messages, in pixels. */
+const CHAT_AVATAR = 28
 
 const HINT_NO_BUBBLE = 'Walk up to someone to talk'
 /**
@@ -46,6 +53,9 @@ const HINT_FOCUSED = 'Focused at a desk - stand up to talk'
 const PLACEHOLDER_NO_BUBBLE = 'Nobody nearby'
 const PLACEHOLDER_FOCUSED = 'Focused at a desk'
 const EMPTY_TEXT = 'No messages yet: say hello.'
+/** What the log shows while there is no conversation to show. */
+const DORMANT_NO_BUBBLE = 'No conversation open'
+const DORMANT_FOCUSED = 'Heads-down'
 /** Keys shown while a bubble is open. */
 const HINT_KEYS: { keys: string[]; does: string }[] = [
   { keys: ['Tab', 'Enter'], does: 'to write' },
@@ -153,38 +163,142 @@ export function mountChat(connection: OfficeConnection) {
     countEl.dataset.tone = length > CHAT_MAX_LENGTH ? 'error' : 'info'
   }
 
-  /** The row that opens a message: who is talking and when. */
-  function metaOf(entry: Entry): HTMLElement {
-    const head = document.createElement('p')
-    head.className = 'chat__meta'
-    const name = document.createElement('span')
-    name.className = 'chat__author'
-    name.textContent = entry.name
+  /**
+   * A run of messages by the same person, close enough together to read as one
+   * turn of speech: who is talking is said once at the top and the portrait
+   * stands beside the whole run.
+   */
+  interface Group {
+    from: string
+    name: string
+    avatar: string
+    mine: boolean
+    entries: Entry[]
+  }
+
+  function groupsOf(list: Entry[]): Group[] {
+    const groups: Group[] = []
+    let last: Entry | undefined
+    for (const entry of list) {
+      const open = groups[groups.length - 1]
+      // The times of one's own are local until the server echoes them, so the
+      // gap is measured in absolute value: it can go slightly backwards.
+      const carries =
+        open !== undefined &&
+        last !== undefined &&
+        last.from === entry.from &&
+        Math.abs(entry.at - last.at) < GROUP_WINDOW_MS
+      if (carries) open.entries.push(entry)
+      else {
+        groups.push({
+          from: entry.from,
+          name: entry.name,
+          avatar: entry.avatar,
+          mine: entry.mine,
+          entries: [entry],
+        })
+      }
+      last = entry
+    }
+    return groups
+  }
+
+  /**
+   * The portrait beside a group. Someone whose sheet is not known - a message
+   * from whoever left the office before it was drawn - gets their initial in
+   * their own colour rather than a hole in the row.
+   */
+  function portrait(group: Group, color: string): HTMLElement {
+    if (group.avatar) return avatarBadge(group.avatar, color, CHAT_AVATAR)
+    const el = document.createElement('span')
+    el.className = 'avatar-badge chat__initial'
+    el.setAttribute('aria-hidden', 'true')
+    el.style.setProperty('--person', color)
+    el.style.width = `${CHAT_AVATAR}px`
+    el.style.height = `${CHAT_AVATAR}px`
+    el.textContent = [...group.name][0]?.toUpperCase() ?? '?'
+    return el
+  }
+
+  /** One message: what was said, and underneath, quietly, when and how it went. */
+  function bubbleOf(entry: Entry): HTMLElement {
+    const msg = document.createElement('div')
+    msg.className = 'chat__msg'
+    msg.dataset.status = entry.status
+
+    const text = document.createElement('p')
+    text.className = 'chat__text'
+    // Plain text on purpose: `<b>hi</b>` reads exactly as written.
+    text.textContent = entry.text
+    msg.append(text)
+
+    const foot = document.createElement('p')
+    foot.className = 'chat__foot'
     const at = document.createElement('time')
     at.className = 'chat__time'
     at.dateTime = new Date(entry.at).toISOString()
     at.textContent = time.format(entry.at)
-    head.append(name, at)
-    return head
+    foot.append(at)
+    // How one's own went is a footnote next to the time: a tick, or the word
+    // while it is on its way.
+    if (entry.mine && entry.status !== 'error') {
+      const state = document.createElement('span')
+      state.className = 'chat__state'
+      state.textContent = entry.status === 'sent' ? 'Sent' : 'Sending...'
+      foot.append(state)
+    }
+    msg.append(foot)
+
+    // A rejection is the one state that has to be read, so it says why right
+    // there instead of leaving the message looking like any other.
+    if (entry.status === 'error') {
+      const why = document.createElement('p')
+      why.className = 'chat__why'
+      why.textContent = `Not sent: ${CHAT_REJECTION_TEXT[entry.reason ?? 'offline']}`
+      msg.append(why)
+    }
+    return msg
   }
 
-  /** How my message is going: understated, except when it did not arrive. */
-  function statusOf(entry: Entry): HTMLElement {
-    const status = document.createElement('p')
-    status.className = 'chat__status'
-    status.textContent =
-      entry.status === 'sent'
-        ? 'Sent'
-        : entry.status === 'sending'
-          ? 'Sending...'
-          : `Not sent: ${CHAT_REJECTION_TEXT[entry.reason ?? 'offline']}`
-    return status
+  function groupEl(group: Group): HTMLLIElement {
+    const li = document.createElement('li')
+    li.className = 'chat__group'
+    li.dataset.mine = String(group.mine)
+    // One's own messages are in the accent tone, but the name above them is
+    // still the colour this person is drawn in everywhere else in the panel.
+    const color = personColor(room, group.from)
+    li.style.setProperty('--person', color)
+
+    const head = document.createElement('p')
+    head.className = 'chat__meta'
+    const name = document.createElement('span')
+    name.className = 'chat__author'
+    name.textContent = group.name
+    head.append(name)
+    if (group.mine) head.append(youTag())
+
+    const stack = document.createElement('div')
+    stack.className = 'chat__stack'
+    stack.append(head, ...group.entries.map(bubbleOf))
+
+    li.append(portrait(group, color), stack)
+    return li
+  }
+
+  /** The log while there is no conversation: dormant, not broken. */
+  function dormant(): HTMLLIElement {
+    const li = document.createElement('li')
+    li.className = 'chat__dormant'
+    li.textContent = focused ? DORMANT_FOCUSED : DORMANT_NO_BUBBLE
+    return li
   }
 
   function renderLog() {
     if (!canChat()) {
-      // Out of a bubble nothing of the conversation is left on screen.
-      logEl.replaceChildren()
+      // Out of a bubble nothing of the conversation is left on screen: the
+      // area keeps its shape and says it is waiting, and the hint below says
+      // what to do about it.
+      logEl.replaceChildren(dormant())
       return
     }
     if (entries.length === 0) {
@@ -194,35 +308,7 @@ export function mountChat(connection: OfficeConnection) {
       logEl.replaceChildren(empty)
       return
     }
-    logEl.replaceChildren(
-      ...entries.map((entry, index) => {
-        const previous = entries[index - 1]
-        // The times of one's own are local until the server echoes them, so
-        // the gap is measured in absolute value: it can go slightly backwards.
-        const grouped =
-          previous !== undefined &&
-          previous.from === entry.from &&
-          Math.abs(entry.at - previous.at) < GROUP_WINDOW_MS
-
-        const li = document.createElement('li')
-        li.className = 'chat__msg'
-        li.dataset.mine = String(entry.mine)
-        li.dataset.status = entry.status
-        li.dataset.grouped = String(grouped)
-
-        const text = document.createElement('p')
-        text.className = 'chat__text'
-        // Plain text on purpose: `<b>hi</b>` reads exactly as written.
-        text.textContent = entry.text
-        // Grouped it carries no visible time, so it keeps it within reach.
-        if (grouped) text.title = time.format(entry.at)
-
-        if (!grouped) li.append(metaOf(entry))
-        li.append(text)
-        if (entry.mine) li.append(statusOf(entry))
-        return li
-      }),
-    )
+    logEl.replaceChildren(...groupsOf(entries).map(groupEl))
     logEl.scrollTop = logEl.scrollHeight
   }
 
@@ -282,6 +368,7 @@ export function mountChat(connection: OfficeConnection) {
       id: message.id,
       from: message.from,
       name: message.name,
+      avatar: room?.state.players.get(message.from)?.avatar ?? '',
       text: message.text,
       at: message.at,
       mine,
@@ -315,10 +402,12 @@ export function mountChat(connection: OfficeConnection) {
     }
     rejection = undefined
     // Shown instantly as "sending": the server's echo confirms it.
+    const me = room ? room.state.players.get(room.sessionId) : undefined
     push({
       id: result.id,
       from: room?.sessionId ?? '',
-      name: room?.state.players.get(room.sessionId)?.name ?? 'You',
+      name: me?.name ?? 'You',
+      avatar: me?.avatar ?? '',
       text: result.text,
       at: Date.now(),
       mine: true,
