@@ -20,16 +20,14 @@ interior doors: from the gallery you see the whole world.
 Floors and walls come from `ChironDark.png` (see
 `tools/make-chiron-tileset.py`): they are dark in the tile, not under a veil.
 The furniture does come from the same packs as the First Office — the same
-assets — but arranged in a new plan; individual assemblies are copied from over
-there by rectangle, so we do not have to work out again how a desk fits
-together.
+assets, out of the palette both worlds share (`tools/office_pieces.py`) — but
+arranged in a new plan.
 """
 
 from __future__ import annotations
 
 import json
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -44,11 +42,27 @@ from chiron_tiles import (  # noqa: E402
     TILESET_NAME,
     collides_tiles,
 )
-from tileset_pieces import (  # noqa: E402
-    blank_lines,
-    cut_sides,
-    ink_fraction,
-    sheet_rect,
+from office_pieces import (  # noqa: E402
+    BENCH,
+    CABINET,
+    CAFE_TABLE,
+    COLD_ARMCHAIR,
+    COUNTER,
+    LOW_TABLE,
+    MEETING_TABLE_6,
+    PLANT,
+    POOL_TABLE,
+    SCREEN,
+    SINK_UNIT,
+    SOFA,
+    STOOL,
+    VENDING,
+    WARM_ARMCHAIR,
+    WORKSTATION,
+    block,
+    check_palette,
+    place,
+    sheets_from,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -267,285 +281,24 @@ def build_lights(firstgid: int) -> list[int]:
 # ---------------------------------------------------------------------------
 # Furniture
 # ---------------------------------------------------------------------------
-
-
-def piece(source: dict, col0: int, row0: int, cols: int, rows: int) -> list[dict]:
-    """
-    Copies a piece of furniture out of the First Office: every tile object
-    whose anchor falls inside the rectangle (in tiles), with positions relative
-    to (col0, row0). That way a desk or a counter that already works is reused
-    instead of re-stacking by hand the layers of sprites that make it up.
-
-    `FloorAndGround` objects are skipped: they are that map's wall decoration
-    (the white skirting strip) and mean nothing here.
-    """
-    x0, y0 = col0 * TILE, row0 * TILE
-    x1, y1 = (col0 + cols) * TILE, (row0 + rows) * TILE
-    out: list[dict] = []
-    for layer in source['layers']:
-        if layer['type'] != 'objectgroup' or layer['name'] not in ('Furniture', 'FurnitureCollision'):
-            continue
-        for obj in layer['objects']:
-            if not obj.get('gid'):
-                continue
-            if not (x0 <= obj['x'] < x1 and y0 < obj['y'] <= y1):
-                continue
-            if obj['gid'] & 0x1FFFFFFF < 2561:  # FloorAndGround
-                continue
-            moved = dict(obj)
-            moved['x'] = obj['x'] - x0
-            moved['y'] = obj['y'] - y0
-            moved['_solid'] = layer['name'] == 'FurnitureCollision'
-            out.append(moved)
-    if not out:
-        raise ValueError(f'the piece at ({col0},{row0}) {cols}×{rows} has no objects')
-    return out
-
-
-def place(objects: list[dict], col: int, row: int) -> list[dict]:
-    """The piece, moved to (col, row) of the Chiron Office."""
-    out = []
-    for obj in objects:
-        moved = dict(obj)
-        moved['x'] = obj['x'] + col * TILE
-        moved['y'] = obj['y'] + row * TILE
-        out.append(moved)
-    return out
-
-
-def block(col: int, row: int, grid: list[list[int]], solid: bool = False) -> list[dict]:
-    """
-    A grid of gids drawn with its top-left corner at (col, row). A 0 leaves the
-    tile empty. Raw: this is what `Piece.at()` is built on, and what the tiles
-    of our own dark tileset (the doorway, the letters of the mark) use — they
-    are single tiles by design and have no piece to be part of.
-    """
-    out = []
-    for j, line in enumerate(grid):
-        for i, gid in enumerate(line):
-            if not gid:
-                continue
-            out.append(
-                {
-                    'gid': gid,
-                    'x': (col + i) * TILE,
-                    'y': (row + j + 1) * TILE,
-                    'width': TILE,
-                    'height': TILE,
-                    '_solid': solid,
-                }
-            )
-    return out
-
-
-# ---------------------------------------------------------------------------
-# The furniture palette
-# ---------------------------------------------------------------------------
 #
-# Every piece comes from the packs the First Office already uses (absolute
-# gids: the tilesets are the same and start at the same firstgid), and every
-# one of them is stated as the WHOLE object, not as however many of its tiles
-# happen to be wanted. These sheets draw one sofa across six tiles and park an
-# unrelated lamp in the seventh, so a block picked by eye is a coin toss that
-# loses quietly: the map still renders, it just renders half a chair. Half of
-# this palette used to be exactly that.
-#
-# `tools/tileset_pieces.py` is what settles it, and `check_palette()` below
-# runs it on every piece at build time, so a cut one cannot be committed.
+# The palette lives in `tools/office_pieces.py`, shared with the First Office:
+# the two worlds are furnished from the same packs, and a piece that is whole
+# in one is whole in the other. What is here is only how this world is laid
+# out with it.
 
 
-@dataclass(frozen=True)
-class Piece:
-    """
-    One object of furniture: the tiles that draw it, and which of them block.
-
-    `solid_rows` counts rows from the bottom — a cabinet three rows tall blocks
-    only the row it stands on, so avatars pass behind it (the First Office's
-    idiom; blocking all of it would wall a room off). Within those rows only
-    the tiles that are actually drawn on become solid, which is what keeps the
-    other half of the bargain: no invisible body over bare floor.
-    """
-
-    name: str
-    #: Sheet it is cut from; the build checks the piece against this one.
-    sheet: str
-    grid: list[list[int]]
-    #: How many rows, counted from the bottom, stand on the floor.
-    solid_rows: int = 0
-    #: Sides where the sheet packs the next object flush against this one, with
-    #: no transparent seam. Only the sofa row of `Basement` does this. Listing
-    #: a side here says "I have looked at this one"; a cut anywhere else fails
-    #: the build.
-    abuts: tuple[str, ...] = ()
-    #: Fraction of a tile that has to be drawn on before it may block the way.
-    #: Low, because what it has to keep out is the empty corner of a bounding
-    #: box, not the overhanging end of a bench: a fifth of a tile of ink is a
-    #: piece of furniture you would expect to walk into.
-    ink: float = 0.2
-
-    @property
-    def width(self) -> int:
-        return len(self.grid[0])
-
-    @property
-    def height(self) -> int:
-        return len(self.grid)
-
-    def at(self, col: int, row: int) -> list[dict]:
-        """The objects that put this piece with its top-left corner at (col, row)."""
-        firstgid, columns = SHEETS[self.sheet]
-        out: list[dict] = []
-        for j, line in enumerate(self.grid):
-            solid_row = j >= self.height - self.solid_rows
-            for i, gid in enumerate(line):
-                solid = solid_row and ink_fraction(self.sheet, firstgid, columns, gid) >= self.ink
-                out += block(col + i, row + j, [[gid]], solid=solid)
-        return out
-
-
-#: Where each sheet starts and how wide it is, read off the First Office's own
-#: tilesets at build time (see `sheets_from`), so the palette cannot drift out
-#: of step with the map it is written into.
-SHEETS: dict[str, tuple[int, int]] = {}
-
-
-def sheets_from(source: dict) -> None:
-    for tileset in source['tilesets']:
-        SHEETS[tileset['name']] = (tileset['firstgid'], tileset['columns'])
-
-
-BASEMENT = 'Basement'
-GENERIC = 'Generic'
-OFFICE = 'Modern_Office_Black_Shadow'
-
-#: Wall screen, switched off. Goes on the wall, which already blocks the way.
-SCREEN = Piece('screen', BASEMENT, [[5164, 5165], [5180, 5181]])
-#: Three-seat sofa. The sheet parks the next sofa flush against its right and
-#: the armchairs flush under its base; both have been looked at.
-SOFA = Piece(
-    'sofa',
-    BASEMENT,
-    [[4691, 4692, 4693], [4707, 4708, 4709]],
-    solid_rows=2,
-    abuts=('right', 'bottom'),
-)
-#: Bench for the gallery and the arrival hall: cold, low, and four tiles long.
-BENCH = Piece('bench', BASEMENT, [[4970, 4971, 4972, 4973], [4986, 4987, 4988, 4989]], solid_rows=1)
-#: Round wooden table. Drawn in the middle of its three-by-three, so only the
-#: tiles it actually stands on end up blocking.
-LOW_TABLE = Piece(
-    'low table',
-    BASEMENT,
-    [[4784, 4785, 4786], [4800, 4801, 4802], [4816, 4817, 4818]],
-    solid_rows=2,
-)
-COLD_ARMCHAIR = Piece('cold armchair', BASEMENT, [[5222, 5223], [5238, 5239]], solid_rows=2)
-WARM_ARMCHAIR = Piece('warm armchair', BASEMENT, [[5224, 5225], [5240, 5241]], solid_rows=2)
-POOL_TABLE = Piece(
-    'pool table',
-    BASEMENT,
-    [[5140, 5141, 5142, 5143], [5156, 5157, 5158, 5159], [5172, 5173, 5174, 5175]],
-    solid_rows=2,
-)
-#: Glass-fronted cabinet: what the Archive is furnished with, over and over.
-#: Pale, so the Archive's cold spots have something to catch.
-CABINET = Piece('cabinet', BASEMENT, [[5034, 5035], [5050, 5051]], solid_rows=1)
-#: Kitchen run for the Night Café, and the sink unit that goes beside it.
-COUNTER = Piece(
-    'counter',
-    GENERIC,
-    [[4536, 4537, 4538], [4552, 4553, 4554], [4568, 4569, 4570]],
-    solid_rows=2,
-)
-SINK_UNIT = Piece('sink unit', GENERIC, [[4563, 4564], [4579, 4580]], solid_rows=2)
-VENDING = Piece(
-    'vending machines',
-    BASEMENT,
-    [[5344, 5345, 5346, 5347], [5360, 5361, 5362, 5363], [5376, 5377, 5378, 5379]],
-    solid_rows=1,
-)
-CAFE_TABLE = Piece(
-    'cafe table',
-    BASEMENT,
-    [[4902, 4903, 4904, 4905], [4918, 4919, 4920, 4921], [4934, 4935, 4936, 4937]],
-    solid_rows=2,
-)
-STOOL = Piece('stool', BASEMENT, [[5006], [5022]], solid_rows=1)
-#: Tall plant: drawn over three tiles, blocking only the one it stands in, so
-#: you can walk behind it. Same piece the First Office uses.
-PLANT = Piece('plant', OFFICE, [[2782], [2798], [2814]], solid_rows=1)
-
-PALETTE = [
-    SCREEN,
-    SOFA,
-    BENCH,
-    LOW_TABLE,
-    COLD_ARMCHAIR,
-    WARM_ARMCHAIR,
-    POOL_TABLE,
-    CABINET,
-    COUNTER,
-    SINK_UNIT,
-    VENDING,
-    CAFE_TABLE,
-    STOOL,
-    PLANT,
-]
-
-
-def check_palette() -> None:
-    """
-    Every piece has to be a whole object of its sheet. Three ways it can fail,
-    all of which have actually happened in this map:
-
-    - its tiles are not one rectangle of the sheet (the Night Café's counter
-      was a worktop glued to a sink from eleven columns away);
-    - a whole column or row of it is blank (the Archive's cabinets were a
-      three-wide slice of a two-wide locker, so every one of them had an empty
-      column);
-    - ink crosses its border (both armchairs were one half of a chair).
-    """
-    for piece in PALETTE:
-        firstgid, columns = SHEETS[piece.sheet]
-        where = f'{piece.name} ({piece.sheet} {piece.grid[0][0]})'
-        try:
-            sheet_rect(firstgid, columns, piece.grid)
-        except ValueError as wrong:
-            raise SystemExit(f'{where}: {wrong}') from wrong
-        blank = blank_lines(piece.sheet, firstgid, columns, piece.grid)
-        if blank:
-            raise SystemExit(
-                f'{where}: nothing is drawn on its {", ".join(blank)} — the block covers '
-                'more tiles than the object does'
-            )
-        cuts = {
-            side: n
-            for side, n in cut_sides(piece.sheet, firstgid, columns, piece.grid).items()
-            if side not in piece.abuts
-        }
-        if cuts:
-            raise SystemExit(
-                f'{where}: the block is drawn through on its {", ".join(cuts)} — it is a '
-                'piece of an object, not an object. Run '
-                f'`python3 tools/tileset_pieces.py {piece.sheet} {firstgid} {columns} '
-                f'{piece.grid[0][0]}` to see the whole one.'
-            )
-        if piece.solid_rows > piece.height:
-            raise SystemExit(f'{where}: it is {piece.height} rows tall, not {piece.solid_rows}')
-
-
-def furniture(source: dict, firstgid: int) -> tuple[list[dict], list[dict]]:
+def furniture(firstgid: int) -> tuple[list[dict], list[dict]]:
     """All the furniture in the world; returns (decorative, solid)."""
     check_palette()
     objects: list[dict] = []
 
-    # Pieces reused from the First Office: the same assets, already assembled.
-    # `piece()` copies whole objects, so unlike a block of gids these cannot
-    # come out cut — only over-collected, which is what its filters are for.
-    meeting_table = piece(source, 28, 32, 8, 5)  # table with its six chairs
-    # A workstation for one: the First Office desk cut short of its second
-    # chair, so the chair that is left is unambiguously *this* desk's seat.
-    focus_desk = piece(source, 25, 14, 3, 3)
+    # Assemblies reused whole: the same assets the First Office is furnished
+    # with, already stacked sprite by sprite (see `tools/office_pieces.py`).
+    meeting_table = MEETING_TABLE_6  # table with its eight chairs
+    # A workstation for one, with a single chair, so it is unambiguously
+    # *this* desk's seat.
+    focus_desk = WORKSTATION
 
     # --- Arrival hall: the doorway and the world's name on the north wall,
     # plants framing the way in, and the middle kept clear, because that is
@@ -732,7 +485,7 @@ def build() -> dict:
     firstgid = last['firstgid'] + last['tilecount']
     tilesets.append(chiron_tileset(firstgid))
 
-    decor, solid = furniture(source, firstgid)
+    decor, solid = furniture(firstgid)
     next_id = 1
 
     def numbered(objects: list[dict]) -> list[dict]:

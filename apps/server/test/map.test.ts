@@ -28,6 +28,7 @@ import {
   type TiledObject,
   type Zone,
 } from '@vto/shared'
+import { DEFAULT_BUBBLE_RADIUS_TILES } from '../src/config'
 import { DEFAULT_MAP_FILE, loadOfficeMap, loadWorldMaps } from '../src/map'
 
 /** The Chiron Office's own tileset (see `tools/make-chiron-tileset.py`). */
@@ -36,6 +37,13 @@ const DARK_TILESET = 'ChironDark'
 const ARRIVAL_ZONE = 'Arrival Hall'
 /** How many focus desks the Chiron Office is meant to have. */
 const FOCUS_DESKS = 6
+/** Zone the First Office's logo is anchored to (see `officeMap.ts`). */
+const LOGO_ZONE = 'Reception'
+/** Size of the logo decal and how far below the zone's top edge it is drawn. */
+const LOGO = { width: 160, offsetY: 64 }
+/** What a meeting room is called, and how many seats every one of them has. */
+const MEETING_ROOM = 'Meeting Room'
+const MEETING_SEATS = 10
 
 /**
  * These tests run against the REAL map that gets deployed. If someone edits
@@ -682,6 +690,306 @@ describe('Chiron Office (real file)', () => {
 })
 
 /**
+ * The First Office: the world everybody lands in, and the one with the meeting
+ * wing. What is checked here is what the floor plan promises — that the rooms
+ * are rooms, that a meeting room is a place ten people can sit down in and get
+ * out of again, and that the walk from where you arrive to any of them exists.
+ */
+describe('First Office (real file)', () => {
+  const first = loadWorldMaps().get('first-office')!
+  const map = first.data
+  const arrival = findSpawnPoint(map, 'from-chiron')
+  const zones = getZones(map)
+  const meetingRooms = zones.filter((z) => z.name.includes(MEETING_ROOM))
+  const seats = findSeats(map)
+  const seatsIn = (zone: Zone) =>
+    seats.filter((s) => {
+      const { x, y } = seatAnchor(s)
+      return x >= zone.x && x < zone.x + zone.width && y >= zone.y && y < zone.y + zone.height
+    })
+  const fromEntrance = reachableTiles(map, tileOf(map, first.spawn))
+  const fromArrival = reachableTiles(map, tileOf(map, arrival))
+
+  it('is laid out as named rooms: a lobby, the desks, the kitchen and the wing', () => {
+    const names = zones.map((z) => z.name)
+    expect(names).toContain(LOGO_ZONE)
+    expect(names).toContain('Desks')
+    expect(names).toContain('Focus Room')
+    expect(names.some((n) => n.includes('Kitchen'))).toBe(true)
+    for (const zone of zones) expect(zone.name.trim(), 'unnamed zone').not.toBe('')
+    // No repeats: two identical labels on the map cannot be told apart, and a
+    // meeting cannot be assigned to one of them.
+    expect(new Set(names).size).toBe(names.length)
+  })
+
+  it('arriving from the Chiron Office lands in the lobby, beside the door', () => {
+    expect(zoneNameAt(map, arrival.x, arrival.y)).toBe(LOGO_ZONE)
+    const [door] = findDoors(map)
+    const tiles = Math.hypot(door.x - arrival.x, door.y - arrival.y) / map.tilewidth
+    expect(tiles).toBeLessThanOrEqual(3)
+  })
+
+  /**
+   * The office's mark is not map data: the client paints it as a floor decal
+   * anchored to the `Reception` zone (`officeMap.ts`), which is why the zone
+   * has to be there and the floor under the decal has to be clear. Somebody
+   * arriving sees the mark and the way back out without moving.
+   */
+  it('the logo lands on clear floor in the lobby', () => {
+    const zone = zones.find((z) => z.name === LOGO_ZONE)!
+    const left = zone.x + zone.width / 2 - LOGO.width / 2
+    expect(left % map.tilewidth, 'the logo is off the tile grid').toBe(0)
+    const furniture = tilesBlockedByFurniture(map)
+    const row = Math.floor((zone.y + LOGO.offsetY) / map.tileheight)
+    for (let col = left / map.tilewidth; col < (left + LOGO.width) / map.tilewidth; col++) {
+      expect(isSolidAt(map, col * map.tilewidth, row * map.tileheight)).toBe(false)
+      expect(furniture.has(`${col},${row}`), `the logo covers furniture at (${col},${row})`).toBe(
+        false,
+      )
+    }
+  })
+
+  /**
+   * The meeting wing. A meeting room is a bookable place, so what matters is
+   * that they are interchangeable: the same table, the same ten seats, every
+   * one of them facing it.
+   */
+  describe('the meeting rooms', () => {
+    it(`there are at least two, each with ${MEETING_SEATS} seats of its own`, () => {
+      expect(meetingRooms.length).toBeGreaterThanOrEqual(2)
+      for (const room of meetingRooms) {
+        const inside = seatsIn(room)
+        expect(inside, `"${room.name}"`).toHaveLength(MEETING_SEATS)
+        // Its seats are named after it, so a meeting in that room can find them.
+        for (const seat of inside) expect(seat.name.startsWith(room.name)).toBe(true)
+      }
+      // The same table in every room: a meeting fits in whichever is free.
+      expect(new Set(meetingRooms.map((r) => seatsIn(r).length)).size).toBe(1)
+    })
+
+    it('every seat faces the table it is drawn at', () => {
+      const furniture = tilesBlockedByFurniture(map)
+      const step = { down: [0, 1], up: [0, -1], left: [-1, 0], right: [1, 0] } as const
+      for (const room of meetingRooms) {
+        for (const seat of seatsIn(room)) {
+          const { x, y } = seatAnchor(seat)
+          const [dc, dr] = step[seat.dir]
+          const ahead = `${Math.floor(x / map.tilewidth) + dc},${Math.floor(y / map.tileheight) + dr}`
+          expect(
+            furniture.has(ahead),
+            `"${seat.name}" faces ${seat.dir}, and there is no table there`,
+          ).toBe(true)
+        }
+      }
+    })
+
+    /**
+     * Two people either side of a meeting room's wall must not end up in the
+     * same conversation: the bubble is `DEFAULT_BUBBLE_RADIUS_TILES` tiles
+     * across and it knows nothing about walls, so what keeps them apart is how
+     * thick the wall is -- which is why the ones between the meeting rooms are
+     * two tiles. "Outside" here means standing in another named place (the
+     * corridor, the next room); the open doorway is the room's own threshold
+     * and is not one.
+     */
+    it('a conversation inside one does not reach through its walls', () => {
+      const radius = DEFAULT_BUBBLE_RADIUS_TILES * map.tilewidth
+      const walkable = [...fromEntrance].map((key) => {
+        const [col, row] = key.split(',').map(Number)
+        return {
+          col,
+          row,
+          x: col * map.tilewidth + map.tilewidth / 2,
+          y: row * map.tileheight + map.tileheight / 2,
+        }
+      })
+      for (const room of meetingRooms) {
+        const here = walkable.filter((t) => zoneNameAt(map, t.x, t.y) === room.name)
+        const elsewhere = walkable.filter((t) => {
+          const zone = zoneNameAt(map, t.x, t.y)
+          return zone !== undefined && zone !== room.name
+        })
+        expect(here.length, `"${room.name}" has no floor to stand on`).toBeGreaterThan(0)
+        for (const inside of here) {
+          for (const outside of elsewhere) {
+            expect(
+              Math.hypot(inside.x - outside.x, inside.y - outside.y),
+              `"${room.name}": (${inside.col},${inside.row}) inside and ` +
+                `(${outside.col},${outside.row}) in "${zoneNameAt(map, outside.x, outside.y)}"`,
+            ).toBeGreaterThan(radius)
+          }
+        }
+      }
+    })
+
+    /**
+     * Sitting down at a full table and getting up again. Avatars do not
+     * collide with each other, so "with the other nine occupied" is the same
+     * walk as with the room empty; what this checks is the shape of the room —
+     * that no chair is reached by walking over another one.
+     */
+    it('every seat can be left and the door reached with the room full', () => {
+      const [door] = findDoors(map)
+      const exit = tileKey(map, door.x + door.width / 2, door.y + door.height / 2)
+      for (const room of meetingRooms) {
+        const inside = seatsIn(room)
+        for (const seat of inside) {
+          const taken = new Set(
+            inside
+              .filter((other) => other !== seat)
+              .map((other) => {
+                const { x, y } = seatAnchor(other)
+                return tileKey(map, x, y)
+              }),
+          )
+          const anchor = seatAnchor(seat)
+          const out = reachableTiles(map, tileOf(map, anchor), taken)
+          expect(out.has(exit), `"${seat.name}" is walled in when the room is full`).toBe(true)
+        }
+      }
+    })
+  })
+
+  /**
+   * Every seat in the office, wherever it is: you can get to it from both ways
+   * into the world, sitting in it does not block anybody, and it is drawn far
+   * enough from the next one that two people at it are two people.
+   */
+  describe('the seats', () => {
+    it('all of them are named, and no two share a name', () => {
+      expect(seats.length).toBeGreaterThan(0)
+      for (const seat of seats) expect(seat.name.trim(), 'unnamed seat').not.toBe('')
+      expect(new Set(seats.map((s) => s.name)).size).toBe(seats.length)
+    })
+
+    it('nothing solid is on one, and none of them is in a doorway', () => {
+      const furniture = tilesBlockedByFurniture(map)
+      for (const seat of seats) {
+        const { x, y } = seatAnchor(seat)
+        expect(isSolidAt(map, x, y), `"${seat.name}" is on a colliding tile`).toBe(false)
+        expect(furniture.has(tileKey(map, x, y)), `"${seat.name}" is under furniture`).toBe(false)
+        expect(doorAt(map, x, y), `"${seat.name}" is in the door`).toBeUndefined()
+        expect(seatAtRect(map, seat)?.name, `"${seat.name}" overlaps another seat`).toBe(seat.name)
+      }
+    })
+
+    it('every one is reachable on foot from the spawn and from the Chiron door', () => {
+      for (const [where, reachable] of [
+        ['the entrance', fromEntrance],
+        ['the Chiron door', fromArrival],
+      ] as const) {
+        for (const seat of seats) {
+          const { x, y } = seatAnchor(seat)
+          expect(
+            reachable.has(tileKey(map, x, y)),
+            `"${seat.name}" cannot be reached from ${where}`,
+          ).toBe(true)
+        }
+      }
+    })
+
+    it('no two are close enough for their avatars to overlap', () => {
+      for (const seat of seats) {
+        for (const other of seats) {
+          if (other === seat) continue
+          const a = seatAnchor(seat)
+          const b = seatAnchor(other)
+          expect(
+            Math.abs(a.x - b.x) >= AVATAR_FRAME.width || Math.abs(a.y - b.y) >= AVATAR_FRAME.width,
+            `"${seat.name}" and "${other.name}" are drawn on top of each other`,
+          ).toBe(true)
+        }
+      }
+    })
+
+    it('nobody sitting down closes off part of the office', () => {
+      for (const seat of seats) {
+        const anchor = seatAnchor(seat)
+        const blocked = new Set([tileKey(map, anchor.x, anchor.y)])
+        const still = reachableTiles(map, tileOf(map, first.spawn), blocked)
+        for (const key of fromEntrance) {
+          if (blocked.has(key)) continue
+          expect(
+            still.has(key),
+            `somebody sitting at "${seat.name}" cuts (${key}) off from the rest of the office`,
+          ).toBe(true)
+        }
+      }
+    })
+  })
+
+  /**
+   * The walls. Two things make a floor plan walkable rather than merely
+   * drawn: a way into every room that a person fits through, and no pocket of
+   * floor behind the furniture.
+   */
+  describe('the plan', () => {
+    it('every doorway is at least two tiles wide', () => {
+      for (const zone of zones) {
+        const openings = doorwaysOf(map, zone)
+        expect(openings.length, `"${zone.name}" has no way in`).toBeGreaterThan(0)
+        for (const opening of openings) {
+          expect(
+            opening.width,
+            `"${zone.name}" has a doorway ${opening.width} tile wide at ${opening.at}`,
+          ).toBeGreaterThanOrEqual(2)
+        }
+      }
+    })
+
+    it('every zone, and every piece of floor, can be reached on foot', () => {
+      const furniture = tilesBlockedByFurniture(map)
+      for (const zone of zones) {
+        expect(
+          tilesOf(map, zone).some(({ col, row }) => fromEntrance.has(`${col},${row}`)),
+          `the zone "${zone.name}" cannot be reached on foot`,
+        ).toBe(true)
+      }
+      for (const { col, row } of flooredTiles(map)) {
+        const x = col * map.tilewidth + map.tilewidth / 2
+        const y = row * map.tileheight + map.tileheight / 2
+        if (isSolidAt(map, x, y) || furniture.has(`${col},${row}`)) continue
+        expect(
+          fromEntrance.has(`${col},${row}`),
+          `the floor at (${col},${row}) cannot be reached on foot`,
+        ).toBe(true)
+      }
+    })
+
+    it('what blocks the way is drawn, and what is drawn is where it should be', () => {
+      const solids = tilesBlockedByFurniture(map)
+      const drawn = tilesDrawnOnByFurniture(map)
+      for (const layer of objectLayers(map)) {
+        for (const obj of layer.objects) {
+          if (!obj.gid) continue
+          expect(obj.x % map.tilewidth, `object ${obj.id} is off the grid`).toBe(0)
+          expect(obj.y % map.tileheight, `object ${obj.id} is off the grid`).toBe(0)
+          if (!objectCollides(layer, obj)) continue
+          expect(obj.visible !== false, `object ${obj.id} blocks the way but is hidden`).toBe(true)
+        }
+      }
+      for (const key of solids) {
+        const [col, row] = key.split(',').map(Number)
+        const x = col * map.tilewidth + map.tilewidth / 2
+        const y = row * map.tileheight + map.tileheight / 2
+        expect(
+          drawn.has(key),
+          `something blocks the way at (${key}) with nothing drawn on it`,
+        ).toBe(true)
+        expect(
+          isSolidAt(map, x, y),
+          `a piece of furniture is drawn over the wall at (${key})`,
+        ).toBe(false)
+        expect(
+          doorAt(map, x, y),
+          `a piece of furniture blocks the door at (${key})`,
+        ).toBeUndefined()
+      }
+    })
+  })
+})
+
+/**
  * Does the arrival point face away from the door it came through? It is
  * measured against the nearest door in the same map, which is the one that
  * matches it: `dir` has to point inwards, away from it.
@@ -829,4 +1137,65 @@ function reachableTiles(
     }
   }
   return seen
+}
+
+/** The cell a point is in, as `reachableTiles` wants it. */
+function tileOf(map: TiledMap, at: { x: number; y: number }): { col: number; row: number } {
+  return { col: Math.floor(at.x / map.tilewidth), row: Math.floor(at.y / map.tileheight) }
+}
+
+/**
+ * The ways into a zone: the runs of walkable tiles in the ring around it that
+ * a person could step through. One tile wide is a doorway an avatar gets stuck
+ * in the mouth of; what this is here to measure is that there are none.
+ */
+function doorwaysOf(map: TiledMap, zone: Zone): { at: string; width: number }[] {
+  const first = {
+    col: Math.floor(zone.x / map.tilewidth),
+    row: Math.floor(zone.y / map.tileheight),
+  }
+  const last = {
+    col: Math.ceil((zone.x + zone.width) / map.tilewidth) - 1,
+    row: Math.ceil((zone.y + zone.height) / map.tileheight) - 1,
+  }
+  const furniture = tilesBlockedByFurniture(map)
+  const open = (col: number, row: number) =>
+    !furniture.has(`${col},${row}`) &&
+    !isSolidAt(
+      map,
+      col * map.tilewidth + map.tilewidth / 2,
+      row * map.tileheight + map.tileheight / 2,
+    )
+
+  const sides: { col: number; row: number }[][] = [
+    range(first.col, last.col).map((col) => ({ col, row: first.row - 1 })),
+    range(first.col, last.col).map((col) => ({ col, row: last.row + 1 })),
+    range(first.row, last.row).map((row) => ({ col: first.col - 1, row })),
+    range(first.row, last.row).map((row) => ({ col: last.col + 1, row })),
+  ]
+
+  const out: { at: string; width: number }[] = []
+  for (const side of sides) {
+    let run = 0
+    for (const [i, tile] of side.entries()) {
+      // A way in has to be open on both sides of the line: an opening that
+      // gives on to a wall, or on to a desk, is not one.
+      const inward = {
+        col:
+          tile.col === first.col - 1 ? first.col : tile.col === last.col + 1 ? last.col : tile.col,
+        row:
+          tile.row === first.row - 1 ? first.row : tile.row === last.row + 1 ? last.row : tile.row,
+      }
+      if (open(tile.col, tile.row) && open(inward.col, inward.row)) run++
+      if ((!open(tile.col, tile.row) || i === side.length - 1) && run > 0) {
+        out.push({ at: `${tile.col},${tile.row}`, width: run })
+        run = 0
+      }
+    }
+  }
+  return out
+}
+
+function range(from: number, to: number): number[] {
+  return Array.from({ length: to - from + 1 }, (_, i) => from + i)
 }

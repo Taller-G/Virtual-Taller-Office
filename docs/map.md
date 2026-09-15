@@ -136,13 +136,16 @@ as well.
 
 ### Zones (recommended)
 
-- Rectangles with class `zone` and a name (`Reception`, `Desks`, `Meeting Room`,
-  `Kitchen & Lounge`, `South Meeting Room`, `East Meeting Room`, `Focus Room`...). The app shows the
-  name as a label in the top-left corner of each zone.
-- The server's tests require at least those four zones, plus the three rooms in the south wing, and
+- Rectangles with class `zone` and a name (`Reception`, `Desks`, `Kitchen & Lounge`, `Focus Room`,
+  `West Meeting Room`...). The app shows the name as a label in the top-left corner of each zone.
+- A room's zone covers the **whole room**, wall to wall. That is what makes the label land inside it
+  and what a meeting means when it says which room it is in: the seats of a meeting room are the
+  `seat` objects inside its zone.
+- The server's tests require the First Office's four minimum zones (a reception, the desks, a
+  kitchen and the meeting rooms), that every zone is named, that none of the names is repeated, and
   that **every** zone can be reached on foot from the spawn: a room without a walkable door makes
-  the tests fail. For the Chiron Office they require the same (all of its zones reachable, named and
-  not repeated) plus that the `Arrival Hall` and the `Focus Desks` exist.
+  the tests fail. For the Chiron Office they require the same plus that the `Arrival Hall` and the
+  `Focus Desks` exist.
 - The label is white on a `#1b1f2acc` plate, so it reads the same over a bright floor as over a dark
   one; nothing needs changing to make a dark world.
 
@@ -180,6 +183,18 @@ The constants for these names live in `packages/shared/src/map.ts`, used by clie
 npm test -w apps/server      # real maps of every world: spawns, doors, zones, tilesets
 ```
 
+To **look** at a map instead of reading its tile ids — which is the only way to answer "is this
+piece of furniture whole, and is it where I meant it" — there is an offline renderer that draws a
+world exactly as the client does:
+
+```bash
+python3 tools/render-map.py first-office --grid -o /tmp/first.png
+python3 tools/render-map.py first-office --debug -o /tmp/first-debug.png
+```
+
+`--grid` writes the tile coordinates over it and `--debug` paints what `?debug` paints in the app:
+colliding tiles yellow, solid furniture blue, zones, seats, doors and spawns outlined.
+
 If a map does not meet the contract, `npm run dev` fails while starting the server with the detail
 (`The map "…" is not valid: …`), and the client shows a message if it cannot load the file or a
 tileset image. If a door does not match up, the message is
@@ -187,29 +202,87 @@ tileset image. If a door does not match up, the message is
 
 ## The worlds there are today
 
-| World           | File                 | Zones                                                                           |
-| --------------- | -------------------- | ------------------------------------------------------------------------------- |
-| `first-office`  | `first-office.json`  | Reception, Kitchen & Lounge, Desks, Meeting Room (+ South, East) and Focus Room |
-| `chiron-office` | `chiron-office.json` | Arrival Hall, Focus Desks, Archive, Gallery, The Pit, War Room and Night Café   |
+| World           | File                 | Zones                                                                                |
+| --------------- | -------------------- | ------------------------------------------------------------------------------------ |
+| `first-office`  | `first-office.json`  | Reception, Kitchen & Lounge, Focus Room, Desks, Meeting Wing and three Meeting Rooms |
+| `chiron-office` | `chiron-office.json` | Arrival Hall, Focus Desks, Archive, Gallery, The Pit, War Room and Night Café        |
 
 They are connected by **a pair of doors**, one at each end:
 
 | From            | Door (tile) | Leads to        | Arrival point (tile)       |
 | --------------- | ----------- | --------------- | -------------------------- |
-| `first-office`  | (25, 3)     | `chiron-office` | `from-first-office` (2, 4) |
-| `chiron-office` | (2, 2)      | `first-office`  | `from-chiron` (25, 4)      |
+| `first-office`  | (16, 2)     | `chiron-office` | `from-first-office` (2, 4) |
+| `chiron-office` | (2, 2)      | `first-office`  | `from-chiron` (16, 4)      |
 
 Both sit in their world's reception / arrival hall, against the north wall, and both have an **opening**
 above them (two tiles of the `ChironDark` tileset, drawn as decorative furniture on the wall) so it
 is clear you leave through there: in the First Office it is a dark hole cut into the bright wall;
 in Chiron it is the same hole seen from the inside.
 
+### The First Office
+
+The world everybody lands in, and the first thing anyone sees of the product. Its plan is a front of
+house, a work floor and a meeting wing, one after the other from north to south on a 40×40 canvas:
+
+```
+      +--------------------------------------------------+
+      | Kitchen & Lounge |   RECEPTION    |  Focus Room   |  rows 2-10
+      |                  |  (door, spawn) |               |
+      +------- opening --+--- the aisle --+-- opening ----+  rows 11-12
+      |   OPEN DESK AREA -- two banks either side of a    |  rows 13-23
+      |   four-tile aisle that runs the length of it      |
+      +---------------------- opening --------------------+  rows 24-25
+      |            meeting-wing corridor                  |  rows 26-27
+      +---- door ------------- door -------- door --------+  rows 28-29
+      | West Meeting  |  Centre Meeting  |  East Meeting  |  rows 30-37
+      +--------------------------------------------------+
+```
+
+The **aisle** (cols 18-21) is the spine: it starts at the lobby, crosses the desk area without
+touching a desk and ends at the corridor the meeting rooms open onto, so the walk from the door to a
+meeting never squeezes past anybody's chair.
+
+The rooms, their zones and what you can sit on in each:
+
+| Room                  | Zone (tiles)  | Seats                              |
+| --------------------- | ------------- | ---------------------------------- |
+| `Reception`           | 14-26 × 2-10  | — (the spawn, the door, the logo)  |
+| `Kitchen & Lounge`    | 1-12 × 2-10   | —                                  |
+| `Focus Room`          | 28-38 × 2-10  | 4 · `Focus desk 1…4`               |
+| `Desks`               | 1-38 × 13-23  | 12 · `Desk 1…12`                   |
+| `Meeting Wing`        | 1-38 × 26-27  | — (the corridor)                   |
+| `West Meeting Room`   | 1-11 × 30-37  | 10 · `West Meeting Room seat 1…10` |
+| `Centre Meeting Room` | 14-25 × 30-37 | 10 · `Centre Meeting Room seat …`  |
+| `East Meeting Room`   | 28-38 × 30-37 | 10 · `East Meeting Room seat …`    |
+
+Every **meeting room** is the same room: one table eight tiles long, four chairs along each side and
+one at each end — **ten seats**, every one facing the table, numbered round it (north side, then
+south, then the two ends). That is the seam the scheduled meetings rely on: a meeting is assigned to
+a room **by the name of its zone**, and its seats are the ten `seat` objects inside that zone.
+
+The walls between the meeting rooms are **two tiles thick** on purpose. A conversation bubble is two
+tiles across and knows nothing about walls, so a one-tile wall would put two people either side of
+it in the same conversation. Three tiles apart, they are not.
+
+To rebuild the world from scratch:
+
+```bash
+python3 tools/make-first-office-map.py
+```
+
+The plan is stated at the top of that script in rooms, bands and corridors; the furniture comes from
+`tools/office_pieces.py`, the palette it shares with the Chiron Office. The script refuses to write
+a map in which two pieces of furniture land on the same tile, and checks every piece against the
+tileset image first (see `tools/tileset_pieces.py`). After that the map is edited in Tiled like any
+other; re-running the script overwrites those edits.
+
 ### The Chiron Office
 
 The second world: dark, cold and open-plan, and the one you go to in order to work. The floor plan
-deliberately looks nothing like the First Office's — over there closed rooms hang off a vertical
-corridor on a square 40×40 canvas; here the canvas is landscape (34×24) and everything gives onto an
-east-west **gallery**, with alcoves separated by short stub walls and pillars, and no interior doors.
+deliberately looks nothing like the First Office's — over there rooms are stacked in bands across a
+square 40×40 canvas around one straight aisle; here the canvas is landscape (34×24) and everything
+gives onto an east-west **gallery**, with alcoves separated by short stub walls and pillars, and no
+interior doors.
 
 You arrive in the **Arrival Hall**, the north-west alcove: the world's name is spelled out in light
 on the wall beside the doorway you came through (the Chiron mark), so which of the two offices you
@@ -255,14 +328,16 @@ other; re-running the scripts overwrites those edits.
 
 ## Origin
 
-The floor plan starts from the [SkyOffice](https://github.com/kevinshen56714/SkyOffice) map (MIT),
-reworked for Taller's office: a reception with the spawn, a kitchen and lounge with a counter, sink,
-fridge and vending machine, a meeting room with a table and a whiteboard, and a desk room with extra
-workstations. The south wing (rows 25-39) was added later, hanging off the vertical corridor:
-`South Meeting Room`, `East Meeting Room` and `Focus Room`, each with its door to the corridor.
+The First Office started from the [SkyOffice](https://github.com/kevinshen56714/SkyOffice) map
+(MIT), reworked for Taller's office and then grown by accretion — rows appended to the south for two
+more meeting rooms and a focus room, furniture cloned in piece by piece. It has since been
+**redesigned** (see `tools/make-first-office-map.py`) around what it is for now: an arrival, a work
+floor, and a wing of interchangeable meeting rooms one straight walk from the door. The furniture is
+the same LimeZu packs it always used.
 
-The Chiron Office's floor plan is our own (see `tools/make-chiron-map.py`); its furniture comes from
-the same packs, and a few already-solved assemblies — the meeting table, the desk with a PC — are
-copied from the First Office by tile rectangle rather than rebuilt sprite by sprite.
+The Chiron Office's floor plan is our own (see `tools/make-chiron-map.py`). Both worlds are
+furnished from one palette, `tools/office_pieces.py`: the pieces cut from the sheets (checked against
+the images themselves) and the two assemblies that were solved once in Tiled and are reused whole —
+the meeting table and the workstation.
 
 The graphics are by LimeZu; see `docs/asset-licenses.md`.

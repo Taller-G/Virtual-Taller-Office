@@ -228,10 +228,14 @@ bubble in under 300 ms, a third one joins and all three see three members, whoev
 and the others stay, when one is left it disappears, the N+1th player does not join a full bubble,
 and a fake position from the client neither creates nor breaks bubbles other than the ones the
 server computes). They also validate the **real maps** of every world (`test/map.test.ts`): a single
-entrance on walkable floor, the office's zones (the three rooms of the south wing included), that
-every one of them is reachable on foot from the spawn, embedded tilesets with their images present,
-collisions declared in the map, and the doors of the First Office and the Chiron Office matching up
-both ways without falling on walls or furniture. The **contract of the doors** has its tests in
+entrance on walkable floor, the office's zones (the meeting wing's rooms included), that every one
+of them is reachable on foot from the spawn, embedded tilesets with their images present, collisions
+declared in the map, and the doors of the First Office and the Chiron Office matching up both ways
+without falling on walls or furniture. For the First Office they also check what its floor plan
+promises: that every meeting room is a named zone with the same ten seats around its table, all of
+them facing it, reachable on foot from the spawn and from the Chiron door, that you can leave one
+with the room full, that no doorway is narrower than two tiles and that a conversation inside a
+meeting room does not reach through its walls. The **contract of the doors** has its tests in
 `test/doors.test.ts` (named spawns, a door without a destination, a door to a world or to a spawn
 that does not exist: the server does not start and names the door and what is missing) and
 **travelling between worlds** in `test/travel.room.test.ts` (you arrive at the spawn the door names
