@@ -1,14 +1,6 @@
 import Phaser from 'phaser'
-import {
-  APPEARANCE_BASES,
-  AVATAR_FRAME,
-  AVATAR_IDS,
-  GLASSES_OPTIONS,
-  HAT_OPTIONS,
-  SKIN_TONES,
-  type WorldDefinition,
-} from '@vto/shared'
-import { layerTextureKey, textureKey } from './avatarAnims'
+import { AVATAR_FRAME, AVATAR_IDS, appearanceLayerAssets, type WorldDefinition } from '@vto/shared'
+import { layerAssetPath, layerTextureKey, textureKey } from './avatarAnims'
 import { queueTilesets, queueWorldMap } from './worldAssets'
 
 /** Key of the Taller logo texture (decoration for the reception). */
@@ -64,26 +56,11 @@ export class BootScene extends Phaser.Scene {
       })
     }
 
-    // Layers for composed avatars: body (per skin tone), hair, top, accessories.
+    // Layers for composed avatars: the catalogue lists every sheet any
+    // appearance can ask for, so a new part only has to be declared there.
     const layersUrl = `${this.avatarsUrl}layers/`
-    for (const base of APPEARANCE_BASES) {
-      for (const tone of SKIN_TONES) {
-        this.load.spritesheet(
-          layerTextureKey(base, 'body', tone),
-          `${layersUrl}${base}/body-${tone}.png`,
-          { frameWidth: AVATAR_FRAME.width, frameHeight: AVATAR_FRAME.height },
-        )
-      }
-      for (const part of ['hair', 'top'] as const) {
-        this.load.spritesheet(layerTextureKey(base, part), `${layersUrl}${base}/${part}.png`, {
-          frameWidth: AVATAR_FRAME.width,
-          frameHeight: AVATAR_FRAME.height,
-        })
-      }
-    }
-    for (const acc of [...HAT_OPTIONS, ...GLASSES_OPTIONS]) {
-      if (acc === 'none') continue
-      this.load.spritesheet(layerTextureKey('acc', acc), `${layersUrl}accessories/${acc}.png`, {
+    for (const layer of appearanceLayerAssets()) {
+      this.load.spritesheet(layerTextureKey(layer), `${layersUrl}${layerAssetPath(layer)}`, {
         frameWidth: AVATAR_FRAME.width,
         frameHeight: AVATAR_FRAME.height,
       })

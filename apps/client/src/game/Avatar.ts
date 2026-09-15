@@ -1,10 +1,9 @@
 import Phaser from 'phaser'
 import {
   AVATAR_FRAME,
-  HAIR_COLORS,
   PLAYER_BODY,
   SIT_FRAME,
-  TOP_COLORS,
+  appearanceLayers,
   parseAppearance,
   type Appearance,
   type Direction,
@@ -59,10 +58,11 @@ export interface AvatarOptions {
  * Two rendering modes:
  * - **Preset** (empty `appearance`): a single `Phaser.Sprite` with the full
  *   sheet of the selected avatar, as before.
- * - **Composed** (`appearance` with valid `Appearance` JSON): several layers
- *   (body, top, hair, glasses, hat) stacked in the container. The hair and
- *   top layers are tinted with `setTint()` over their greyscale sheet; the
- *   body one uses a sheet pre-generated per skin tone.
+ * - **Composed** (`appearance` with valid `Appearance` JSON): the layers the
+ *   shared catalogue lists for that appearance — feet, legs, top, facial hair,
+ *   hair and accessories — stacked in the container in its order. Each one is
+ *   tinted with `setTint()` over its greyscale sheet, except the body, which
+ *   uses a sheet pre-generated per skin tone.
  *
  * In both modes the container also carries: name, "away" badge, bubble ring
  * and chat balloon.
@@ -218,22 +218,20 @@ export class Avatar extends Phaser.GameObjects.Container {
     this.add(children)
   }
 
-  /** Creates the layered sprites for a composed appearance. */
+  /**
+   * Creates the layered sprites for a composed appearance, in the order the
+   * shared catalogue gives them: it is the same list the entry preview draws,
+   * so a part added there shows up here without touching this file.
+   */
   private buildLayers(a: Appearance, feetY: number) {
-    const addLayer = (texKey: string, tint?: number) => {
-      if (!this.scene.textures.exists(texKey)) return
+    for (const layer of appearanceLayers(a)) {
+      const texKey = layerTextureKey(layer)
+      if (!this.scene.textures.exists(texKey)) continue
       const sprite = this.scene.add.sprite(0, feetY, texKey).setOrigin(0.5, 1)
-      if (tint !== undefined && tint !== 0xffffff) sprite.setTint(tint)
+      if (layer.tint !== undefined && layer.tint !== 0xffffff) sprite.setTint(layer.tint)
       this.layers.push(sprite)
       this.layerTexKeys.push(texKey)
     }
-
-    // Order: body → top → hair → glasses → hat
-    addLayer(layerTextureKey(a.base, 'body', a.skinTone))
-    addLayer(layerTextureKey(a.base, 'top'), TOP_COLORS[a.topColor])
-    addLayer(layerTextureKey(a.base, 'hair'), HAIR_COLORS[a.hairColor])
-    if (a.glasses !== 'none') addLayer(layerTextureKey('acc', a.glasses))
-    if (a.hat !== 'none') addLayer(layerTextureKey('acc', a.hat))
   }
 
   // -------------------------------------------------------------------------

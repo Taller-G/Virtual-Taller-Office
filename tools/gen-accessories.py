@@ -19,31 +19,10 @@ from pathlib import Path
 
 from PIL import Image
 
+from avatar_frames import DIR_MAP, FRAME_COUNT, FRAME_H, FRAME_W, SHEET_W
+
 AVATARS_DIR = Path(__file__).resolve().parents[1] / "apps/client/public/assets/avatars"
 ACC_DIR = AVATARS_DIR / "layers" / "accessories"
-
-FRAME_W, FRAME_H, FRAME_COUNT = 32, 48, 52
-SHEET_W = FRAME_W * FRAME_COUNT
-
-# Which frames belong to which direction.
-# idle: right 0-5, up 6-11, left 12-17, down 18-23
-# walk: right 24-29, up 30-35, left 36-41, down 42-47
-# sit:  48-51
-DIR_MAP = {}
-for i in range(6):
-    DIR_MAP[i] = "right"
-    DIR_MAP[6 + i] = "up"
-    DIR_MAP[12 + i] = "left"
-    DIR_MAP[18 + i] = "down"
-    DIR_MAP[24 + i] = "right"
-    DIR_MAP[30 + i] = "up"
-    DIR_MAP[36 + i] = "left"
-    DIR_MAP[42 + i] = "down"
-# Sentado: 48 right, 49 up, 50 left, 51 down
-DIR_MAP[48] = "right"
-DIR_MAP[49] = "up"
-DIR_MAP[50] = "left"
-DIR_MAP[51] = "down"
 
 
 # ---------------------------------------------------------------------------

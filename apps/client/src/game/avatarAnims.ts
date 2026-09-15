@@ -1,14 +1,12 @@
 import Phaser from 'phaser'
 import {
   ANIM_START,
-  APPEARANCE_BASES,
   AVATAR_IDS,
   DEFAULT_AVATAR,
   DIRECTIONS,
   FRAMES_PER_ANIM,
-  GLASSES_OPTIONS,
-  HAT_OPTIONS,
-  SKIN_TONES,
+  appearanceLayerAssets,
+  type AppearanceLayerRef,
   type Direction,
 } from '@vto/shared'
 
@@ -20,11 +18,17 @@ export function textureKey(avatar: string): string {
 }
 
 /**
- * Texture key for a layer of a composed avatar.
- * Examples: `layer-adam-body-default`, `layer-ash-hair`, `layer-acc-beanie`.
+ * Texture key for a layer of a composed avatar, built from the same two fields
+ * that locate its sheet on disk — `assets/avatars/layers/<dir>/<file>.png`.
+ * Examples: `layer-adam-body-default`, `layer-ash-hair-bun`, `layer-accessories-beanie`.
  */
-export function layerTextureKey(group: string, part: string, variant?: string): string {
-  return variant ? `layer-${group}-${part}-${variant}` : `layer-${group}-${part}`
+export function layerTextureKey(layer: AppearanceLayerRef): string {
+  return `layer-${layer.dir}-${layer.file}`
+}
+
+/** Path of a layer's sheet, relative to the avatar layers folder. */
+export function layerAssetPath(layer: AppearanceLayerRef): string {
+  return `${layer.dir}/${layer.file}.png`
 }
 
 /**
@@ -110,16 +114,8 @@ export function createAvatarAnims(scene: Phaser.Scene) {
     }
   }
 
-  // Layers: body (per tone), hair, top, accessories.
-  for (const base of APPEARANCE_BASES) {
-    for (const tone of SKIN_TONES) {
-      registerLayerAnims(scene, layerTextureKey(base, 'body', tone))
-    }
-    registerLayerAnims(scene, layerTextureKey(base, 'hair'))
-    registerLayerAnims(scene, layerTextureKey(base, 'top'))
-  }
-  for (const acc of [...HAT_OPTIONS, ...GLASSES_OPTIONS]) {
-    if (acc === 'none') continue
-    registerLayerAnims(scene, layerTextureKey('acc', acc))
+  // Layers: every sheet an appearance can ask for, straight from the catalogue.
+  for (const layer of appearanceLayerAssets()) {
+    registerLayerAnims(scene, layerTextureKey(layer))
   }
 }

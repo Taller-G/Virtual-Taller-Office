@@ -3,11 +3,17 @@ import {
   AVATARS,
   DEFAULT_APPEARANCE,
   DEFAULT_AVATAR,
+  FACIAL_HAIR_OPTIONS,
   GLASSES_OPTIONS,
   HAIR_COLORS,
   HAIR_COLOR_IDS,
+  HAIR_STYLES,
   HAT_OPTIONS,
   NAME_MAX_LENGTH,
+  PANTS_COLORS,
+  PANTS_COLOR_IDS,
+  SHOE_COLORS,
+  SHOE_COLOR_IDS,
   SKIN_TONES,
   TOP_COLORS,
   TOP_COLOR_IDS,
@@ -17,9 +23,13 @@ import {
   serializeAppearance,
   type Appearance,
   type AppearanceBase,
+  type FacialHairOption,
   type GlassesOption,
   type HairColorId,
+  type HairStyle,
   type HatOption,
+  type PantsColorId,
+  type ShoeColorId,
   type SkinTone,
   type TopColorId,
 } from '@vto/shared'
@@ -79,6 +89,14 @@ const LABEL: Record<string, string> = {
   beanie: 'Beanie',
   'glasses-round': 'Round',
   'glasses-square': 'Square',
+  short: 'Short',
+  long: 'Long',
+  bun: 'Bun',
+  curly: 'Curly',
+  ponytail: 'Ponytail',
+  stubble: 'Stubble',
+  mustache: 'Moustache',
+  beard: 'Beard',
 }
 
 function colorHex(n: number): string {
@@ -138,8 +156,9 @@ function optionRow<T extends string>(
  *
  * Two modes (tabs):
  * - **Presets**: the 11 avatars in the catalogue (single-sheet), as before.
- * - **Customise**: composed appearance editor with pickers for base, skin
- *   tone, hair colour, clothes colour, hat and glasses.
+ * - **Customise**: composed appearance editor with a row per part — silhouette,
+ *   skin tone, hair style and colour, facial hair, clothes, trousers, shoes,
+ *   hat and glasses.
  *
  * It remembers the last choice in localStorage. It resolves when the user
  * confirms; only then is the room joined.
@@ -219,8 +238,11 @@ export function showEntry(): Promise<Identity> {
     optionRow('Skin', SKIN_TONES, appearance.skinTone, (v: SkinTone) => {
       appearance = { ...appearance, skinTone: v }
     }),
+    optionRow('Hair style', HAIR_STYLES, appearance.hairStyle, (v: HairStyle) => {
+      appearance = { ...appearance, hairStyle: v }
+    }),
     optionRow(
-      'Hair',
+      'Hair colour',
       HAIR_COLOR_IDS,
       appearance.hairColor,
       (v: HairColorId) => {
@@ -228,6 +250,9 @@ export function showEntry(): Promise<Identity> {
       },
       HAIR_COLORS as Record<HairColorId, number>,
     ),
+    optionRow('Facial hair', FACIAL_HAIR_OPTIONS, appearance.facialHair, (v: FacialHairOption) => {
+      appearance = { ...appearance, facialHair: v }
+    }),
     optionRow(
       'Clothes',
       TOP_COLOR_IDS,
@@ -236,6 +261,24 @@ export function showEntry(): Promise<Identity> {
         appearance = { ...appearance, topColor: v }
       },
       TOP_COLORS as Record<TopColorId, number>,
+    ),
+    optionRow(
+      'Trousers',
+      PANTS_COLOR_IDS,
+      appearance.pantsColor,
+      (v: PantsColorId) => {
+        appearance = { ...appearance, pantsColor: v }
+      },
+      PANTS_COLORS as Record<PantsColorId, number>,
+    ),
+    optionRow(
+      'Shoes',
+      SHOE_COLOR_IDS,
+      appearance.shoeColor,
+      (v: ShoeColorId) => {
+        appearance = { ...appearance, shoeColor: v }
+      },
+      SHOE_COLORS as Record<ShoeColorId, number>,
     ),
     optionRow('Hat', HAT_OPTIONS, appearance.hat, (v: HatOption) => {
       appearance = { ...appearance, hat: v }

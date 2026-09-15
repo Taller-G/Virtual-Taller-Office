@@ -87,6 +87,19 @@ export const GLASSES_OPTIONS = ['none', 'glasses-round', 'glasses-square'] as co
 export type GlassesOption = (typeof GLASSES_OPTIONS)[number]
 
 /**
+ * Hair shapes.  `short` is the cropped cut each silhouette is drawn with; the
+ * other four add geometry over it (strands down the sides, a bun, curls, a
+ * tail), so every style keeps the head it belongs to.  They are generated per
+ * silhouette by `tools/gen-hair.py`.
+ */
+export const HAIR_STYLES = ['short', 'long', 'bun', 'curly', 'ponytail'] as const
+export type HairStyle = (typeof HAIR_STYLES)[number]
+
+/** Facial hair; it takes the hair colour.  See `tools/gen-facial-hair.py`. */
+export const FACIAL_HAIR_OPTIONS = ['none', 'stubble', 'mustache', 'beard'] as const
+export type FacialHairOption = (typeof FACIAL_HAIR_OPTIONS)[number]
+
+/**
  * Palette of named colours for hair and clothes.  Each entry is a hex tint
  * that Phaser applies over the greyscale layer with `setTint()`.
  *
@@ -124,6 +137,38 @@ export const TOP_COLORS = {
 export const TOP_COLOR_IDS = Object.keys(TOP_COLORS) as readonly TopColorId[]
 export type TopColorId = keyof typeof TOP_COLORS
 
+/** Trousers.  Applied to the legs only, never to the feet or the top. */
+export const PANTS_COLORS = {
+  navy: 0x4a5480,
+  denim: 0x5f82b4,
+  blue: 0x4080d0,
+  black: 0x3a3a4a,
+  gray: 0x909098,
+  khaki: 0xbfae80,
+  olive: 0x76854f,
+  brown: 0x8b6040,
+  red: 0xd04040,
+  white: 0xf0f0f0,
+} as const
+
+export const PANTS_COLOR_IDS = Object.keys(PANTS_COLORS) as readonly PantsColorId[]
+export type PantsColorId = keyof typeof PANTS_COLORS
+
+/** Shoes.  Applied to the feet only, never to the legs. */
+export const SHOE_COLORS = {
+  black: 0x3a3a4a,
+  brown: 0x8b6040,
+  tan: 0xc09258,
+  gray: 0x909098,
+  white: 0xf0f0f0,
+  red: 0xd04040,
+  blue: 0x4080d0,
+  green: 0x40a060,
+} as const
+
+export const SHOE_COLOR_IDS = Object.keys(SHOE_COLORS) as readonly ShoeColorId[]
+export type ShoeColorId = keyof typeof SHOE_COLORS
+
 /**
  * Composed look of an avatar: fully describes how a character looks, built
  * from layers stacked on top of each other.
@@ -131,8 +176,12 @@ export type TopColorId = keyof typeof TOP_COLORS
 export interface Appearance {
   base: AppearanceBase
   skinTone: SkinTone
+  hairStyle: HairStyle
   hairColor: HairColorId
+  facialHair: FacialHairOption
   topColor: TopColorId
+  pantsColor: PantsColorId
+  shoeColor: ShoeColorId
   hat: HatOption
   glasses: GlassesOption
 }
@@ -140,10 +189,83 @@ export interface Appearance {
 export const DEFAULT_APPEARANCE: Appearance = {
   base: 'adam',
   skinTone: 'default',
+  hairStyle: 'short',
   hairColor: 'brown',
+  facialHair: 'none',
   topColor: 'green',
+  pantsColor: 'navy',
+  shoeColor: 'black',
   hat: 'none',
   glasses: 'none',
+}
+
+// ---------------------------------------------------------------------------
+// The layers a composed avatar is drawn with
+// ---------------------------------------------------------------------------
+
+/** Folder of the sheets that do not belong to one silhouette. */
+export const ACCESSORIES_DIR = 'accessories'
+
+/**
+ * One sprite sheet of a composed avatar.  `dir`/`file` locate it under
+ * `assets/avatars/layers/` and are also what its texture key is built from, so
+ * anything that draws an appearance — the office, the entry preview — only has
+ * to walk this list.
+ */
+export interface AppearanceLayerRef {
+  /** Folder: a silhouette id, or `accessories`. */
+  dir: string
+  /** File name inside the folder, without `.png`. */
+  file: string
+}
+
+/** A layer of a specific appearance: its sheet plus the tint it is drawn with. */
+export interface AppearanceLayer extends AppearanceLayerRef {
+  /** Tint over the greyscale sheet; absent = draw the sheet as it is. */
+  tint?: number
+}
+
+/**
+ * The layers that make up an appearance, in draw order (first = furthest
+ * back).  The order is what keeps the parts readable: the feet go under the
+ * legs and the legs under the top, the beard sits on the face but under the
+ * glasses, and the hair goes under the hat.
+ */
+export function appearanceLayers(a: Appearance): AppearanceLayer[] {
+  const layers: AppearanceLayer[] = [
+    { dir: a.base, file: `body-${a.skinTone}` },
+    { dir: a.base, file: 'shoes', tint: SHOE_COLORS[a.shoeColor] },
+    { dir: a.base, file: 'pants', tint: PANTS_COLORS[a.pantsColor] },
+    { dir: a.base, file: 'top', tint: TOP_COLORS[a.topColor] },
+  ]
+  if (a.facialHair !== 'none') {
+    layers.push({ dir: a.base, file: `facial-${a.facialHair}`, tint: HAIR_COLORS[a.hairColor] })
+  }
+  layers.push({ dir: a.base, file: `hair-${a.hairStyle}`, tint: HAIR_COLORS[a.hairColor] })
+  if (a.glasses !== 'none') layers.push({ dir: ACCESSORIES_DIR, file: a.glasses })
+  if (a.hat !== 'none') layers.push({ dir: ACCESSORIES_DIR, file: a.hat })
+  return layers
+}
+
+/** Every sheet any appearance can ask for: what the client preloads. */
+export function appearanceLayerAssets(): AppearanceLayerRef[] {
+  const refs: AppearanceLayerRef[] = []
+  for (const base of APPEARANCE_BASES) {
+    for (const tone of SKIN_TONES) refs.push({ dir: base, file: `body-${tone}` })
+    for (const style of HAIR_STYLES) refs.push({ dir: base, file: `hair-${style}` })
+    for (const facial of FACIAL_HAIR_OPTIONS) {
+      if (facial !== 'none') refs.push({ dir: base, file: `facial-${facial}` })
+    }
+    refs.push(
+      { dir: base, file: 'top' },
+      { dir: base, file: 'pants' },
+      { dir: base, file: 'shoes' },
+    )
+  }
+  for (const acc of [...HAT_OPTIONS, ...GLASSES_OPTIONS]) {
+    if (acc !== 'none') refs.push({ dir: ACCESSORIES_DIR, file: acc })
+  }
+  return refs
 }
 
 /** Serialises an Appearance to a JSON string for the schema field. */
@@ -151,28 +273,46 @@ export function serializeAppearance(a: Appearance): string {
   return JSON.stringify(a)
 }
 
-/** Parses a JSON string into an Appearance, or returns null if invalid. */
+/**
+ * Parses a JSON string into an Appearance, or returns null if invalid.
+ *
+ * Fields added after the first version of the editor are optional: an
+ * appearance saved without them (a remembered identity, an older client) loads
+ * with the default for each missing part.  A field that *is* there but holds an
+ * unknown value is still rejected, so a bad value can never reach the room.
+ */
 export function parseAppearance(raw: string): Appearance | null {
   if (!raw) return null
   try {
     const obj = JSON.parse(raw) as Record<string, unknown>
+    if (typeof obj !== 'object' || obj === null) return null
+    const hairStyle = optional(obj.hairStyle, HAIR_STYLES, DEFAULT_APPEARANCE.hairStyle)
+    const facialHair = optional(obj.facialHair, FACIAL_HAIR_OPTIONS, DEFAULT_APPEARANCE.facialHair)
+    const pantsColor = optional(obj.pantsColor, PANTS_COLOR_IDS, DEFAULT_APPEARANCE.pantsColor)
+    const shoeColor = optional(obj.shoeColor, SHOE_COLOR_IDS, DEFAULT_APPEARANCE.shoeColor)
     if (
-      typeof obj !== 'object' ||
-      obj === null ||
       !isAppearanceBase(obj.base) ||
       !isSkinTone(obj.skinTone) ||
       !isHairColorId(obj.hairColor) ||
       !isTopColorId(obj.topColor) ||
       !isHatOption(obj.hat) ||
-      !isGlassesOption(obj.glasses)
+      !isGlassesOption(obj.glasses) ||
+      hairStyle === null ||
+      facialHair === null ||
+      pantsColor === null ||
+      shoeColor === null
     ) {
       return null
     }
     return {
       base: obj.base,
       skinTone: obj.skinTone,
+      hairStyle,
       hairColor: obj.hairColor,
+      facialHair,
       topColor: obj.topColor,
+      pantsColor,
+      shoeColor,
       hat: obj.hat,
       glasses: obj.glasses,
     }
@@ -191,6 +331,16 @@ export function sanitizeAppearance(raw: unknown): string {
 }
 
 // Type guards
+/**
+ * A field that may be absent: missing takes the default, anything outside the
+ * option list is a rejection (`null`).
+ */
+function optional<T extends string>(value: unknown, options: readonly T[], fallback: T): T | null {
+  if (value === undefined) return fallback
+  return typeof value === 'string' && (options as readonly string[]).includes(value)
+    ? (value as T)
+    : null
+}
 function isAppearanceBase(v: unknown): v is AppearanceBase {
   return typeof v === 'string' && (APPEARANCE_BASES as readonly string[]).includes(v)
 }
