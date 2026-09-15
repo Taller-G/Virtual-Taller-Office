@@ -2,10 +2,6 @@
 
 A choice made and the reasoning behind it — the path taken over the alternatives.
 
-## South wing added by growing the map canvas instead of filling the gaps
-
-What: The three new rooms (South Meeting Room, East Meeting Room, Focus Room) were added by growing the Tiled canvas from 40×30 to 40×40 tiles and hanging them off the vertical corridor (cols 20-23), which was prolonged from row 28 to row 34 · Why: the free pockets inside the original 40×30 canvas were 3-5 tiles tall, too small for rooms with walls, doors and furniture; appending rows at the bottom keeps every existing object's coordinates untouched, so nothing in the old office moves · Where: apps/client/public/assets/map/first-office.json · Learned: extend a Tiled map to the right or the bottom — origin-anchored coordinates then stay valid and only the tile layers need re-padding
-
 ## Travelling joins the destination world before leaving the origin
 
 What: Crossing a door does `join` (not `joinOrCreate`) on the destination room, waits for its first state, and only then leaves the origin room with a consented leave · Why: if the destination is down, full or its map failed, the traveller must stay exactly where they were with a message instead of ending up in limbo; `joinOrCreate` would silently resurrect a world the server deliberately did not start · Where: apps/client/src/network/connection.ts (`travelTo`) · Learned: for a hand-off between two live connections, acquire the new one first and release the old one last
@@ -105,3 +101,19 @@ What: the desk alcove is nine rows deep (2-10) and two banks of three workstatio
 ## Furniture collision is derived from the art, not declared per tile
 
 What: a `Piece` says how many of its rows stand on the floor (`solid_rows`, counted from the bottom, so a cabinet blocks only the row it stands on and avatars pass behind it) and the generator then makes solid only those tiles with at least a fifth of their pixels drawn on (`Piece.ink`) · Why: it keeps both halves of the bargain at once and by construction — you cannot walk through a desk, and nothing stops you where nothing is drawn — whereas `solid=True` over a whole rectangle put an invisible wall across the empty corners of every bounding box · Where: tools/make-chiron-map.py (`Piece.at`), tools/tileset_pieces.py (`ink_fraction`) · Learned: the threshold is low on purpose; what it has to exclude is the blank corner of a round table's three-by-three, not the overhanging end of a bench, which is furniture you would expect to walk into
+
+## The First Office is a floor plan of bands around one aisle
+
+What: The First Office is laid out as three bands across the 40×40 canvas — front of house (Kitchen & Lounge | Reception | Focus Room, rows 2-10), the open desk area (rows 13-23) and the meeting wing (three rooms, rows 30-37) — tied together by a four-tile aisle on cols 18-21 that runs from the lobby door to the corridor the meeting rooms open onto · Why: the office had grown by accretion (rooms appended south, furniture cloned in) and read as rooms that happened to fit rather than as a plan; making the circulation the thing the rooms hang off is what lets somebody walk from the door to any meeting without passing a desk, and the arrival is the first impression of the product · Where: tools/make-first-office-map.py (the plan is stated at the top in bands and columns), apps/client/public/assets/map/first-office.json · Learned: lay out the corridor first and let the rooms take what is left — a plan drawn the other way round ends up with its circulation running through somebody's chair
+
+## A meeting room is ten seats around one table, and its zone name is the booking key
+
+What: Every meeting room of the First Office holds one eight-tile table with exactly ten seats — four a side on alternate tiles plus one at each end — each a Tiled `seat` facing the table and named `<room name> seat N`; the room itself is a `zone` whose rectangle covers the whole room (`West / Centre / East Meeting Room`) · Why: scheduled meetings assign a meeting to a room **by name** and then need its seats, so the map has to answer "which seats belong to this room" with nothing but geometry: the seats of a room are the `seat` objects inside its zone · Where: apps/client/public/assets/map/first-office.json, tools/make-first-office-map.py (`Furnishing.meeting_table`), docs/map.md · Learned: when another feature will have to find things in a map, make the containment do the work — a zone that covers its room needs no second list to keep in sync
+
+## Walls between meeting rooms are two tiles thick
+
+What: The partitions between the three meeting rooms are two columns of wall, not one, and every interior band wall is two rows (its upper edge plus its face) · Why: a conversation bubble is `DEFAULT_BUBBLE_RADIUS_TILES` = 2 tiles across and knows nothing about walls, so across a one-tile wall two people standing either side of it are exactly two tiles apart and end up in the same conversation; at two tiles they are three apart and cannot be · Where: tools/make-first-office-map.py (`build_walls`), apps/server/src/config.ts (`DEFAULT_BUBBLE_RADIUS_TILES`) · Learned: when proximity is measured in straight-line distance and ignores geometry, wall thickness is a _feature_ — size it against the radius rather than against how it looks
+
+## The First Office map is generated by a script, like the Chiron one
+
+What: `apps/client/public/assets/map/first-office.json` is written by `tools/make-first-office-map.py` (which reads its own tilesets back out of the map, since Tiled is where they are embedded) rather than hand-edited · Why: a 40×40 map is 3200 tile ids and 500 objects — a layout that is only stated as tile ids cannot be reviewed, and the redesign had to be iterated on; with the plan written as rooms, bands and corridors, moving a wall is one line and the whole map is rebuilt · Where: tools/make-first-office-map.py · Learned: the committed map stays the source of truth for Tiled, and re-running the generator overwrites hand edits — the same bargain the Chiron Office already had

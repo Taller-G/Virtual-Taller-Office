@@ -117,3 +117,12 @@ What: `cut_sides()` is exact everywhere except the sofa row of `Basement`, where
 ## Calling `travelTo` from the console does not take you to the other world
 
 What: driving the client over CDP, `window.__vto.connection.travelTo('chiron-office', ...)` returns `{ok: true}` and the header changes to "Chiron Office", but the scene goes on drawing the world you left — the screenshot shows the First Office's kitchen with the other world's name over it · Why: crossing a door is two steps, and only the first is on the connection: `OfficeScene.checkDoors` calls `travelTo` and *then* `this.scene.restart({ worldId })`; the restart is what loads the other map · Where: apps/client/src/game/OfficeScene.ts (`checkDoors`) · Learned: to check a world in the real client, walk into the door rectangle with key events — the shortcut proves nothing about the map you wanted to look at
+
+## A doorway is only as wide as what is walkable on BOTH sides of it
+
+What: A two-tile gap in a wall is not a two-tile doorway if a piece of furniture blocks one of the tiles the other side of it — an armchair standing on the tile just inside the Kitchen & Lounge's door turned it into a one-tile squeeze, with the gap in the wall still two tiles wide · Why: the gap and the room are painted separately (walls in a tile layer, furniture as objects), so nothing in the map file relates them; only walking the ring of tiles around a room and requiring both sides of each opening to be free finds it · Where: apps/server/test/map.test.ts (`doorwaysOf`, "every doorway is at least two tiles wide"), tools/make-first-office-map.py · Learned: measure a doorway through the furniture, not in the wall
+
+## A floating-point free column is what lets somebody leave a full meeting room
+
+What: Each meeting room is a tile wider than its table needs, and the spare column runs the full depth of the room · Why: with all ten seats taken, somebody at a chair on the far side has to get out past nine occupied tiles; without a clear column from the back of the room to the door, leaving means walking over somebody else's chair · Where: tools/make-first-office-map.py (`Furnishing.meeting_table`), apps/server/test/map.test.ts ("every seat can be left and the door reached with the room full") · Learned: a room full of furniture needs its escape route tested with the furniture *occupied*, not empty
+
