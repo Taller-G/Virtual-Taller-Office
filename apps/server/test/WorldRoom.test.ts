@@ -4,6 +4,7 @@ import { CloseCode, type Room as SdkRoom } from '@colyseus/sdk'
 import {
   DEFAULT_AVATAR,
   DEFAULT_WORLD_ID,
+  MAX_AGENTS,
   Message,
   NAME_MAX_LENGTH,
   roomNameFor,
@@ -235,6 +236,52 @@ describe('A world\'s room: connect / disconnect cycle', () => {
     expect(room.state.players.get(anon.sessionId)?.avatar).toBe(DEFAULT_AVATAR)
     expect(room.state.players.get(long.sessionId)?.name).toBe('x'.repeat(NAME_MAX_LENGTH))
     expect(room.state.players.get(long.sessionId)?.avatar).toBe(DEFAULT_AVATAR)
+  })
+
+  it('joins with the chosen number of agents, and everyone sees it', async () => {
+    await createRoom()
+    const observer = await connect()
+    const client = await connect({ name: 'Ana', agents: 3 })
+    await client.waitForInitialState()
+
+    expect(room.state.players.get(client.sessionId)?.agents).toBe(3)
+    await waitFor(
+      () => observer.state.players.get(client.sessionId)?.agents === 3,
+      1_000,
+      'the observer sees the agents',
+    )
+  })
+
+  it('a join without an agent count enters with none', async () => {
+    await createRoom()
+    const client = await connect({ name: 'Ana' })
+    await client.waitForInitialState()
+
+    expect(room.state.players.get(client.sessionId)?.agents).toBe(0)
+  })
+
+  it('an invalid agent count is clamped and the player enters normally', async () => {
+    await createRoom()
+    const cases: Array<{ sent: unknown; expected: number }> = [
+      { sent: -1, expected: 0 },
+      { sent: 99, expected: MAX_AGENTS },
+      { sent: 2.5, expected: 2 },
+      { sent: 'three', expected: 0 },
+    ]
+    const joined = []
+    for (const { sent } of cases) {
+      joined.push(await connect({ name: 'Ana', agents: sent as never }))
+    }
+    await joined[joined.length - 1].waitForInitialState()
+
+    for (let i = 0; i < cases.length; i++) {
+      const player = room.state.players.get(joined[i].sessionId)
+      expect(player).toBeDefined()
+      expect(player?.agents).toBe(cases[i].expected)
+      // Entering normally is the point: a junk count is not a rejected join.
+      expect(player?.name).toBe('Ana')
+      expect(player?.connected).toBe(true)
+    }
   })
 
   it('changing the name is replicated; an empty name is ignored', async () => {

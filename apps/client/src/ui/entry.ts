@@ -1,18 +1,21 @@
 import {
   APPEARANCE_BASES,
   AVATARS,
+  DEFAULT_AGENTS,
   DEFAULT_APPEARANCE,
   DEFAULT_AVATAR,
   GLASSES_OPTIONS,
   HAIR_COLORS,
   HAIR_COLOR_IDS,
   HAT_OPTIONS,
+  MAX_AGENTS,
   NAME_MAX_LENGTH,
   SKIN_TONES,
   TOP_COLORS,
   TOP_COLOR_IDS,
   isAvatarId,
   parseAppearance,
+  sanitizeAgentCount,
   sanitizeName,
   serializeAppearance,
   type Appearance,
@@ -30,6 +33,13 @@ export interface Identity {
   avatar: string
   /** Appearance JSON (composed look). Empty = use a preset. */
   appearance: string
+  /**
+   * How many agent mascots walk behind you. For now it is set by hand here;
+   * later it will be however many agents Chiron reports. It is part of the
+   * identity like the name is, so it travels to the server on joining (see
+   * `JoinOptions`) and through every door after that.
+   */
+  agents: number
 }
 
 const STORAGE_KEY = 'vto.identity'
@@ -46,6 +56,9 @@ function loadIdentity(): Partial<Identity> {
         typeof parsed.appearance === 'string' && parseAppearance(parsed.appearance)
           ? parsed.appearance
           : undefined,
+      // An identity stored before there were agents has no count: it reads as
+      // none, like anything else unusable.
+      agents: sanitizeAgentCount(parsed.agents),
     }
   } catch {
     return {}
@@ -134,9 +147,13 @@ function optionRow<T extends string>(
 // ---------------------------------------------------------------------------
 
 /**
- * Entry screen: visible name and choice of avatar.
+ * Entry screen: visible name, how many agents walk with you, and choice of
+ * avatar.
  *
- * Two modes (tabs):
+ * The agents stepper sits on its own, above the avatar group and outside it:
+ * it applies whichever tab is open, and it is not part of the look.
+ *
+ * Two modes (tabs) for the avatar:
  * - **Presets**: the 11 avatars in the catalogue (single-sheet), as before.
  * - **Customise**: composed appearance editor with pickers for base, skin
  *   tone, hair colour, clothes colour, hat and glasses.
@@ -265,6 +282,25 @@ export function showEntry(): Promise<Identity> {
   customTab.addEventListener('click', () => setMode('custom'))
   setMode(mode)
 
+  // -- Agents stepper --
+  // It is above the avatar group and outside it on purpose: the count applies
+  // to both tabs, and the Customise tab is being worked on elsewhere.
+  let agents = remembered.agents ?? DEFAULT_AGENTS
+  const agentsValue = form.querySelector<HTMLOutputElement>('#entry-agents-value')!
+  const agentsLess = form.querySelector<HTMLButtonElement>('#entry-agents-less')!
+  const agentsMore = form.querySelector<HTMLButtonElement>('#entry-agents-more')!
+
+  const setAgents = (value: number) => {
+    agents = sanitizeAgentCount(value)
+    agentsValue.textContent = String(agents)
+    // At either end the button that cannot do anything says so.
+    agentsLess.disabled = agents === 0
+    agentsMore.disabled = agents === MAX_AGENTS
+  }
+  agentsLess.addEventListener('click', () => setAgents(agents - 1))
+  agentsMore.addEventListener('click', () => setAgents(agents + 1))
+  setAgents(agents)
+
   // -- Submit --
   const refreshSubmit = () => {
     submit.disabled = sanitizeName(nameInput.value) === undefined
@@ -286,6 +322,7 @@ export function showEntry(): Promise<Identity> {
           name,
           avatar: mode === 'preset' ? selectedPreset : DEFAULT_AVATAR,
           appearance: mode === 'custom' ? serializeAppearance(appearance) : '',
+          agents,
         }
         saveIdentity(identity)
         overlay.hidden = true

@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest'
 import {
   AVATAR_IDS,
   AVATARS,
+  DEFAULT_AGENTS,
   DEFAULT_APPEARANCE,
   DEFAULT_AVATAR,
   isDirection,
+  MAX_AGENTS,
   NAME_MAX_LENGTH,
   parseAppearance,
+  sanitizeAgentCount,
   sanitizeAppearance,
   sanitizeAvatar,
   sanitizeName,
@@ -85,5 +88,33 @@ describe('appearance', () => {
     const a = { ...DEFAULT_APPEARANCE, hat: 'none' as const, glasses: 'none' as const }
     const raw = serializeAppearance(a)
     expect(parseAppearance(raw)).toEqual(a)
+  })
+})
+
+describe('sanitizeAgentCount', () => {
+  it('passes every valid count through untouched', () => {
+    for (let n = 0; n <= MAX_AGENTS; n++) expect(sanitizeAgentCount(n)).toBe(n)
+  })
+
+  it('clamps a count outside the range to the nearest end', () => {
+    expect(sanitizeAgentCount(-1)).toBe(0)
+    expect(sanitizeAgentCount(-99)).toBe(0)
+    expect(sanitizeAgentCount(MAX_AGENTS + 1)).toBe(MAX_AGENTS)
+    expect(sanitizeAgentCount(99)).toBe(MAX_AGENTS)
+  })
+
+  it('truncates a fractional count', () => {
+    expect(sanitizeAgentCount(2.5)).toBe(2)
+    expect(sanitizeAgentCount(0.9)).toBe(0)
+    expect(sanitizeAgentCount(-0.5)).toBe(0)
+  })
+
+  it('reads anything that is not a finite number as no agents', () => {
+    expect(sanitizeAgentCount(undefined)).toBe(DEFAULT_AGENTS)
+    expect(sanitizeAgentCount(null)).toBe(DEFAULT_AGENTS)
+    expect(sanitizeAgentCount('3')).toBe(DEFAULT_AGENTS)
+    expect(sanitizeAgentCount(NaN)).toBe(DEFAULT_AGENTS)
+    expect(sanitizeAgentCount(Infinity)).toBe(DEFAULT_AGENTS)
+    expect(sanitizeAgentCount({ agents: 3 })).toBe(DEFAULT_AGENTS)
   })
 })

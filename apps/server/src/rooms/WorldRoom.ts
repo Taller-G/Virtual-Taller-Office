@@ -12,6 +12,7 @@ import {
   OfficeState,
   Player,
   randomSpawnPosition,
+  sanitizeAgentCount,
   sanitizeAppearance,
   sanitizeAvatar,
   sanitizeName,
@@ -167,6 +168,10 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
       name: sanitizeName(options?.name) ?? guestName(client.sessionId),
       avatar: sanitizeAvatar(options?.avatar),
       appearance: sanitizeAppearance(options?.appearance),
+      // How many agent mascots walk behind them. It is part of the identity
+      // like the avatar is: validated here once, and from then on it is the
+      // state that everyone reads.
+      agents: sanitizeAgentCount(options?.agents),
       x,
       y,
       dir: spawn.dir,
@@ -189,7 +194,7 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
     }
     client.send(Message.ROOM_INFO, info)
     console.log(
-      `[world ${this.world.id}] ${client.sessionId} joins as "${player.name}" (${player.avatar}; spawn "${spawn.name}"; ${this.state.players.size} present)`,
+      `[world ${this.world.id}] ${client.sessionId} joins as "${player.name}" (${player.avatar}; ${player.agents} agents; spawn "${spawn.name}"; ${this.state.players.size} present)`,
     )
   }
 

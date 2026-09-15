@@ -34,7 +34,7 @@ const game = new Phaser.Game({
   // tests).
   fps: { forceSetTimeOut: config.debug },
   scene: [
-    new BootScene(startWorld, config.avatarsUrl, config.logoUrl),
+    new BootScene(startWorld, config.avatarsUrl, config.mascotUrl, config.logoUrl),
     new OfficeScene(connection, { debug: config.debug }),
   ],
 })

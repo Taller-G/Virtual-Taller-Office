@@ -20,6 +20,8 @@ import { toast } from '../ui/toasts'
 import { Avatar, BODY } from './Avatar'
 import { createAvatarAnims } from './avatarAnims'
 import { BubbleArea } from './BubbleArea'
+import { MascotTrain } from './MascotTrain'
+import { createMascotAnims } from './mascotAnims'
 import { buildOfficeMap, drawCollisionDebug, type BuiltMap } from './officeMap'
 import { SeatHint, SIT_KEY } from './SeatHint'
 import { isTyping } from './typingGuard'
@@ -77,6 +79,12 @@ interface Sent {
  * instead stand the person up. That is why a refused seat (taken a moment
  * ago) needs no reply: nothing changed, so nothing is drawn.
  *
+ * Agent mascots: each player carries `agents` robots in the state, and this
+ * scene gives every avatar a `MascotTrain` that draws them and walks them
+ * along their owner's path. They are decoration and nothing else: they have
+ * no physics body, no name and no entry in any list, so nothing here — seats,
+ * doors, bubbles, chat — ever asks about them.
+ *
  * Doors: stepping on an object of class `door` in the map leads to another
  * world. There is no key press and no confirmation: as soon as the feet enter
  * the area, the scene fades to black, loads the destination's map, switches
@@ -88,6 +96,8 @@ export class OfficeScene extends Phaser.Scene {
   private worldId = DEFAULT_WORLD_ID
   private map!: BuiltMap
   private avatars = new Map<string, Avatar>()
+  /** The agent robots of each player, by sessionId (see `MascotTrain`). */
+  private mascots = new Map<string, MascotTrain>()
   private bubbleAreas = new Map<string, BubbleArea>()
   private me?: Avatar
   private keys!: Keys
@@ -131,6 +141,7 @@ export class OfficeScene extends Phaser.Scene {
     this.cameras.main.fadeIn(FADE_MS)
     if (this.debug) drawCollisionDebug(this, this.map)
     createAvatarAnims(this)
+    createMascotAnims(this)
 
     const camera = this.cameras.main
     camera.setBounds(0, 0, this.map.bounds.width, this.map.bounds.height)
@@ -178,6 +189,12 @@ export class OfficeScene extends Phaser.Scene {
     this.checkDoors()
     for (const avatar of this.avatars.values()) {
       if (!avatar.isMe) avatar.interpolate(delta)
+    }
+    // After the avatars have moved: the robots follow where their player is
+    // now drawn, not where they were a frame ago.
+    for (const [sessionId, train] of this.mascots) {
+      const avatar = this.avatars.get(sessionId)
+      if (avatar) train.update(delta, avatar)
     }
     for (const area of this.bubbleAreas.values()) area.interpolate(delta)
   }
@@ -394,6 +411,9 @@ export class OfficeScene extends Phaser.Scene {
           $.listen(player, 'name', (name) => avatar.setLabel(name)),
           $.listen(player, 'avatar', (id) => avatar.setAvatar(id)),
           $.listen(player, 'appearance', (raw) => avatar.setAppearance(raw)),
+          $.listen(player, 'agents', (agents) =>
+            this.mascots.get(sessionId)?.setCount(agents, avatar),
+          ),
           $.listen(player, 'bubbleId', () => this.refreshBubbles()),
         )
         // This client sends its own position and animation: they are not overwritten by the echo.
@@ -477,6 +497,8 @@ export class OfficeScene extends Phaser.Scene {
   private clearRoom() {
     for (const unbind of this.unbindRoom.splice(0)) unbind()
     for (const sessionId of [...this.avatars.keys()]) this.removeAvatar(sessionId)
+    for (const train of this.mascots.values()) train.destroy()
+    this.mascots.clear()
     for (const area of this.bubbleAreas.values()) area.destroy(true)
     this.bubbleAreas.clear()
     this.room = undefined
@@ -497,6 +519,7 @@ export class OfficeScene extends Phaser.Scene {
     avatar.setAway(player.away)
     this.syncAnim(avatar, player)
     this.avatars.set(sessionId, avatar)
+    this.mascots.set(sessionId, new MascotTrain(this, avatar, player.agents))
     this.refreshBubbles()
 
     if (isMe) {
@@ -516,6 +539,10 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private removeAvatar(sessionId: string) {
+    // The robots go with their player, whether they left, dropped or the room
+    // was replaced: nothing else holds a reference to them.
+    this.mascots.get(sessionId)?.destroy()
+    this.mascots.delete(sessionId)
     const avatar = this.avatars.get(sessionId)
     if (!avatar) return
     if (avatar === this.me) {
