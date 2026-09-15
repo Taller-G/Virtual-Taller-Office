@@ -27,9 +27,10 @@ export function sanitizeAgentCount(value: unknown): number {
 }
 
 /**
- * Sprite sheet of the robot mascot: deliberately smaller than the avatars'
- * 32x48 frame, so a robot next to a person reads as a companion and not as
- * another player.
+ * Sprite sheet of the robot mascot: a small hovering robot, deliberately
+ * smaller than the avatars' 32x48 frame, so one next to a person reads as a
+ * companion and not as another player. It has no legs — it drifts above its
+ * own shadow — so its "walk" is a faster float, not a step.
  *
  * The sheet follows the same frame layout as the avatars (see `ANIM_START` in
  * `avatars.ts`) minus the seated poses, which a robot has no use for:

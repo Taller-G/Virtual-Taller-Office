@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """
-Draws the agent mascot's sprite sheet: the little robot that walks behind a
-player (see `packages/shared/src/agents.ts`).
+Draws the agent mascot's sprite sheet: the little robot that follows a player
+(see `packages/shared/src/agents.ts`).
+
+The mascot is an EVE-like hovering robot: a smooth white egg with no legs, two
+arms floating free of the body, and a black visor with big glowing eyes. It
+never touches the ground — it drifts above its own shadow, so the "walk" of
+the animation is a faster, deeper float with the arms trailing, not a step.
 
 The sheet is 768x24 px: 48 frames of 16x24, in the same layout as the avatars'
-sheets minus the seated poses, which a robot has no use for:
+sheets minus the seated poses, which this robot has no use for:
 
   idle: right 0-5 - up 6-11 - left 12-17 - down 18-23
   walk: right 24-29 - up 30-35 - left 36-41 - down 42-47
 
-The robot is deliberately small — 10 px wide against the avatars' ~16, on a
-frame half the height — so that next to a person it reads as a companion and
-not as another player. The palette is the avatars' own dark navy (#3a3a50 is
-the darkest colour in every LimeZu sheet) plus a violet accent, the same one
-the Focused badge and the Chiron doorways use.
+It is deliberately small — 10 px wide against the avatars' ~16, on a frame half
+the height — so that next to a person it reads as a companion and not as
+another player.
 
 `left` is never drawn: it is `right` mirrored, which is what keeps the two
 profiles identical.
@@ -49,149 +52,184 @@ ANIM_START = {
 }
 
 # --- palette ---------------------------------------------------------------
-OUT = (58, 58, 80, 255)  # #3a3a50, the avatars' darkest colour
-PLATE = (185, 194, 214, 255)
-PLATE_SH = (142, 152, 178, 255)
-PLATE_HI = (224, 230, 242, 255)
-VISOR = (42, 51, 80, 255)
-EYE = (95, 214, 224, 255)
-EYE_DIM = (58, 150, 170, 255)
-ACCENT = (160, 120, 255, 255)
-ACCENT_DIM = (109, 72, 196, 255)
-SHADOW = (32, 32, 48, 70)
+# Glossy white, so the edge is a soft slate rather than the avatars' near-black
+# outline: a hard dark ring would make her read as heavy, which is the opposite
+# of what she is.
+EDGE = (90, 100, 120, 255)
+SHELL = (244, 247, 252, 255)
+SHELL_SH = (206, 214, 228, 255)
+GLINT = (255, 255, 255, 255)
+VISOR = (23, 27, 42, 255)
+EYE = (127, 216, 255, 255)
+EYE_DIM = (79, 158, 200, 255)
+SHADOW = (32, 32, 48, 64)
 
-# --- body plan (y of the frame, feet on row 21, shadow on 22) --------------
-HEAD_TOP, HEAD_BOTTOM = 4, 10
-BODY_TOP, BODY_BOTTOM = 12, 17
-LEG_TOP, LEG_BOTTOM = 18, 21
+# --- shapes ----------------------------------------------------------------
+# One silhouette, not a head stacked on a body: EVE is a single smooth shell,
+# and two outlined circles would read as a snowman. The neck is a one-pixel
+# pinch at each side — enough to tell head from body without cutting the form
+# in two. The head is left a little larger than the body, which is the whole
+# trick of a cute character. Each row is (dy, x0, x1), both ends included.
+SHELL_TOP = 3
+SHELL_ROWS = [
+    (0, 5, 10),
+    (1, 4, 11),
+    (2, 3, 12),
+    (3, 3, 12),
+    (4, 3, 12),
+    (5, 3, 12),
+    (6, 4, 11),
+    (7, 5, 10),
+    (8, 4, 11),
+    (9, 4, 11),
+    (10, 4, 11),
+    (11, 4, 11),
+    (12, 4, 11),
+    (13, 5, 10),
+    (14, 5, 10),
+    (15, 6, 9),
+]
+
+# The visor: a rounded black oval inset in the face, not a band wrapped round
+# the head — the corners of the shell stay white, which is what keeps it a
+# face and not a helmet. Rows are relative to FACE_DY.
+FACE_DY = 3
+VISOR_ROWS = [(0, 5, 10), (1, 4, 11), (2, 4, 11), (3, 5, 10)]
+# The eyes sit on the two middle rows, a pixel clear of the visor's rim.
+EYE_DY = 1
+EYES = ((5, 6), (9, 10))
+# In profile only the leading eye shows, and the visor slides to that side.
+VISOR_ROWS_SIDE = [(0, 7, 10), (1, 6, 11), (2, 6, 11), (3, 7, 10)]
+EYES_SIDE = ((9, 10),)
+
+# The pinch, for the profile's shoulder shade.
+NECK_DY = 7
+
+# Arms: stubby paddles floating a pixel clear of the shell, at chest height.
+# Two pixels wide is all the frame has left beside a 10-wide shell, and at that
+# width an outline ring would leave nothing but ring — so they are shaded by
+# hand instead, light on the inner top and dark at the outer base.
+ARM_TOP = 12
+ARM_H = 4
+
+# The shadow sits on the last row but one: the sprite's bottom edge is put at
+# the owner's feet, so that is where the floor is, and the shell floating three
+# pixels above it is what makes her hover rather than stand.
+GROUND = 22
+
+
+def put(im: Image.Image, x: int, y: int, color) -> None:
+    if 0 <= x < FRAME_W and 0 <= y < FRAME_H:
+        im.putpixel((x, y), color)
 
 
 def rect(im: Image.Image, x0: int, y0: int, x1: int, y1: int, color) -> None:
-    """Filled rectangle, both ends included, clipped to the frame."""
-    for y in range(max(0, y0), min(FRAME_H - 1, y1) + 1):
-        for x in range(max(0, x0), min(FRAME_W - 1, x1) + 1):
-            im.putpixel((x, y), color)
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            put(im, x, y, color)
 
 
-def box(im: Image.Image, x0: int, y0: int, x1: int, y1: int, fill, outline=OUT) -> None:
-    """Outlined box with the four corners cut off (a rounded pixel-art box)."""
-    rect(im, x0, y0, x1, y1, outline)
-    rect(im, x0 + 1, y0 + 1, x1 - 1, y1 - 1, fill)
-    for cx, cy in ((x0, y0), (x1, y0), (x0, y1), (x1, y1)):
-        im.putpixel((cx, cy), (0, 0, 0, 0))
+def cells_of(rows, top: int, dx: int) -> set:
+    return {(x + dx, top + dy) for dy, x0, x1 in rows for x in range(x0, x1 + 1)}
 
 
-def draw_shadow(im: Image.Image) -> None:
-    """The patch of shade under the robot: it never bobs, so the body does."""
-    rect(im, 5, 22, 10, 22, SHADOW)
-    im.putpixel((4, 22), (SHADOW[0], SHADOW[1], SHADOW[2], 40))
-    im.putpixel((11, 22), (SHADOW[0], SHADOW[1], SHADOW[2], 40))
-
-
-def draw_legs(im: Image.Image, direction: str, step: int, bob: int) -> None:
+def blob(im: Image.Image, rows, top: int, dx: int, fill, edge=EDGE) -> None:
     """
-    Two stubby legs. `step` is the phase of the walk: -1 while standing still
-    (both legs down), 0 and 1 for each leg forward, which is what makes the
-    walk read as a walk and not as a slide.
+    Fills a shape given as rows and rings it with an edge: every pixel of the
+    shape with a gap beside it (or above/below) takes the edge colour, so the
+    outline follows the curve without being drawn by hand.
     """
-    top = LEG_TOP + bob
+    cells = cells_of(rows, top, dx)
+    for x, y in cells:
+        neighbours = ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1))
+        put(im, x, y, edge if any(n not in cells for n in neighbours) else fill)
+
+
+def draw_shadow(im: Image.Image, height: int, dx: int) -> None:
+    """
+    The patch of shade she floats over. It shrinks as she rises, which is what
+    sells the hover: the shell moves, the ground does not.
+    """
+    half = max(1, 3 - (height + 1) // 2)
+    alpha = max(28, SHADOW[3] - height * 12)
+    rect(im, 7 - half + dx, GROUND, 8 + half + dx, GROUND, (*SHADOW[:3], alpha))
+
+
+def draw_arms(im: Image.Image, direction: str, lift: int, trail: int) -> None:
+    """
+    The two paddles that float beside her. Mirrored, so the light falls the
+    same way on both, and rounded by shading rather than by an outline.
+    """
+    top = ARM_TOP - lift + trail
+    # (inner column, outer column) of each arm.
     if direction in ("down", "up"):
-        legs = ((5, 6), (9, 10))
-        for i, (x0, x1) in enumerate(legs):
-            lifted = step == i
-            rect(im, x0, top, x1, LEG_BOTTOM - (1 if lifted else 0), OUT)
-            rect(im, x0, top, x1, top + 1, PLATE_SH if lifted else PLATE)
+        pairs = ((2, 1), (13, 14))
     else:
-        # In profile one leg is in front of the other: the back one is darker.
-        front, back = (8, 9), (6, 7)
-        for i, (x0, x1) in enumerate((back, front)):
-            forward = step == i
-            shade = PLATE if i == 1 else PLATE_SH
-            rect(im, x0, top, x1, LEG_BOTTOM - (1 if forward else 0), OUT)
-            rect(im, x0, top, x1, top + 1, shade)
+        # In profile only the near arm shows; the far one is behind the shell.
+        pairs = ((12, 13),)
+    for inner, outer in pairs:
+        for dy in range(ARM_H):
+            first, last = dy == 0, dy == ARM_H - 1
+            put(im, inner, top + dy, SHELL_SH if (first or last) else SHELL)
+            put(im, outer, top + dy, EDGE if last else (SHELL_SH if first else SHELL))
 
 
-def draw_body(im: Image.Image, direction: str, bob: int, step: int) -> None:
-    top, bottom = BODY_TOP + bob, BODY_BOTTOM + bob
-    if direction in ("down", "up"):
-        box(im, 4, top, 11, bottom, PLATE)
-        # Arms: a nub each side, swinging a pixel with the step.
-        for i, x in enumerate((3, 12)):
-            arm_top = top + 1 + (1 if step == i else 0)
-            rect(im, x, arm_top, x, arm_top + 2, OUT)
-        if direction == "down":
-            rect(im, 5, top + 1, 10, top + 1, PLATE_HI)
-            rect(im, 7, top + 2, 8, top + 3, ACCENT)  # chest light
-            rect(im, 6, bottom - 1, 9, bottom - 1, PLATE_SH)
+def draw_face(im: Image.Image, direction: str, top: int, blink: bool, dx: int) -> None:
+    """
+    The visor and the eyes glowing in it. From behind there is no face at all,
+    only the seam where the visor's rim comes round.
+    """
+    face = top + FACE_DY
+    if direction == "up":
+        rect(im, 5 + dx, face + 1, 10 + dx, face + 1, SHELL_SH)
+        return
+
+    rows, eyes = (VISOR_ROWS, EYES) if direction == "down" else (VISOR_ROWS_SIDE, EYES_SIDE)
+    for dy, x0, x1 in rows:
+        rect(im, x0 + dx, face + dy, x1 + dx, face + dy, VISOR)
+    for ex0, ex1 in eyes:
+        if blink:
+            # A blink is the eye squeezed to its bottom line — a slow, friendly
+            # one rather than the light going out.
+            rect(im, ex0 + dx, face + EYE_DY + 1, ex1 + dx, face + EYE_DY + 1, EYE_DIM)
         else:
-            # Seen from behind: a vented back plate, no light.
-            rect(im, 6, top + 2, 9, top + 2, PLATE_SH)
-            rect(im, 6, top + 4, 9, top + 4, PLATE_SH)
-    else:
-        box(im, 5, top, 10, bottom, PLATE)
-        rect(im, 6, top + 1, 9, top + 1, PLATE_HI)
-        rect(im, 6, bottom - 1, 9, bottom - 1, PLATE_SH)
-        im.putpixel((9, top + 3), ACCENT)  # the light, on the front
-        # The arm nearest us, swinging.
-        arm_top = top + 1 + (1 if step == 1 else 0)
-        rect(im, 4, arm_top, 4, arm_top + 2, OUT)
-    # Neck
-    rect(im, 7, HEAD_BOTTOM + 1 + bob, 8, HEAD_BOTTOM + 1 + bob, OUT)
-
-
-def draw_head(im: Image.Image, direction: str, bob: int, lit: bool) -> None:
-    top, bottom = HEAD_TOP + bob, HEAD_BOTTOM + bob
-
-    # Antenna, with its light blinking on the idle cycle.
-    rect(im, 8, top - 1, 8, top - 1, OUT)
-    im.putpixel((8, top - 2), ACCENT if lit else ACCENT_DIM)
-
-    if direction in ("down", "up"):
-        box(im, 3, top, 12, bottom, PLATE)
-        rect(im, 4, top + 1, 11, top + 1, PLATE_HI)
-        if direction == "down":
-            rect(im, 4, top + 2, 11, top + 4, VISOR)
-            rect(im, 5, top + 3, 6, top + 3, EYE)
-            rect(im, 9, top + 3, 10, top + 3, EYE)
-        else:
-            # The back of the head: a panel with two vents, and no eyes.
-            rect(im, 5, top + 3, 10, top + 3, PLATE_SH)
-            rect(im, 5, top + 5, 10, top + 5, PLATE_SH)
-    else:
-        # In profile the head leans a pixel towards where it is looking.
-        box(im, 4, top, 12, bottom, PLATE)
-        rect(im, 5, top + 1, 11, top + 1, PLATE_HI)
-        rect(im, 8, top + 2, 11, top + 4, VISOR)
-        rect(im, 10, top + 3, 11, top + 3, EYE)
-        rect(im, 5, top + 5, 7, top + 5, PLATE_SH)  # nape
+            rect(im, ex0 + dx, face + EYE_DY, ex1 + dx, face + EYE_DY + 1, EYE)
 
 
 def draw_frame(state: str, direction: str, phase: int) -> Image.Image:
-    """One frame: `phase` is 0..5 within its animation."""
     im = Image.new("RGBA", (FRAME_W, FRAME_H), (0, 0, 0, 0))
 
     if state == "walk":
-        # Legs alternate every half cycle; the body lifts a pixel mid-stride.
-        step = 0 if phase < 3 else 1
-        bob = -1 if phase in (1, 4) else 0
-        lit = True
+        # Gliding: a deeper, quicker float, and the arms hang back.
+        lift = (0, 1, 2, 2, 1, 0)[phase]
+        trail = 1
+        blink = False
     else:
-        # Standing: a slow breath and the antenna light blinking.
-        step = -1
-        bob = -1 if phase in (2, 3) else 0
-        lit = phase < 4
+        # Hovering in place: a slow breath, with a blink at the top of it.
+        lift = (0, 0, 1, 1, 0, 0)[phase]
+        trail = 0
+        blink = phase == 4
 
-    draw_shadow(im)
-    draw_legs(im, direction, step, bob)
-    draw_body(im, direction, bob, step)
-    draw_head(im, direction, bob, lit)
+    dx = 1 if direction == "right" else 0
+    top = SHELL_TOP - lift
 
-    if state == "idle" and not lit:
-        # A dimmer eye on the off beat: it reads as "waiting", not as broken.
-        for x in range(FRAME_W):
-            for y in range(FRAME_H):
-                if im.getpixel((x, y)) == EYE:
-                    im.putpixel((x, y), EYE_DIM)
+    draw_shadow(im, lift, dx)
+    draw_arms(im, direction, lift, trail)
+
+    # In profile the shell is a touch slimmer, seen edge-on.
+    rows = [(dy, x0 + 1, x1 - 1) for dy, x0, x1 in SHELL_ROWS] if dx else SHELL_ROWS
+    blob(im, rows, top, dx, SHELL)
+
+    # Gloss: the highlight where the light catches the dome and the belly, and
+    # the shade that rounds the underside.
+    put(im, 5 + dx, top + 2, GLINT)
+    put(im, 4 + dx, top + 10, GLINT)
+    rect(im, 6 + dx, top + 14, 9 + dx, top + 14, SHELL_SH)
+    if dx:
+        # The neck pinch is lost edge-on, so a shade stands in for it.
+        rect(im, 5, top + NECK_DY, 9, top + NECK_DY, SHELL_SH)
+
+    draw_face(im, direction, top, blink, dx)
     return im
 
 
@@ -212,7 +250,8 @@ def main() -> None:
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     sheet = build()
     sheet.save(OUT_PATH)
-    print(f"{OUT_PATH.relative_to(Path(__file__).resolve().parents[1])}: {sheet.size[0]}x{sheet.size[1]} px, {FRAME_COUNT} frames")
+    root = Path(__file__).resolve().parents[1]
+    print(f"{OUT_PATH.relative_to(root)}: {sheet.size[0]}x{sheet.size[1]} px, {FRAME_COUNT} frames")
 
 
 if __name__ == "__main__":
