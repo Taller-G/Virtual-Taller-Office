@@ -71,10 +71,10 @@
           <span>Your name</span>
           <input id="entry-name" type="text" required placeholder="Visible name" />
         </label>
-        <fieldset class="entry__avatars">
-          <legend>Your avatar</legend>
+        <div class="entry__avatars" role="group" aria-labelledby="entry-avatars-label">
+          <span id="entry-avatars-label" class="entry__avatars-label">Your avatar</span>
           <div id="entry-avatars" class="avatar-grid"></div>
-        </fieldset>
+        </div>
         <button type="submit" class="button">Enter the office</button>
         <p class="entry__keys">You move with the arrow keys or with W A S D.</p>
       </form>

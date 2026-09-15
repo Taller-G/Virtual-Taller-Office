@@ -161,11 +161,16 @@ export function showEntry(): Promise<Identity> {
   let appearance: Appearance = hadAppearance ?? { ...DEFAULT_APPEARANCE }
 
   // -- Tab bar --
-  const fieldset = form.querySelector<HTMLFieldSetElement>('.entry__avatars')!
-  fieldset.replaceChildren()
-  const legend = document.createElement('legend')
-  legend.textContent = 'Your avatar'
-  fieldset.append(legend)
+  // A role="group" div rather than a fieldset: a fieldset lays its children out
+  // in an anonymous content box that keeps height:auto, so a constrained height
+  // never reaches them and the panels below could not shrink in order to scroll.
+  const group = form.querySelector<HTMLElement>('.entry__avatars')!
+  group.replaceChildren()
+  const groupLabel = document.createElement('span')
+  groupLabel.id = 'entry-avatars-label'
+  groupLabel.className = 'entry__avatars-label'
+  groupLabel.textContent = 'Your avatar'
+  group.append(groupLabel)
 
   const tabs = document.createElement('div')
   tabs.className = 'entry__tabs'
@@ -178,7 +183,7 @@ export function showEntry(): Promise<Identity> {
   customTab.textContent = 'Customise'
   customTab.className = 'entry__tab'
   tabs.append(presetTab, customTab)
-  fieldset.append(tabs)
+  group.append(tabs)
 
   // -- Preset grid --
   const presetPanel = document.createElement('div')
@@ -240,7 +245,12 @@ export function showEntry(): Promise<Identity> {
     }),
   )
 
-  fieldset.append(presetPanel, customPanel)
+  // Both panels share one scroller, so on a short window the avatar area
+  // scrolls while the group label, the tabs and the submit button stay put.
+  const panels = document.createElement('div')
+  panels.className = 'entry__panels'
+  panels.append(presetPanel, customPanel)
+  group.append(panels)
 
   // -- Tab switching --
   function setMode(m: 'preset' | 'custom') {
@@ -249,6 +259,7 @@ export function showEntry(): Promise<Identity> {
     customTab.setAttribute('aria-selected', String(m === 'custom'))
     presetPanel.hidden = m !== 'preset'
     customPanel.hidden = m !== 'custom'
+    panels.scrollTop = 0
   }
   presetTab.addEventListener('click', () => setMode('preset'))
   customTab.addEventListener('click', () => setMode('custom'))

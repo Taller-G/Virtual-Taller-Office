@@ -16,6 +16,13 @@
   box-sizing: border-box;
 }
 
+/* An author `display` rule outranks the UA stylesheet's `[hidden]`, so any
+   element with a class that sets `display` would ignore `el.hidden = true`.
+   This keeps the attribute authoritative everywhere. */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -321,12 +328,11 @@ input {
   z-index: 10;
 }
 
-.entry[hidden] {
-  display: none;
-}
-
 .entry__card {
   width: min(28rem, 100%);
+  /* Never taller than the overlay's content box, so nothing can fall off
+     the screen: the avatar area below absorbs the difference instead. */
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
@@ -334,6 +340,18 @@ input {
   border-radius: 0.8rem;
   background: var(--panel);
   box-shadow: 0 20px 60px #0008;
+  /* Safety net for viewports too short even for the collapsed avatar area. */
+  overflow-y: auto;
+}
+
+/* The card's chrome keeps its natural height, so the title, the name field
+   and the submit button stay on screen however short the window is. */
+.entry__title,
+.entry__hint,
+.entry__field,
+.entry__card > .button,
+.entry__keys {
+  flex: none;
 }
 
 .entry__title {
@@ -353,12 +371,15 @@ input {
 }
 
 .entry__avatars {
-  margin: 0;
-  padding: 0;
-  border: 0;
+  display: flex;
+  flex-direction: column;
+  /* Shrinks but never grows: on a tall screen there is no empty scroll gap. */
+  flex: 0 1 auto;
+  min-height: 0;
 }
 
-.entry__avatars legend {
+.entry__avatars-label {
+  flex: none;
   padding: 0 0 0.35rem;
   font-size: 0.8rem;
   color: var(--muted);
@@ -368,6 +389,7 @@ input {
 
 .entry__tabs {
   display: flex;
+  flex: none;
   gap: 0.25rem;
   margin-bottom: 0.6rem;
 }
@@ -387,6 +409,48 @@ input {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+}
+
+/* ---- Avatar panels (the one scrolling part of the card) -------------------- */
+
+.entry__panels {
+  flex: 1 1 auto;
+  /* Overrides the implicit min-height:auto that stops a flex item shrinking
+     below its content, while keeping a usable strip of options on short
+     windows. */
+  min-height: 4rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Keeps a keyboard-focused option clear of the scroller's edges. */
+  scroll-padding: 0.4rem;
+}
+
+/* An always-drawn scrollbar rather than the platform's overlay one: when the
+   options run past the card, that has to be visible, not discovered. */
+.entry__panels::-webkit-scrollbar {
+  width: 0.5rem;
+}
+
+.entry__panels::-webkit-scrollbar-thumb {
+  border-radius: 0.25rem;
+  background: #ffffff33;
+}
+
+.entry__panels::-webkit-scrollbar-thumb:hover {
+  background: #ffffff4d;
+}
+
+.entry__panels::-webkit-scrollbar-track {
+  border-radius: 0.25rem;
+  background: #0003;
+}
+
+/* Firefox has no ::-webkit-scrollbar; it gets the standard properties. */
+@supports not selector(::-webkit-scrollbar) {
+  .entry__panels {
+    scrollbar-width: thin;
+    scrollbar-color: #ffffff4d #0003;
+  }
 }
 
 /* ---- Appearance editor ----------------------------------------------------- */
@@ -445,6 +509,35 @@ input {
   height: 1rem;
   border-radius: 50%;
   border: 1px solid #fff3;
+}
+
+/* Short windows (small laptops, split screens, landscape phones): spend the
+   card's breathing room on the option area so the button never leaves. */
+@media (max-height: 640px) {
+  .entry {
+    padding: 0.5rem;
+  }
+
+  .entry__card {
+    gap: 0.6rem;
+    padding: 1rem;
+  }
+
+  .entry__title {
+    font-size: 1.15rem;
+  }
+
+  .entry__hint {
+    display: none;
+  }
+
+  .entry__tabs {
+    margin-bottom: 0.4rem;
+  }
+
+  .appearance-editor {
+    gap: 0.5rem;
+  }
 }
 
 /* ---- Notices --------------------------------------------------------------- */
