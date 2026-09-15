@@ -347,6 +347,9 @@ input {
 
 .entry__card {
   width: min(28rem, 100%);
+  /* Widening is a transition so the card grows into the preview's column
+     instead of jumping when the customise tab is opened. */
+  transition: width 140ms ease;
   /* Never taller than the overlay's content box, so nothing can fall off
      the screen: the avatar area below absorbs the difference instead. */
   max-height: 100%;
@@ -359,6 +362,18 @@ input {
   box-shadow: 0 20px 60px #0008;
   /* Safety net for viewports too short even for the collapsed avatar area. */
   overflow-y: auto;
+}
+
+/* The customise tab lays its options out beside a preview of the avatar, which
+   does not fit the width the preset grid is happy with. */
+.entry__card--custom {
+  width: min(40rem, 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entry__card {
+    transition: none;
+  }
 }
 
 /* The card's chrome keeps its natural height, so the title, the name field
@@ -472,10 +487,55 @@ input {
 
 /* ---- Appearance editor ----------------------------------------------------- */
 
+/* Two columns: the option rows, and the avatar they are building. The preview
+   is on the right and `align-items: flex-start` is what lets it stick — a
+   stretched flex item fills the height and has nowhere to travel. */
 .appearance-editor {
   display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.appearance-editor__rows {
+  display: flex;
+  flex: 1 1 auto;
+  /* Without this the rows refuse to shrink below their widest button row and
+     push the preview out of the card. */
+  min-width: 0;
   flex-direction: column;
   gap: 0.7rem;
+}
+
+/* ---- Live avatar preview --------------------------------------------------- */
+
+.avatar-preview {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.6rem;
+  border: 1px solid #fff2;
+  border-radius: 0.5rem;
+  background: var(--panel-2);
+  /* .entry__panels is the scroller: the preview rides along with the rows so
+     it is still on screen once they have been scrolled. */
+  position: sticky;
+  top: 0;
+}
+
+.avatar-preview__label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.avatar-preview__canvas {
+  display: block;
+  /* The canvas is already drawn at its final size; this keeps it hard-edged
+     when the display's pixel ratio scales it again. */
+  image-rendering: pixelated;
 }
 
 .appearance-row {
@@ -526,6 +586,27 @@ input {
   height: 1rem;
   border-radius: 50%;
   border: 1px solid #fff3;
+}
+
+/* Too narrow for two columns (phones, a split screen): stack them, with the
+   avatar above the options it is built from rather than below the fold. */
+@media (max-width: 30rem) {
+  .appearance-editor {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.7rem;
+  }
+
+  .avatar-preview {
+    /* Above the options in the stack, whatever the source order: what you are
+       building should be the first thing in view, not below the fold. */
+    order: -1;
+    position: static;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    gap: 0.6rem;
+  }
 }
 
 /* Short windows (small laptops, split screens, landscape phones): spend the

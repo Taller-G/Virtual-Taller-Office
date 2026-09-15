@@ -1,14 +1,6 @@
 import Phaser from 'phaser'
-import {
-  APPEARANCE_BASES,
-  AVATAR_FRAME,
-  AVATAR_IDS,
-  GLASSES_OPTIONS,
-  HAT_OPTIONS,
-  SKIN_TONES,
-  type WorldDefinition,
-} from '@vto/shared'
-import { layerTextureKey, textureKey } from './avatarAnims'
+import { AVATAR_FRAME, AVATAR_IDS, allLayerSheets, type WorldDefinition } from '@vto/shared'
+import { layerSheetUrl, layerTextureKey, textureKey } from './avatarAnims'
 import { queueTilesets, queueWorldMap } from './worldAssets'
 
 /** Key of the Taller logo texture (decoration for the reception). */
@@ -65,28 +57,14 @@ export class BootScene extends Phaser.Scene {
     }
 
     // Layers for composed avatars: body (per skin tone), hair, top, accessories.
-    const layersUrl = `${this.avatarsUrl}layers/`
-    for (const base of APPEARANCE_BASES) {
-      for (const tone of SKIN_TONES) {
-        this.load.spritesheet(
-          layerTextureKey(base, 'body', tone),
-          `${layersUrl}${base}/body-${tone}.png`,
-          { frameWidth: AVATAR_FRAME.width, frameHeight: AVATAR_FRAME.height },
-        )
-      }
-      for (const part of ['hair', 'top'] as const) {
-        this.load.spritesheet(layerTextureKey(base, part), `${layersUrl}${base}/${part}.png`, {
-          frameWidth: AVATAR_FRAME.width,
-          frameHeight: AVATAR_FRAME.height,
-        })
-      }
-    }
-    for (const acc of [...HAT_OPTIONS, ...GLASSES_OPTIONS]) {
-      if (acc === 'none') continue
-      this.load.spritesheet(layerTextureKey('acc', acc), `${layersUrl}accessories/${acc}.png`, {
-        frameWidth: AVATAR_FRAME.width,
-        frameHeight: AVATAR_FRAME.height,
-      })
+    // The catalogue lists them and names their files, so a part added there is
+    // loaded here and drawn by the entry screen's preview without more work.
+    for (const sheet of allLayerSheets()) {
+      this.load.spritesheet(
+        layerTextureKey(sheet.group, sheet.part, sheet.variant),
+        layerSheetUrl(this.avatarsUrl, sheet),
+        { frameWidth: AVATAR_FRAME.width, frameHeight: AVATAR_FRAME.height },
+      )
     }
   }
 

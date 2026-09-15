@@ -69,7 +69,9 @@ FIXED_COLORS = PROTECTED - SKIN_COLORS
 # HAIR colours per base sprite (from person-avatars.py + adam, analysed).
 # ---------------------------------------------------------------------------
 HAIR: dict[str, set[tuple[int, int, int]]] = {
-    "adam": {(128, 94, 142), (159, 116, 168)},
+    # adam has none here: every colour of his hair is also the colour of his
+    # trousers, so he is classified spatially (see HAIR_SPATIAL).
+    "adam": set(),
     "ash": {(141, 112, 81), (138, 101, 82), (149, 115, 80), (186, 141, 94), (111, 84, 70)},
     "lucy": {(171, 103, 54), (179, 123, 63), (204, 150, 89), (175, 114, 59), (194, 136, 75), (179, 94, 63)},
     "nancy": {(114, 74, 64), (128, 84, 73), (131, 91, 76), (134, 97, 80), (123, 81, 71), (100, 73, 66)},
@@ -79,16 +81,31 @@ HAIR: dict[str, set[tuple[int, int, int]]] = {
 # CLOTHING colours (torso) per base sprite.
 # ---------------------------------------------------------------------------
 TOP: dict[str, set[tuple[int, int, int]]] = {
-    "adam": {(104, 114, 83), (93, 96, 67), (95, 105, 74), (149, 157, 88)},
+    # adam's shirt shares its purple with his shoes: spatial too (TOP_SPATIAL).
+    "adam": set(),
     "ash": {(90, 68, 74), (111, 73, 77), (162, 57, 75), (174, 74, 82), (225, 155, 155), (246, 151, 132)},
     "lucy": {(191, 166, 144), (208, 190, 156)},
     "nancy": {(108, 110, 133), (216, 208, 224), (51, 131, 214), (42, 165, 226)},
 }
 
-# Colours shared by clothing and trousers: they count as TOP only in the torso
-# area (local y < 32).
-TOP_SPATIAL: dict[str, set[tuple[int, int, int]]] = {
-    "ash": {(128, 145, 165), (157, 163, 183), (139, 139, 171)},
+# ---------------------------------------------------------------------------
+# Colours a base uses for two different parts, which therefore cannot be told
+# apart by colour alone: `{base: (colours, max_y)}` means those colours are
+# that layer only above local row `max_y` inside the frame, and belong to the
+# body below it.  Measure the bound before changing it: render the rows each
+# colour occupies across all 52 frames and cut in the gap between the two
+# parts, not at the first row of the lower one.
+# ---------------------------------------------------------------------------
+HAIR_SPATIAL: dict[str, tuple[set[tuple[int, int, int]], int]] = {
+    # adam: olive green is his hair (rows 2-27) and his trousers (rows 36-45).
+    "adam": ({(104, 114, 83), (93, 96, 67), (95, 105, 74), (149, 157, 88)}, 32),
+}
+
+TOP_SPATIAL: dict[str, tuple[set[tuple[int, int, int]], int]] = {
+    # ash: colours shared by the shirt and the trousers.
+    "ash": ({(128, 145, 165), (157, 163, 183), (139, 139, 171)}, 32),
+    # adam: purple is his shirt (rows 26-43) and his shoes (rows 44-45).
+    "adam": ({(128, 94, 142), (159, 116, 168)}, 44),
 }
 
 # ---------------------------------------------------------------------------
@@ -132,9 +149,10 @@ def classify_pixel(
         return "hair"
     if col in TOP[base]:
         return "top"
-    spatial = TOP_SPATIAL.get(base, set())
-    if col in spatial and y_local < 32:
-        return "top"
+    for layer, spatial in (("hair", HAIR_SPATIAL), ("top", TOP_SPATIAL)):
+        entry = spatial.get(base)
+        if entry is not None and col in entry[0] and y_local < entry[1]:
+            return layer
     return "body"
 
 
