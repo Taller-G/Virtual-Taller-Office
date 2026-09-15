@@ -13,6 +13,14 @@ export const Player = schema(
   {
     /** Colyseus session identifier. Matches the key in `players`. */
     sessionId: t.string(),
+    /**
+     * Who this is, across worlds. The session ends at every door — each world
+     * is its own room — so anything that has to keep pointing at a person
+     * after they travel (a meeting's invitees, its participants) names them by
+     * this instead. The client mints one per browser tab and sends it when
+     * joining; the server validates it (see `sanitizePersonId`).
+     */
+    personId: t.string().default(''),
     /** Visible name, chosen by the user (or `Guest-xxxx`). */
     name: t.string(),
     /** Id of the preset avatar (see `AVATARS`), used when `appearance` is empty. */
@@ -66,6 +74,13 @@ export const Player = schema(
      * focused and the seat is taken. **Only the server writes it.**
      */
     seatId: t.string().default(''),
+    /**
+     * Id of the meeting they are in (key in `meetings`), or `''`. Being in a
+     * meeting is not the same as being at a desk: it is its own status, it is
+     * never swept to away, and it — not the distance to anybody — is what
+     * decides the conversation they are in. **Only the server writes it.**
+     */
+    meetingId: t.string().default(''),
   },
   'Player',
 )
@@ -74,24 +89,33 @@ export type Player = SchemaType<typeof Player>
 /**
  * What a player is doing, as the people list and the avatar label show it.
  * The order is the precedence: someone whose connection dropped reads as
- * offline even if they were focused, and sitting down beats being away (the
- * server frees the seat when someone goes away, so the two never overlap).
+ * offline even if they were seated; being in a meeting beats being at a desk
+ * (a participant holds a seat at the table, and "in the stand-up" says more
+ * than "Focused"); and sitting down beats being away (the server frees the
+ * seat when someone goes away, so the two never overlap).
  */
-export type PlayerStatus = 'offline' | 'focused' | 'away' | 'active'
+export type PlayerStatus = 'offline' | 'meeting' | 'focused' | 'away' | 'active'
 
 export function playerStatus(player: {
   connected: boolean
   seatId: string
+  meetingId: string
   away: boolean
 }): PlayerStatus {
   if (!player.connected) return 'offline'
+  if (player.meetingId !== '') return 'meeting'
   if (player.seatId !== '') return 'focused'
   return player.away ? 'away' : 'active'
 }
 
-/** Visible text of each status, shared by the list and the avatar's badge. */
+/**
+ * Visible text of each status, shared by the list and the avatar's badge. The
+ * meeting one is the fallback: wherever the meeting's title is at hand, what
+ * is shown is `In "Weekly"`.
+ */
 export const PLAYER_STATUS_TEXT: Record<PlayerStatus, string> = {
   offline: 'offline',
+  meeting: 'In a meeting',
   focused: 'Focused',
   away: 'away',
   active: 'active',
@@ -100,6 +124,21 @@ export const PLAYER_STATUS_TEXT: Record<PlayerStatus, string> = {
 /** Is the player heads-down at a desk? Conversations are off while they are. */
 export function isFocused(player: { seatId: string }): boolean {
   return player.seatId !== ''
+}
+
+/** Is the player in a meeting? Their conversation is the meeting's, not the room's. */
+export function isInMeeting(player: { meetingId: string }): boolean {
+  return player.meetingId !== ''
+}
+
+/**
+ * Is this person available to be pulled into a proximity bubble? Sitting at a
+ * desk is heads-down, and being in a meeting is being in another conversation
+ * already: in both cases walking past them starts nothing, in either
+ * direction.
+ */
+export function isAvailableToTalkNearby(player: { seatId: string; meetingId: string }): boolean {
+  return !isFocused(player) && !isInMeeting(player)
 }
 
 /**
@@ -116,15 +155,95 @@ export const Bubble = schema(
     y: t.number().default(0),
     /** sessionIds of the members, in arrival order. */
     members: t.array('string'),
+    /**
+     * Id of the meeting this conversation **is**, or `''` for an ordinary
+     * proximity bubble. A meeting's conversation is a bubble like any other as
+     * far as the panel and the chat relay are concerned — which is the point —
+     * but it is not decided by distance: nobody is absorbed into it by walking
+     * past, no member falls out of it by sitting at the far end of the table,
+     * and it lives until the meeting ends.
+     */
+    meetingId: t.string().default(''),
   },
   'Bubble',
 )
 export type Bubble = SchemaType<typeof Bubble>
 
+/**
+ * Somebody a meeting names: invited to it, or already inside it. The name
+ * travels with the id because the people a meeting lists are not necessarily
+ * in the room you are reading it from — the organiser may be sitting in the
+ * First Office while you look at the list from the Chiron Office.
+ */
+export const MeetingPerson = schema(
+  {
+    /** Stable id of the person across worlds (see `Player.personId`). */
+    personId: t.string(),
+    /** Their visible name when they were invited or when they entered. */
+    name: t.string(),
+  },
+  'MeetingPerson',
+)
+export type MeetingPerson = SchemaType<typeof MeetingPerson>
+
+/**
+ * A meeting: a title, a stretch of time, a room and the people invited.
+ *
+ * Meetings are the same in every world's room — one book of them on the
+ * server, mirrored into each — so a meeting in the First Office is listed,
+ * and can be entered, from the Chiron Office too. They only live in memory:
+ * restarting the server empties the list.
+ */
+export const Meeting = schema(
+  {
+    /** Unique identifier. Matches the key in `meetings`. */
+    id: t.string(),
+    title: t.string(),
+    /** Id of the world the room is in. */
+    worldId: t.string(),
+    /** Name of the meeting room (a zone marked `meeting` in that world's map). */
+    room: t.string(),
+    /** Start and end (epoch ms), the same number on every client. */
+    startsAt: t.number(),
+    endsAt: t.number(),
+    /** `personId` of whoever scheduled it: the only one who can cancel it. */
+    organiser: t.string(),
+    /** Their visible name when they scheduled it. */
+    organiserName: t.string(),
+    /** Who may enter, the organiser included. Anybody else is turned away. */
+    invited: t.array(MeetingPerson),
+    /** Who is inside right now, in arrival order. */
+    participants: t.array(MeetingPerson),
+  },
+  'Meeting',
+)
+export type Meeting = SchemaType<typeof Meeting>
+
+/** A room a meeting can be booked into, as the scheduling form offers it. */
+export const MeetingRoomInfo = schema(
+  {
+    worldId: t.string(),
+    name: t.string(),
+    /** How many seats its big table has: what "the table is full" means. */
+    seats: t.number().default(0),
+  },
+  'MeetingRoomInfo',
+)
+export type MeetingRoomInfo = SchemaType<typeof MeetingRoomInfo>
+
 export const OfficeState = schema(
   {
     players: t.map(Player),
     bubbles: t.map(Bubble),
+    /**
+     * Every meeting that has not ended, whichever world its room is in. The
+     * same list in every room, so the panel shows it wherever you are
+     * standing. A meeting leaves it the moment its end time passes or its
+     * organiser cancels it.
+     */
+    meetings: t.map(Meeting),
+    /** The rooms a meeting can be booked into, read off the worlds' maps. */
+    meetingRooms: t.array(MeetingRoomInfo),
     /**
      * Parameters the server builds bubbles with, replicated so that the
      * client draws the real radius and detects "full" with the same values

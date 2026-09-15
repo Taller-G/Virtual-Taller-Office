@@ -6,6 +6,7 @@ import {
   sanitizeName,
   type Player,
 } from '@vto/shared'
+
 import type { OfficeConnection, OfficeRoom } from '../network/connection'
 import { avatarBadge } from './avatarThumb'
 import { personColors } from './personColor'
@@ -25,7 +26,9 @@ import { youTag } from './youTag'
  * The status of each row comes from `playerStatus()`, shared with the server:
  * "Focused" (sitting at a focus desk) is a state of its own, apart from away
  * and from offline, and while someone is in it nobody can open a conversation
- * with them.
+ * with them. Being **in a meeting** is another one, and it is shown with the
+ * meeting's own title — `In "Weekly"` says where somebody is in a way that
+ * "Focused" does not.
  */
 export function mountPresence(connection: OfficeConnection) {
   const panel = document.getElementById('presence')!
@@ -99,8 +102,12 @@ export function mountPresence(connection: OfficeConnection) {
 
     const statusEl = document.createElement('span')
     statusEl.className = 'presence__status'
-    statusEl.textContent = PLAYER_STATUS_TEXT[status]
+    // In a meeting, the meeting is the answer: its title says more about where
+    // this person is than any word for the state does.
+    const title = status === 'meeting' ? meetingTitle(player.meetingId) : ''
+    statusEl.textContent = title ? `In "${title}"` : PLAYER_STATUS_TEXT[status]
     if (status === 'focused') statusEl.title = 'Heads-down at a desk: not available to talk'
+    if (status === 'meeting') statusEl.title = 'In a meeting: in the conversation at that table'
 
     const text = document.createElement('span')
     text.className = 'presence__text'
@@ -123,6 +130,11 @@ export function mountPresence(connection: OfficeConnection) {
     return li
   }
 
+  /** Title of that meeting, if this world's room still knows about it. */
+  function meetingTitle(meetingId: string): string {
+    return room?.state.meetings.get(meetingId)?.title ?? ''
+  }
+
   function bind(newRoom: OfficeRoom) {
     clear()
     room = newRoom
@@ -137,6 +149,7 @@ export function mountPresence(connection: OfficeConnection) {
           $.listen(player, 'avatar', render),
           $.listen(player, 'away', render),
           $.listen(player, 'seatId', render),
+          $.listen(player, 'meetingId', render),
           $.listen(player, 'connected', render),
         )
         if (!initial && sessionId !== newRoom.sessionId) toast(`${player.name} joined the office`)
@@ -147,6 +160,9 @@ export function mountPresence(connection: OfficeConnection) {
         if (sessionId !== newRoom.sessionId) toast(`${player.name} left the office`)
         render()
       }),
+      // A meeting arriving or ending is what a row's status reads off.
+      $.onAdd('meetings', render),
+      $.onRemove('meetings', render),
     )
     initial = false
     render()

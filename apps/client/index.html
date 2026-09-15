@@ -28,6 +28,46 @@
         </h2>
         <ul id="presence-list" class="presence__list"></ul>
 
+        <section id="meetings" class="meetings" data-state="none" aria-label="Upcoming meetings">
+          <h3 class="meetings__title">Upcoming meetings</h3>
+          <ul id="meetings-list" class="meetings__list"></ul>
+          <p id="meetings-empty" class="meetings__empty">Nothing scheduled for today.</p>
+          <details id="meetings-new" class="meetings__new">
+            <summary class="meetings__summary">Schedule a meeting</summary>
+            <form id="meeting-form" class="meetings__form" autocomplete="off">
+              <label class="presence__field">
+                <span>Title</span>
+                <input id="meeting-title" type="text" required placeholder="Weekly" />
+              </label>
+              <div class="meetings__when">
+                <label class="presence__field">
+                  <span>Starts</span>
+                  <input id="meeting-start" type="time" required />
+                </label>
+                <label class="presence__field">
+                  <span>Minutes</span>
+                  <input id="meeting-minutes" type="number" required />
+                </label>
+              </div>
+              <label class="presence__field">
+                <span>Room</span>
+                <select id="meeting-room"></select>
+              </label>
+              <div class="presence__field">
+                <span id="meeting-invited-label">Invite</span>
+                <div
+                  id="meeting-invited"
+                  class="meetings__invited"
+                  role="group"
+                  aria-labelledby="meeting-invited-label"
+                ></div>
+              </div>
+              <button type="submit" class="button">Schedule</button>
+              <p id="meeting-error" class="meetings__error" role="alert"></p>
+            </form>
+          </details>
+        </section>
+
         <section id="bubble" class="bubble" data-state="none" aria-label="Your conversation">
           <h3 id="bubble-title" class="bubble__title">In conversation</h3>
           <ul id="bubble-list" class="bubble__list"></ul>

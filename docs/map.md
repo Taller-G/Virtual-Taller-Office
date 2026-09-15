@@ -122,6 +122,11 @@ place in the world, not a feature of the app: adding one is adding an object to 
 - Sitting is decided by the **server**: a seat somebody else is in cannot be taken, and the seat is
   freed when the person stands up, walks away, marks themselves away, loses the connection or
   leaves the world. Nothing in the map says any of that.
+- The seats around a **meeting room's** big table are the same kind of object: there is no separate
+  class for them. What makes them the table's seats is that they fall inside a zone marked as a
+  meeting room (see ["Zones"](#zones-recommended)), and that is what "Enter meeting" looks for when
+  it seats somebody. In the First Office they are named after their room (`Meeting Room A seat 1`),
+  numbered clockwise from the top-left chair.
 
 In `?debug` the seats are drawn in teal with their name and facing, over the same view that shows
 the collision bodies: a seat with a collision body on it is visible at a glance.
@@ -136,9 +141,15 @@ as well.
 
 ### Zones (recommended)
 
-- Rectangles with class `zone` and a name (`Reception`, `Desks`, `Meeting Room`,
-  `Kitchen & Lounge`, `South Meeting Room`, `East Meeting Room`, `Focus Room`...). The app shows the
+- Rectangles with class `zone` and a name (`Reception`, `Desks`, `Meeting Room A`,
+  `Kitchen & Lounge`, `Meeting Room B`, `Meeting Room C`, `Focus Room`...). The app shows the
   name as a label in the top-left corner of each zone.
+- Property `meeting` (bool, optional): the zone is a **meeting room**, that is, a room a meeting can
+  be scheduled into. Its seats are the ones around its big table, and entering a meeting seats
+  people in them or, when they are all taken, stands them on free floor inside the rectangle. A room
+  with the property and no seat inside it is a room nobody could sit in, so the tests reject it.
+  Adding a meeting room is drawing the zone, ticking `meeting` and naming its chairs: no code
+  changes.
 - The server's tests require at least those four zones, plus the three rooms in the south wing, and
   that **every** zone can be reached on foot from the spawn: a room without a walkable door makes
   the tests fail. For the Chiron Office they require the same (all of its zones reachable, named and
@@ -167,6 +178,7 @@ as well.
 | Arrival point         | Object (point or rectangle)    | class `spawn` + unique name; optional `radius` and `dir` |
 | Door to another world | Rectangle object               | class `door` + `world` (id) and `spawn` (name) of target |
 | Named zone            | Rectangle object               | class `zone` + name                                      |
+| Meeting room          | Rectangle object               | class `zone` + name + `meeting: true`; seats inside it   |
 | Seat (focus desk)     | Rectangle object               | class `seat` + unique name; optional `dir`               |
 | World ambient         | Map → property                 | `ambient` (colour `#AARRGGBB`)                           |
 | Tilesets              | Map                            | embedded, images relative to the map file                |
@@ -187,10 +199,10 @@ tileset image. If a door does not match up, the message is
 
 ## The worlds there are today
 
-| World           | File                 | Zones                                                                           |
-| --------------- | -------------------- | ------------------------------------------------------------------------------- |
-| `first-office`  | `first-office.json`  | Reception, Kitchen & Lounge, Desks, Meeting Room (+ South, East) and Focus Room |
-| `chiron-office` | `chiron-office.json` | Arrival Hall, Focus Desks, Archive, Gallery, The Pit, War Room and Night Café   |
+| World           | File                 | Zones                                                                         |
+| --------------- | -------------------- | ----------------------------------------------------------------------------- |
+| `first-office`  | `first-office.json`  | Reception, Kitchen & Lounge, Desks, Meeting Rooms A, B and C and Focus Room   |
+| `chiron-office` | `chiron-office.json` | Arrival Hall, Focus Desks, Archive, Gallery, The Pit, War Room and Night Café |
 
 They are connected by **a pair of doors**, one at each end:
 
@@ -259,7 +271,7 @@ The floor plan starts from the [SkyOffice](https://github.com/kevinshen56714/Sky
 reworked for Taller's office: a reception with the spawn, a kitchen and lounge with a counter, sink,
 fridge and vending machine, a meeting room with a table and a whiteboard, and a desk room with extra
 workstations. The south wing (rows 25-39) was added later, hanging off the vertical corridor:
-`South Meeting Room`, `East Meeting Room` and `Focus Room`, each with its door to the corridor.
+`Meeting Room B`, `Meeting Room C` and `Focus Room`, each with its door to the corridor.
 
 The Chiron Office's floor plan is our own (see `tools/make-chiron-map.py`); its furniture comes from
 the same packs, and a few already-solved assemblies — the meeting table, the desk with a PC — are

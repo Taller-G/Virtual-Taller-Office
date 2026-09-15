@@ -2,6 +2,7 @@ import {
   CHAT_MAX_LENGTH,
   CHAT_REJECTION_TEXT,
   isFocused,
+  isInMeeting,
   type ChatMessagePayload,
   type ChatRejection,
 } from '@vto/shared'
@@ -510,7 +511,9 @@ export function mountChat(connection: OfficeConnection) {
     room = next
     const refresh = () => {
       const me = next.state.players.get(next.sessionId)
-      const nowFocused = me ? isFocused(me) : false
+      // A participant sitting at a meeting table holds a seat but is not
+      // heads-down: what is open to them is the meeting's conversation.
+      const nowFocused = me ? isFocused(me) && !isInMeeting(me) : false
       const changed = nowFocused !== focused
       focused = nowFocused
       setBubble(me?.bubbleId ?? '')

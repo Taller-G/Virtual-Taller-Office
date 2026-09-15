@@ -270,6 +270,15 @@ input {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus) 25%, transparent);
 }
 
+/* In a meeting: somewhere they went, not somewhere they drifted to. */
+.presence__row[data-status='meeting'] .presence__status {
+  color: var(--accent-bright);
+}
+
+.presence__row[data-status='meeting'] .presence__status::before {
+  background: var(--accent-bright);
+}
+
 .presence__row[data-status='away'] .presence__status {
   color: var(--warn);
 }
@@ -896,6 +905,176 @@ input {
   50% {
     opacity: 0.35;
   }
+}
+
+/* ---- Upcoming meetings ----------------------------------------------------- */
+
+/* Its own step up from the people list, like the bubble below it: the panel's
+   sections are told apart by their surface before their titles are read. */
+.meetings {
+  flex: none;
+  padding: 0.6rem 1rem 0.75rem;
+  border-top: 1px solid var(--line-soft);
+  background: var(--side-2);
+  /* A long day does not push the conversation off the screen: about two
+     meetings are in view and the rest scrolls here, rather than the section
+     growing until the chat field is out of reach. */
+  max-height: min(14rem, 30vh);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+/* Nothing to show and nowhere to schedule from: out of the office entirely. */
+.presence[data-state='out'] .meetings {
+  display: none;
+}
+
+.meetings__title {
+  margin: 0 0 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+
+.meetings[data-state='some'] .meetings__title {
+  color: var(--text);
+}
+
+.meetings__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.meetings__list:empty {
+  display: none;
+}
+
+.meetings[data-state='some'] .meetings__empty {
+  display: none;
+}
+
+.meetings__empty {
+  margin: 0.2rem 0 0;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.meetings__row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 0.6rem;
+  background: var(--side-1);
+  border-left: 3px solid transparent;
+}
+
+/* The one you are in is the one you are looking for. */
+.meetings__row[data-mine='true'] {
+  border-left-color: var(--accent-bright);
+}
+
+.meetings__name {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.meetings__where {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.meetings__who {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.meetings__who[data-any='true'] {
+  color: var(--ok);
+}
+
+.meetings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+}
+
+.meetings__actions .button {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.76rem;
+}
+
+.meetings__summary {
+  margin-top: 0.6rem;
+  font-size: 0.76rem;
+  color: var(--accent-bright);
+  cursor: pointer;
+}
+
+.meetings__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.meetings__when {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.meetings__when > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.meetings__form select,
+.meetings__form input[type='number'],
+.meetings__form input[type='time'] {
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.4rem;
+  border: 1px solid #fff2;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.meetings__invited {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  max-height: 8rem;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.meetings__invitee {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text);
+}
+
+.meetings__nobody {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.meetings__error {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--bad);
+}
+
+.meetings__error:empty {
+  display: none;
 }
 
 /* ---- Conversation bubble --------------------------------------------------- */

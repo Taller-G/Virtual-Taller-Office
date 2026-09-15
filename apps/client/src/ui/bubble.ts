@@ -1,4 +1,4 @@
-import { isFocused } from '@vto/shared'
+import { isFocused, isInMeeting } from '@vto/shared'
 import type { OfficeConnection, OfficeRoom } from '../network/connection'
 import { avatarBadge } from './avatarThumb'
 import { personColors } from './personColor'
@@ -15,6 +15,12 @@ interface Member {
 interface BubbleView {
   /** Id of my bubble, or `''` if I am in none. */
   bubbleId: string
+  /**
+   * Title of the meeting this conversation is, or `''` for an ordinary
+   * proximity bubble. A meeting's members are not the people near you, and
+   * saying which meeting it is, is what makes that read right.
+   */
+  meeting: string
   /** Members of my bubble: me first, then the rest by name. */
   members: Member[]
   /** There is a bubble within my reach that is at the cap and will not let me in. */
@@ -27,6 +33,7 @@ interface BubbleView {
 
 const EMPTY: BubbleView = {
   bubbleId: '',
+  meeting: '',
   members: [],
   fullNearby: false,
   focused: false,
@@ -57,19 +64,24 @@ export function mountBubble(connection: OfficeConnection) {
     const maxMembers = state.bubbleMaxMembers
     if (!me) return { ...EMPTY, maxMembers }
 
-    const focused = isFocused(me)
+    // Sitting at a meeting table is not being heads-down: a participant holds
+    // a seat, but their conversation is the meeting's and it is wide open.
+    const focused = isFocused(me) && !isInMeeting(me)
     const bubble = me.bubbleId ? state.bubbles.get(me.bubbleId) : undefined
     if (!bubble) {
       // No bubble: is there one within reach that is full? (While focused the
-      // answer does not matter: none of them would take me anyway.)
+      // answer does not matter: none of them would take me anyway.) A meeting
+      // is never the answer either: it is not full, it is simply not mine —
+      // you get into one by entering it, not by standing next to it.
       let fullNearby = false
       state.bubbles.forEach((other) => {
+        if (other.meetingId !== '') return
         const full = other.members.length >= maxMembers
         if (!focused && full && Math.hypot(me.x - other.x, me.y - other.y) <= state.bubbleRadius) {
           fullNearby = true
         }
       })
-      return { bubbleId: '', members: [], fullNearby, focused, maxMembers }
+      return { bubbleId: '', meeting: '', members: [], fullNearby, focused, maxMembers }
     }
 
     const members: Member[] = []
@@ -82,7 +94,8 @@ export function mountBubble(connection: OfficeConnection) {
       if (b.sessionId === room.sessionId) return 1
       return a.name.localeCompare(b.name, 'en')
     })
-    return { bubbleId: me.bubbleId, members, fullNearby: false, focused, maxMembers }
+    const meeting = bubble.meetingId ? (state.meetings.get(bubble.meetingId)?.title ?? '') : ''
+    return { bubbleId: me.bubbleId, meeting, members, fullNearby: false, focused, maxMembers }
   }
 
   function render(next: BubbleView, mySessionId: string, room?: OfficeRoom) {
@@ -95,11 +108,15 @@ export function mountBubble(connection: OfficeConnection) {
           ? 'full'
           : 'none'
     titleEl.textContent = next.bubbleId
-      ? `In conversation - ${next.members.length}`
+      ? next.meeting
+        ? `${next.meeting} - ${next.members.length}`
+        : `In conversation - ${next.members.length}`
       : 'In conversation'
     hintEl.textContent = next.bubbleId
       ? others.length === 0
-        ? 'Waiting for someone else...'
+        ? next.meeting
+          ? 'Waiting for the others to come in...'
+          : 'Waiting for someone else...'
         : ''
       : next.focused
         ? 'Focused at a desk: nobody can start a conversation with you. Press E or move to stand up.'
@@ -136,15 +153,26 @@ export function mountBubble(connection: OfficeConnection) {
     if (next.bubbleId !== previous.bubbleId) {
       if (next.bubbleId) {
         const withWhom = names(next.members)
-        toast(withWhom ? `You joined a conversation with ${withWhom}` : 'You opened a conversation')
+        // A meeting announces itself by name: it is somewhere you went, not
+        // somebody you happened to end up next to.
+        if (next.meeting) toast(`You are in "${next.meeting}"`)
+        else {
+          toast(
+            withWhom ? `You joined a conversation with ${withWhom}` : 'You opened a conversation',
+          )
+        }
       } else if (previous.bubbleId) {
         // If the bubble no longer exists, it closed (a single person was
         // left); if it still exists, the one who left was me.
-        toast(
-          room.state.bubbles.has(previous.bubbleId)
-            ? 'You left the conversation'
-            : 'The conversation closed',
-        )
+        // A meeting that ended says so on its own (see `meetingEnded`), so
+        // this only speaks for an ordinary bubble.
+        if (!previous.meeting) {
+          toast(
+            room.state.bubbles.has(previous.bubbleId)
+              ? 'You left the conversation'
+              : 'The conversation closed',
+          )
+        }
       }
     } else if (next.bubbleId) {
       const before = new Set(previous.members.map((m) => m.sessionId))

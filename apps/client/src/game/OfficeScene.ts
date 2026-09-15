@@ -4,6 +4,7 @@ import {
   DEFAULT_WORLD_ID,
   doorAtRect,
   getWorld,
+  type JoinOptions,
   Message,
   seatAtRect,
   seatByName,
@@ -16,6 +17,7 @@ import {
   type SitPayload,
 } from '@vto/shared'
 import type { OfficeConnection, OfficeRoom } from '../network/connection'
+import type { MeetingTravel } from '../ui/meetings'
 import { clearSelection, selectPerson } from '../ui/selection'
 import { toast } from '../ui/toasts'
 import { Avatar, BODY } from './Avatar'
@@ -114,8 +116,14 @@ interface Sent {
  * the area, the scene fades to black, loads the destination's map, switches
  * room and restarts there. If the destination is unavailable, it says so and
  * you stay where you were.
+ *
+ * Meetings: entering one whose room is in another world is that very trip,
+ * asked for by the panel instead of by a door (`travelToMeeting`), with the
+ * meeting named in the join options so the arrival and the chair at the table
+ * are one action. A trip that does not come off leaves the person where they
+ * were, exactly as a door that leads nowhere does.
  */
-export class OfficeScene extends Phaser.Scene {
+export class OfficeScene extends Phaser.Scene implements MeetingTravel {
   /** World this scene is drawing. */
   private worldId = DEFAULT_WORLD_ID
   private map!: BuiltMap
@@ -580,8 +588,37 @@ export class OfficeScene extends Phaser.Scene {
    * where they were, with a notice and the screen back.
    */
   private async travel(door: Door) {
-    const world = getWorld(door.world)
-    if (!world) return
+    const outcome = await this.travelToWorld(door.world, door.spawn)
+    if (!outcome.ok) toast(outcome.reason)
+  }
+
+  /**
+   * Entering a meeting held in another world: the trip, with the meeting named
+   * in the join options, so the destination's room seats the person at the
+   * table as they arrive rather than at the entrance for an instant first. If
+   * the trip does not come off they are still where they were, with the
+   * reason, exactly as with a door.
+   */
+  async travelToMeeting(
+    worldId: string,
+    meetingId: string,
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    return this.travelToWorld(worldId, '', { meeting: meetingId })
+  }
+
+  /**
+   * Changing world: fade to black, destination map loaded, room switched and
+   * scene restarted already in the new world. Any stumble leaves the player
+   * where they were, with the screen back and the reason to show.
+   */
+  private async travelToWorld(
+    worldId: string,
+    spawn: string,
+    extra: Partial<JoinOptions> = {},
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const world = getWorld(worldId)
+    if (!world) return { ok: false, reason: `That world does not exist` }
+    if (this.traveling) return { ok: false, reason: 'You are already on your way somewhere' }
     this.traveling = true
     this.doorArmed = false
     // The path belonged to the world being left.
@@ -596,17 +633,21 @@ export class OfficeScene extends Phaser.Scene {
     try {
       // The map first: if the destination does not load, the current world is not left.
       await loadWorld(this, world)
-      const outcome = await this.connection.travelTo(door.world, door.spawn)
+      const outcome = await this.connection.travelTo(worldId, spawn, extra)
       if (!outcome.ok) throw new Error(outcome.reason)
     } catch (error) {
-      toast(error instanceof Error ? error.message : `Could not travel to ${worldName(door.world)}`)
       this.offRoom = this.connection.on('room', (room) => this.bindRoom(room))
       camera.fadeIn(FADE_MS)
       this.traveling = false
-      return
+      return {
+        ok: false,
+        reason:
+          error instanceof Error ? error.message : `Could not travel to ${worldName(worldId)}`,
+      }
     }
 
-    this.scene.restart({ worldId: door.world })
+    this.scene.restart({ worldId })
+    return { ok: true }
   }
 
   /** A new room fully replaces whatever was there (rejoining included). */
@@ -656,6 +697,13 @@ export class OfficeScene extends Phaser.Scene {
         this.refreshBubbles()
       }),
       $.onAdd('bubbles', (bubble, id) => {
+        // A meeting's conversation is a bubble, but not a proximity one: its
+        // members are seated around a table wider than the radius, so a circle
+        // of that radius drawn at their centre would describe nothing.
+        if (bubble.meetingId !== '') {
+          this.refreshBubbles()
+          return
+        }
         const area = new BubbleArea(this, bubble, this.bubbleRadius(), false)
         this.bubbleAreas.set(id, area)
         this.unbindRoom.push(
