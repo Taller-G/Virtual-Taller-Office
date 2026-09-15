@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   APPEARANCE_BASES,
@@ -151,8 +154,8 @@ describe('appearance layers', () => {
       'adam/top.png',
       'adam/facial-beard.png',
       'adam/hair-long.png',
-      'accessories/glasses-round.png',
-      'accessories/cap.png',
+      'adam/glasses-round.png',
+      'adam/cap.png',
     ])
   })
 
@@ -186,6 +189,12 @@ describe('appearance layers', () => {
       for (const style of HAIR_STYLES) expect(sheets).toContain(`${base}/hair-${style}.png`)
       expect(sheets).toContain(`${base}/pants.png`)
       expect(sheets).toContain(`${base}/shoes.png`)
+      // Accessories are cut per silhouette too: a hat is measured against the
+      // skull it sits on, so there is no sheet shared between the four bases.
+      expect(sheets).toContain(`${base}/cap.png`)
+      expect(sheets).toContain(`${base}/beanie.png`)
+      expect(sheets).toContain(`${base}/glasses-round.png`)
+      expect(sheets).toContain(`${base}/glasses-square.png`)
     }
     const used = appearanceLayers({
       ...DEFAULT_APPEARANCE,
@@ -195,6 +204,21 @@ describe('appearance layers', () => {
       glasses: 'glasses-square',
     })
     for (const layer of used) expect(sheets).toContain(layerSheetFile(layer))
+  })
+
+  it('has a file on disk for every sheet it preloads', () => {
+    // The catalogue names the files and nothing checks the name against the
+    // folder, so a layer that is renamed or moved — as the accessories were,
+    // from one shared sheet to one per silhouette — fails silently: Phaser
+    // skips the texture and the part just never appears on the avatar.
+    const layers = resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      '../../client/public/assets/avatars/layers',
+    )
+    const missing = allLayerSheets()
+      .map(layerSheetFile)
+      .filter((file) => !existsSync(resolve(layers, file)))
+    expect(missing).toEqual([])
   })
 })
 

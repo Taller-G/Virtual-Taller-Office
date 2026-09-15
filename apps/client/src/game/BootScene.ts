@@ -71,7 +71,8 @@ export class BootScene extends Phaser.Scene {
       })
     }
 
-    // Layers for composed avatars: body (per skin tone), hair, top, accessories.
+    // Layers for composed avatars: body (per skin tone), hair, top and
+    // accessories, every one of them cut for one silhouette.
     // The catalogue lists them and names their files, so a part added there is
     // loaded here and drawn by the entry screen's preview without more work.
     for (const sheet of allLayerSheets()) {
