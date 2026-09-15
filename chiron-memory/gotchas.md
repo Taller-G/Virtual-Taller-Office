@@ -57,3 +57,11 @@ What: The panel's highlight was restarted the usual way — drop the class, add 
 ## Vite's first page load can throw away a form that was just submitted
 
 What: Driving the client over CDP, the first page load after starting `npm run dev` submits the entry form, the server logs the join, and then Vite finishes optimizing dependencies and forces a full reload: the fresh page is back at the entry screen with `window.__vto` gone and the session orphaned · Why: it reads as "the client cannot join", and the server log showing a successful join sends you looking in the wrong place · Where: automated runs against `http://localhost:5173/?debug` · Learned: wait for `window.__vto` to exist before submitting, and retry the whole entry once if the room does not appear — or warm the dev server with a throwaway page load first
+
+## `rem` in this client is 14px, so a width in `rem` comes out narrower than it reads
+
+What: `html, body { font: 14px/1.4 ... }` sets the **root** font size to 14px, so `1rem` is 14px everywhere: the sidebar's `width: 20rem` rendered at 280px, not the 320px the design meant · Why: it passes review silently — the number in the stylesheet is the number in the design, and only a measurement in the browser shows the gap · Where: apps/client/src/style.css (`--side-width`, set in px on purpose) · Learned: a `font` shorthand on `html` redefines `rem` for the whole sheet; for a figure that has to land on an exact pixel width, write the pixels
+
+## The own-message rule outranks the failed-message rule in the chat
+
+What: `.chat__group[data-mine='true'] .chat__msg` (three in the class column) beats `.chat__msg[data-status='error']` (two), so a rejected message kept the accent background and ring and only its reason text gave it away — and since a failed message is always one's own, the whole error style was dead · Why: both rules looked right in isolation and the reason line did appear, so the bubble read as "sent" with an odd sentence under it · Where: apps/client/src/style.css (`.chat__group[data-mine] .chat__msg[data-status='error']`, matched through the group to win) · Learned: a state that only ever occurs inside a variant has to be specified at least as deeply as that variant
