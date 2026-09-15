@@ -22,17 +22,12 @@ import {
   sanitizeName,
   serializeAppearance,
   type Appearance,
-  type AppearanceBase,
-  type FacialHairOption,
-  type GlassesOption,
   type HairColorId,
-  type HairStyle,
-  type HatOption,
   type PantsColorId,
   type ShoeColorId,
-  type SkinTone,
   type TopColorId,
 } from '@vto/shared'
+import { avatarPreview } from './avatarPreview'
 import { avatarThumb } from './avatarThumb'
 
 export interface Identity {
@@ -183,6 +178,7 @@ export function showEntry(): Promise<Identity> {
   // A role="group" div rather than a fieldset: a fieldset lays its children out
   // in an anonymous content box that keeps height:auto, so a constrained height
   // never reaches them and the panels below could not shrink in order to scroll.
+  const card = form.closest<HTMLElement>('.entry__card') ?? form
   const group = form.querySelector<HTMLElement>('.entry__avatars')!
   group.replaceChildren()
   const groupLabel = document.createElement('span')
@@ -227,66 +223,62 @@ export function showEntry(): Promise<Identity> {
     presetPanel.append(button)
   }
 
-  // -- Custom panel --
+  // -- Custom panel: the option rows, and the avatar they build beside them --
   const customPanel = document.createElement('div')
   customPanel.className = 'appearance-editor'
 
-  customPanel.append(
-    optionRow('Silhouette', APPEARANCE_BASES, appearance.base, (v: AppearanceBase) => {
-      appearance = { ...appearance, base: v }
-    }),
-    optionRow('Skin', SKIN_TONES, appearance.skinTone, (v: SkinTone) => {
-      appearance = { ...appearance, skinTone: v }
-    }),
-    optionRow('Hair style', HAIR_STYLES, appearance.hairStyle, (v: HairStyle) => {
-      appearance = { ...appearance, hairStyle: v }
-    }),
+  const preview = avatarPreview()
+
+  /**
+   * Handler for one option row. Every row changes the appearance through here,
+   * so none of them can be added later and forget to repaint the preview.
+   */
+  function change<K extends keyof Appearance>(key: K) {
+    return (value: Appearance[K]) => {
+      appearance = { ...appearance, [key]: value }
+      preview.update(appearance)
+    }
+  }
+
+  const rows = document.createElement('div')
+  rows.className = 'appearance-editor__rows'
+  rows.append(
+    optionRow('Silhouette', APPEARANCE_BASES, appearance.base, change('base')),
+    optionRow('Skin', SKIN_TONES, appearance.skinTone, change('skinTone')),
+    optionRow('Hair style', HAIR_STYLES, appearance.hairStyle, change('hairStyle')),
     optionRow(
       'Hair colour',
       HAIR_COLOR_IDS,
       appearance.hairColor,
-      (v: HairColorId) => {
-        appearance = { ...appearance, hairColor: v }
-      },
+      change('hairColor'),
       HAIR_COLORS as Record<HairColorId, number>,
     ),
-    optionRow('Facial hair', FACIAL_HAIR_OPTIONS, appearance.facialHair, (v: FacialHairOption) => {
-      appearance = { ...appearance, facialHair: v }
-    }),
+    optionRow('Facial hair', FACIAL_HAIR_OPTIONS, appearance.facialHair, change('facialHair')),
     optionRow(
       'Clothes',
       TOP_COLOR_IDS,
       appearance.topColor,
-      (v: TopColorId) => {
-        appearance = { ...appearance, topColor: v }
-      },
+      change('topColor'),
       TOP_COLORS as Record<TopColorId, number>,
     ),
     optionRow(
       'Trousers',
       PANTS_COLOR_IDS,
       appearance.pantsColor,
-      (v: PantsColorId) => {
-        appearance = { ...appearance, pantsColor: v }
-      },
+      change('pantsColor'),
       PANTS_COLORS as Record<PantsColorId, number>,
     ),
     optionRow(
       'Shoes',
       SHOE_COLOR_IDS,
       appearance.shoeColor,
-      (v: ShoeColorId) => {
-        appearance = { ...appearance, shoeColor: v }
-      },
+      change('shoeColor'),
       SHOE_COLORS as Record<ShoeColorId, number>,
     ),
-    optionRow('Hat', HAT_OPTIONS, appearance.hat, (v: HatOption) => {
-      appearance = { ...appearance, hat: v }
-    }),
-    optionRow('Glasses', GLASSES_OPTIONS, appearance.glasses, (v: GlassesOption) => {
-      appearance = { ...appearance, glasses: v }
-    }),
+    optionRow('Hat', HAT_OPTIONS, appearance.hat, change('hat')),
+    optionRow('Glasses', GLASSES_OPTIONS, appearance.glasses, change('glasses')),
   )
+  customPanel.append(rows, preview.el)
 
   // Both panels share one scroller, so on a short window the avatar area
   // scrolls while the group label, the tabs and the submit button stay put.
@@ -302,6 +294,11 @@ export function showEntry(): Promise<Identity> {
     customTab.setAttribute('aria-selected', String(m === 'custom'))
     presetPanel.hidden = m !== 'preset'
     customPanel.hidden = m !== 'custom'
+    // The customise tab needs room for the preview column beside the options.
+    card.classList.toggle('entry__card--custom', m === 'custom')
+    // Repaint on the way in: a canvas keeps what it drew, but this is also
+    // what puts a remembered appearance on screen before anything is clicked.
+    if (m === 'custom') preview.update(appearance)
     panels.scrollTop = 0
   }
   presetTab.addEventListener('click', () => setMode('preset'))

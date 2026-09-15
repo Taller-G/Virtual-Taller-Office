@@ -1,6 +1,7 @@
 import Phaser from 'phaser'
 import {
   AVATAR_FRAME,
+  NO_TINT,
   PLAYER_BODY,
   SIT_FRAME,
   appearanceLayers,
@@ -58,11 +59,10 @@ export interface AvatarOptions {
  * Two rendering modes:
  * - **Preset** (empty `appearance`): a single `Phaser.Sprite` with the full
  *   sheet of the selected avatar, as before.
- * - **Composed** (`appearance` with valid `Appearance` JSON): the layers the
- *   shared catalogue lists for that appearance — feet, legs, top, facial hair,
- *   hair and accessories — stacked in the container in its order. Each one is
- *   tinted with `setTint()` over its greyscale sheet, except the body, which
- *   uses a sheet pre-generated per skin tone.
+ * - **Composed** (`appearance` with valid `Appearance` JSON): several layers
+ *   (body, top, hair, glasses, hat) stacked in the container. The hair and
+ *   top layers are tinted with `setTint()` over their greyscale sheet; the
+ *   body one uses a sheet pre-generated per skin tone.
  *
  * In both modes the container also carries: name, "away" badge, bubble ring
  * and chat balloon.
@@ -219,16 +219,20 @@ export class Avatar extends Phaser.GameObjects.Container {
   }
 
   /**
-   * Creates the layered sprites for a composed appearance, in the order the
-   * shared catalogue gives them: it is the same list the entry preview draws,
-   * so a part added there shows up here without touching this file.
+   * Creates the layered sprites for a composed appearance.
+   *
+   * Which layers there are, in what order and with which tint comes from
+   * `appearanceLayers()` in the catalogue — the same list the entry screen's
+   * preview paints, so what someone builds there is what the office shows.
+   * A layer whose sheet failed to load is skipped: the rest of the avatar
+   * still appears.
    */
   private buildLayers(a: Appearance, feetY: number) {
     for (const layer of appearanceLayers(a)) {
-      const texKey = layerTextureKey(layer)
+      const texKey = layerTextureKey(layer.group, layer.part, layer.variant)
       if (!this.scene.textures.exists(texKey)) continue
       const sprite = this.scene.add.sprite(0, feetY, texKey).setOrigin(0.5, 1)
-      if (layer.tint !== undefined && layer.tint !== 0xffffff) sprite.setTint(layer.tint)
+      if (layer.tint !== NO_TINT) sprite.setTint(layer.tint)
       this.layers.push(sprite)
       this.layerTexKeys.push(texKey)
     }

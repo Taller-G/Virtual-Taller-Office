@@ -1,6 +1,6 @@
 import Phaser from 'phaser'
-import { AVATAR_FRAME, AVATAR_IDS, appearanceLayerAssets, type WorldDefinition } from '@vto/shared'
-import { layerAssetPath, layerTextureKey, textureKey } from './avatarAnims'
+import { AVATAR_FRAME, AVATAR_IDS, allLayerSheets, type WorldDefinition } from '@vto/shared'
+import { layerSheetUrl, layerTextureKey, textureKey } from './avatarAnims'
 import { queueTilesets, queueWorldMap } from './worldAssets'
 
 /** Key of the Taller logo texture (decoration for the reception). */
@@ -56,14 +56,15 @@ export class BootScene extends Phaser.Scene {
       })
     }
 
-    // Layers for composed avatars: the catalogue lists every sheet any
-    // appearance can ask for, so a new part only has to be declared there.
-    const layersUrl = `${this.avatarsUrl}layers/`
-    for (const layer of appearanceLayerAssets()) {
-      this.load.spritesheet(layerTextureKey(layer), `${layersUrl}${layerAssetPath(layer)}`, {
-        frameWidth: AVATAR_FRAME.width,
-        frameHeight: AVATAR_FRAME.height,
-      })
+    // Layers for composed avatars: body (per skin tone), hair, top, accessories.
+    // The catalogue lists them and names their files, so a part added there is
+    // loaded here and drawn by the entry screen's preview without more work.
+    for (const sheet of allLayerSheets()) {
+      this.load.spritesheet(
+        layerTextureKey(sheet.group, sheet.part, sheet.variant),
+        layerSheetUrl(this.avatarsUrl, sheet),
+        { frameWidth: AVATAR_FRAME.width, frameHeight: AVATAR_FRAME.height },
+      )
     }
   }
 

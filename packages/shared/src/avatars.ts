@@ -199,75 +199,6 @@ export const DEFAULT_APPEARANCE: Appearance = {
   glasses: 'none',
 }
 
-// ---------------------------------------------------------------------------
-// The layers a composed avatar is drawn with
-// ---------------------------------------------------------------------------
-
-/** Folder of the sheets that do not belong to one silhouette. */
-export const ACCESSORIES_DIR = 'accessories'
-
-/**
- * One sprite sheet of a composed avatar.  `dir`/`file` locate it under
- * `assets/avatars/layers/` and are also what its texture key is built from, so
- * anything that draws an appearance — the office, the entry preview — only has
- * to walk this list.
- */
-export interface AppearanceLayerRef {
-  /** Folder: a silhouette id, or `accessories`. */
-  dir: string
-  /** File name inside the folder, without `.png`. */
-  file: string
-}
-
-/** A layer of a specific appearance: its sheet plus the tint it is drawn with. */
-export interface AppearanceLayer extends AppearanceLayerRef {
-  /** Tint over the greyscale sheet; absent = draw the sheet as it is. */
-  tint?: number
-}
-
-/**
- * The layers that make up an appearance, in draw order (first = furthest
- * back).  The order is what keeps the parts readable: the feet go under the
- * legs and the legs under the top, the beard sits on the face but under the
- * glasses, and the hair goes under the hat.
- */
-export function appearanceLayers(a: Appearance): AppearanceLayer[] {
-  const layers: AppearanceLayer[] = [
-    { dir: a.base, file: `body-${a.skinTone}` },
-    { dir: a.base, file: 'shoes', tint: SHOE_COLORS[a.shoeColor] },
-    { dir: a.base, file: 'pants', tint: PANTS_COLORS[a.pantsColor] },
-    { dir: a.base, file: 'top', tint: TOP_COLORS[a.topColor] },
-  ]
-  if (a.facialHair !== 'none') {
-    layers.push({ dir: a.base, file: `facial-${a.facialHair}`, tint: HAIR_COLORS[a.hairColor] })
-  }
-  layers.push({ dir: a.base, file: `hair-${a.hairStyle}`, tint: HAIR_COLORS[a.hairColor] })
-  if (a.glasses !== 'none') layers.push({ dir: ACCESSORIES_DIR, file: a.glasses })
-  if (a.hat !== 'none') layers.push({ dir: ACCESSORIES_DIR, file: a.hat })
-  return layers
-}
-
-/** Every sheet any appearance can ask for: what the client preloads. */
-export function appearanceLayerAssets(): AppearanceLayerRef[] {
-  const refs: AppearanceLayerRef[] = []
-  for (const base of APPEARANCE_BASES) {
-    for (const tone of SKIN_TONES) refs.push({ dir: base, file: `body-${tone}` })
-    for (const style of HAIR_STYLES) refs.push({ dir: base, file: `hair-${style}` })
-    for (const facial of FACIAL_HAIR_OPTIONS) {
-      if (facial !== 'none') refs.push({ dir: base, file: `facial-${facial}` })
-    }
-    refs.push(
-      { dir: base, file: 'top' },
-      { dir: base, file: 'pants' },
-      { dir: base, file: 'shoes' },
-    )
-  }
-  for (const acc of [...HAT_OPTIONS, ...GLASSES_OPTIONS]) {
-    if (acc !== 'none') refs.push({ dir: ACCESSORIES_DIR, file: acc })
-  }
-  return refs
-}
-
 /** Serialises an Appearance to a JSON string for the schema field. */
 export function serializeAppearance(a: Appearance): string {
   return JSON.stringify(a)
@@ -358,4 +289,95 @@ function isHatOption(v: unknown): v is HatOption {
 }
 function isGlassesOption(v: unknown): v is GlassesOption {
   return typeof v === 'string' && (GLASSES_OPTIONS as readonly string[]).includes(v)
+}
+
+// ---------------------------------------------------------------------------
+// Layer stack of a composed appearance
+// ---------------------------------------------------------------------------
+
+/**
+ * Sprite-sheet group the accessories live in — they are shared by every base,
+ * unlike body/hair/top which are cut per base.
+ */
+export const ACCESSORY_GROUP = 'acc'
+
+/** Untinted: the layer keeps the original colours of its sheet. */
+export const NO_TINT = 0xffffff
+
+/**
+ * One layer of a composed avatar: which sheet to draw and the multiply tint
+ * to apply over it.
+ */
+export interface AppearanceLayer {
+  /** An `AppearanceBase` for the body parts, `ACCESSORY_GROUP` for accessories. */
+  group: string
+  /** `body`, `hair`, `top`, or the accessory's own id. */
+  part: string
+  /** Distinguishes the sheets of one part (the skin tone of a body). */
+  variant?: string
+  /** Colour multiplied over the greyscale sheet; `NO_TINT` leaves it alone. */
+  tint: number
+}
+
+/**
+ * The layers that make up an appearance, in the order they must be drawn
+ * (first = furthest back).  The order is what keeps the parts readable: the
+ * feet go under the legs and the legs under the top, the beard sits on the
+ * face but under the glasses, and the hair goes under the hat.
+ *
+ * This is the single description of what a composed avatar is made of: the
+ * in-game avatar builds Phaser sprites from it and the entry screen's preview
+ * paints it on a canvas, so the two cannot disagree about which layers exist,
+ * in which order, or with which colour. Adding a part to the catalogue means
+ * adding it here, and both renderers pick it up.
+ */
+export function appearanceLayers(a: Appearance): AppearanceLayer[] {
+  const hairTint = HAIR_COLORS[a.hairColor]
+  const layers: AppearanceLayer[] = [
+    { group: a.base, part: 'body', variant: a.skinTone, tint: NO_TINT },
+    { group: a.base, part: 'shoes', tint: SHOE_COLORS[a.shoeColor] },
+    { group: a.base, part: 'pants', tint: PANTS_COLORS[a.pantsColor] },
+    { group: a.base, part: 'top', tint: TOP_COLORS[a.topColor] },
+  ]
+  if (a.facialHair !== 'none') {
+    layers.push({ group: a.base, part: 'facial', variant: a.facialHair, tint: hairTint })
+  }
+  layers.push({ group: a.base, part: 'hair', variant: a.hairStyle, tint: hairTint })
+  if (a.glasses !== 'none') layers.push({ group: ACCESSORY_GROUP, part: a.glasses, tint: NO_TINT })
+  if (a.hat !== 'none') layers.push({ group: ACCESSORY_GROUP, part: a.hat, tint: NO_TINT })
+  return layers
+}
+
+/**
+ * Path of a layer's sprite sheet, relative to the folder holding them
+ * (`assets/avatars/layers/`). Both the game's loader and the entry preview
+ * resolve sheets through this, so a renamed file moves in one place.
+ */
+export function layerSheetFile(layer: Pick<AppearanceLayer, 'group' | 'part' | 'variant'>): string {
+  const dir = layer.group === ACCESSORY_GROUP ? 'accessories' : layer.group
+  const file = layer.variant ? `${layer.part}-${layer.variant}` : layer.part
+  return `${dir}/${file}.png`
+}
+
+/**
+ * Every layer sheet the catalogue can ask for, for preloading: the bodies (one
+ * per base and tone), every hair style and facial hair of each base, its top,
+ * trousers and shoes, and each accessory.
+ */
+export function allLayerSheets(): Pick<AppearanceLayer, 'group' | 'part' | 'variant'>[] {
+  const sheets: Pick<AppearanceLayer, 'group' | 'part' | 'variant'>[] = []
+  for (const base of APPEARANCE_BASES) {
+    for (const tone of SKIN_TONES) sheets.push({ group: base, part: 'body', variant: tone })
+    for (const style of HAIR_STYLES) sheets.push({ group: base, part: 'hair', variant: style })
+    for (const facial of FACIAL_HAIR_OPTIONS) {
+      if (facial !== 'none') sheets.push({ group: base, part: 'facial', variant: facial })
+    }
+    sheets.push({ group: base, part: 'top' }, { group: base, part: 'pants' })
+    sheets.push({ group: base, part: 'shoes' })
+  }
+  for (const acc of [...HAT_OPTIONS, ...GLASSES_OPTIONS]) {
+    if (acc === 'none') continue
+    sheets.push({ group: ACCESSORY_GROUP, part: acc })
+  }
+  return sheets
 }

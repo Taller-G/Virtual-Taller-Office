@@ -7,8 +7,10 @@ import {
   DEFAULT_AVATAR,
   FACIAL_HAIR_OPTIONS,
   HAIR_STYLES,
-  appearanceLayerAssets,
+  NO_TINT,
+  allLayerSheets,
   appearanceLayers,
+  layerSheetFile,
   isDirection,
   NAME_MAX_LENGTH,
   parseAppearance,
@@ -132,28 +134,34 @@ describe('appearance', () => {
 
 describe('appearance layers', () => {
   it('stacks the parts in draw order', () => {
-    const files = appearanceLayers({
+    const sheets = appearanceLayers({
       ...DEFAULT_APPEARANCE,
       facialHair: 'beard',
       hat: 'cap',
       glasses: 'glasses-round',
       hairStyle: 'long',
-    }).map((l) => l.file)
-    expect(files).toEqual([
-      'body-default',
-      'shoes',
-      'pants',
-      'top',
-      'facial-beard',
-      'hair-long',
-      'glasses-round',
-      'cap',
+    }).map(layerSheetFile)
+    expect(sheets).toEqual([
+      'adam/body-default.png',
+      'adam/shoes.png',
+      'adam/pants.png',
+      'adam/top.png',
+      'adam/facial-beard.png',
+      'adam/hair-long.png',
+      'accessories/glasses-round.png',
+      'accessories/cap.png',
     ])
   })
 
   it('leaves out the parts set to "none"', () => {
-    const files = appearanceLayers(DEFAULT_APPEARANCE).map((l) => l.file)
-    expect(files).toEqual(['body-default', 'shoes', 'pants', 'top', 'hair-short'])
+    const sheets = appearanceLayers(DEFAULT_APPEARANCE).map(layerSheetFile)
+    expect(sheets).toEqual([
+      'adam/body-default.png',
+      'adam/shoes.png',
+      'adam/pants.png',
+      'adam/top.png',
+      'adam/hair-short.png',
+    ])
   })
 
   it('tints the legs apart from each other and from the top', () => {
@@ -163,19 +171,18 @@ describe('appearance layers', () => {
       pantsColor: 'blue',
       shoeColor: 'white',
     })
-    const tint = (file: string) => layers.find((l) => l.file === file)?.tint
+    const tint = (part: string) => layers.find((l) => l.part === part)?.tint
     expect(new Set([tint('top'), tint('pants'), tint('shoes')]).size).toBe(3)
-    expect(tint('body-default')).toBeUndefined()
+    expect(tint('body')).toBe(NO_TINT)
   })
 
   it('preloads a sheet for every layer any appearance can ask for', () => {
-    const assets = appearanceLayerAssets()
-    const keys = assets.map((r) => `${r.dir}/${r.file}`)
-    expect(new Set(keys).size).toBe(keys.length)
+    const sheets = allLayerSheets().map(layerSheetFile)
+    expect(new Set(sheets).size).toBe(sheets.length)
     for (const base of APPEARANCE_BASES) {
-      for (const style of HAIR_STYLES) expect(keys).toContain(`${base}/hair-${style}`)
-      expect(keys).toContain(`${base}/pants`)
-      expect(keys).toContain(`${base}/shoes`)
+      for (const style of HAIR_STYLES) expect(sheets).toContain(`${base}/hair-${style}.png`)
+      expect(sheets).toContain(`${base}/pants.png`)
+      expect(sheets).toContain(`${base}/shoes.png`)
     }
     const used = appearanceLayers({
       ...DEFAULT_APPEARANCE,
@@ -184,6 +191,6 @@ describe('appearance layers', () => {
       hat: 'beanie',
       glasses: 'glasses-square',
     })
-    for (const layer of used) expect(keys).toContain(`${layer.dir}/${layer.file}`)
+    for (const layer of used) expect(sheets).toContain(layerSheetFile(layer))
   })
 })

@@ -5,8 +5,9 @@ import {
   DEFAULT_AVATAR,
   DIRECTIONS,
   FRAMES_PER_ANIM,
-  appearanceLayerAssets,
-  type AppearanceLayerRef,
+  allLayerSheets,
+  layerSheetFile,
+  type AppearanceLayer,
   type Direction,
 } from '@vto/shared'
 
@@ -18,17 +19,23 @@ export function textureKey(avatar: string): string {
 }
 
 /**
- * Texture key for a layer of a composed avatar, built from the same two fields
- * that locate its sheet on disk — `assets/avatars/layers/<dir>/<file>.png`.
- * Examples: `layer-adam-body-default`, `layer-ash-hair-bun`, `layer-accessories-beanie`.
+ * Texture key for a layer of a composed avatar.
+ * Examples: `layer-adam-body-default`, `layer-ash-hair`, `layer-acc-beanie`.
  */
-export function layerTextureKey(layer: AppearanceLayerRef): string {
-  return `layer-${layer.dir}-${layer.file}`
+export function layerTextureKey(group: string, part: string, variant?: string): string {
+  return variant ? `layer-${group}-${part}-${variant}` : `layer-${group}-${part}`
 }
 
-/** Path of a layer's sheet, relative to the avatar layers folder. */
-export function layerAssetPath(layer: AppearanceLayerRef): string {
-  return `${layer.dir}/${layer.file}.png`
+/**
+ * URL of a layer's sprite sheet: the catalogue names the file, this puts it
+ * under the avatars folder. Phaser's loader and the entry screen's preview
+ * (which fetches the same sheets itself, outside the game) both go through it.
+ */
+export function layerSheetUrl(
+  avatarsUrl: string,
+  layer: Pick<AppearanceLayer, 'group' | 'part' | 'variant'>,
+): string {
+  return `${avatarsUrl}layers/${layerSheetFile(layer)}`
 }
 
 /**
@@ -114,8 +121,8 @@ export function createAvatarAnims(scene: Phaser.Scene) {
     }
   }
 
-  // Layers: every sheet an appearance can ask for, straight from the catalogue.
-  for (const layer of appearanceLayerAssets()) {
-    registerLayerAnims(scene, layerTextureKey(layer))
+  // Layers: body (per tone), hair, top, accessories — the catalogue's list.
+  for (const sheet of allLayerSheets()) {
+    registerLayerAnims(scene, layerTextureKey(sheet.group, sheet.part, sheet.variant))
   }
 }

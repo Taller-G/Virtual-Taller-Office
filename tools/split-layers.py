@@ -78,6 +78,12 @@ SKIN_COLORS = {
 # ---------------------------------------------------------------------------
 # HAIR colours per base sprite (from person-avatars.py + adam, analysed).
 # ---------------------------------------------------------------------------
+# Two of them name a colour the character uses for a second part as well —
+# adam's olive is his hair (rows 2-27) and his trousers (rows 36-45), his purple
+# is his shirt (rows 26-43) and his shoes (rows 44-45). Nothing here has to say
+# so: these sets are only consulted above the hem, and below it the leg split
+# owns the pixel. Before adding a colour, print the rows it occupies across all
+# 52 frames and check it forms one band, not two.
 HAIR: dict[str, set[tuple[int, int, int]]] = {
     # adam's hair is the olive mop, not the purple shirt: the two sets used to
     # be the other way round, which tinted his shirt with the hair colour.
