@@ -123,6 +123,10 @@ input {
   flex-direction: column;
   background: var(--panel);
   border-left: 1px solid var(--line);
+  /* Last resort on a very short window: once the chat and the bubble have
+     given all they can, the column scrolls instead of pushing the name field
+     and the away button out of reach. */
+  overflow-y: auto;
 }
 
 .presence__title {
@@ -648,17 +652,24 @@ input {
 /* ---- Bubble chat ----------------------------------------------------------- */
 
 .chat {
-  flex: none;
+  /* It gives way before the presence list does when the window is short, but
+     it never grows past its own content. */
+  flex: 0 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  padding: 0.6rem 0.9rem 0.7rem;
+  gap: 0.5rem;
+  padding: 0.7rem 0.9rem 0.8rem;
   border-top: 1px solid var(--line);
   background: var(--panel-2);
 }
 
 .chat__title {
   margin: 0;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   font-size: 0.78rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -670,18 +681,48 @@ input {
   color: var(--text);
 }
 
-/* Highlight when a message arrives with the window in the background. */
-.chat--alert {
-  animation: chat-alert 1.2s ease-out 2;
+/* Out of a bubble the panel is not broken, it is waiting: it goes quiet and
+   the hint says what to do about it. */
+.chat[data-state='none'] .chat__title {
+  opacity: 0.7;
 }
 
-@keyframes chat-alert {
-  0%,
+/* A message arrived with the window in the background: a standing mark that
+   is still there when one comes back. */
+.chat--alert {
+  background: #1b6ef31a;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.chat--alert .chat__title::after {
+  content: '';
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px #1b6ef333;
+}
+
+/* A brief light when a bubble opens (before anyone presses Tab) and when one
+   comes back to what was missed: it only paints, nothing moves. */
+.chat--spark {
+  animation: chat-spark 1.6s ease-out 1;
+}
+
+@keyframes chat-spark {
+  0% {
+    background: #1b6ef333;
+    box-shadow: inset 0 0 0 1px #1b6ef366;
+  }
   100% {
     background: var(--panel-2);
+    box-shadow: inset 0 0 0 1px #1b6ef300;
   }
-  35% {
-    background: #1b6ef333;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat--spark {
+    animation: none;
   }
 }
 
@@ -691,43 +732,84 @@ input {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  max-height: 12rem;
+  gap: 0.3rem;
+  flex: 0 1 auto;
+  /* It gives height away on a short window, but never below a couple of
+     messages: a two-line log is not a log. */
+  min-height: 5.5rem;
+  max-height: min(14rem, 34vh);
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .chat__log:empty {
   display: none;
 }
 
-.chat__msg {
-  padding: 0.3rem 0.45rem;
-  border-radius: 6px;
-  border-left: 2px solid transparent;
-  background: #0003;
-}
-
-.chat__msg[data-mine='true'] {
-  border-left-color: var(--accent);
-}
-
-.chat__msg[data-status='error'] {
-  border-left-color: var(--bad);
-}
-
-.chat__meta {
-  margin: 0 0 0.1rem;
-  display: flex;
-  gap: 0.4rem;
-  align-items: baseline;
-  font-size: 0.72rem;
+/* In a bubble with nothing said yet: an invitation instead of a blank space. */
+.chat__empty {
+  padding: 0.6rem 0.5rem;
+  border: 1px dashed #ffffff1f;
+  border-radius: 0.55rem;
+  text-align: center;
+  font-size: 0.78rem;
   color: var(--muted);
 }
 
+.chat__msg {
+  max-width: 92%;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.55rem;
+  border: 1px solid #ffffff10;
+  background: #0003;
+}
+
+/* Someone else's arrive from the left; mine sit on the right in the accent
+   colour, so they are told apart without reading the name. */
+.chat__msg[data-mine='false'] {
+  align-self: flex-start;
+  border-bottom-left-radius: 0.2rem;
+}
+
+.chat__msg[data-mine='true'] {
+  align-self: flex-end;
+  border-color: #1b6ef355;
+  background: #1b6ef333;
+  border-bottom-right-radius: 0.2rem;
+}
+
+/* Another one from the same person straight after: it tucks under the one
+   before and does not repeat who is talking. */
+.chat__msg[data-grouped='true'] {
+  margin-top: -0.2rem;
+}
+
+.chat__msg[data-mine='false'][data-grouped='true'] {
+  border-top-left-radius: 0.2rem;
+}
+
+.chat__msg[data-mine='true'][data-grouped='true'] {
+  border-top-right-radius: 0.2rem;
+}
+
+.chat__msg[data-status='error'] {
+  border-color: var(--bad);
+  background: #ff5d6c26;
+}
+
+.chat__meta {
+  margin: 0 0 0.15rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+/* Who is talking is a label: what was said is what matters. */
 .chat__author {
   font-weight: 600;
-  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -736,32 +818,46 @@ input {
 .chat__time {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
+  opacity: 0.75;
 }
 
 .chat__text {
   margin: 0;
   font-size: 0.85rem;
+  line-height: 1.35;
+  color: var(--text);
   /* The message text is shown as it is: a long string without spaces wraps
      instead of stretching the panel. */
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
+/* How it went is a footnote, unless it did not arrive. */
 .chat__status {
   margin: 0.15rem 0 0;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
+  text-align: right;
   color: var(--muted);
+  opacity: 0.75;
 }
 
-.chat__msg[data-status='sent'] .chat__status {
-  color: var(--ok);
+.chat__msg[data-status='sending'] .chat__status {
+  font-style: italic;
+}
+
+.chat__msg[data-status='sent'] .chat__status::before {
+  content: '\2713\00a0';
 }
 
 .chat__msg[data-status='error'] .chat__status {
+  font-size: 0.72rem;
+  text-align: left;
   color: var(--bad);
+  opacity: 1;
 }
 
 .chat__form {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -770,10 +866,10 @@ input {
 .chat__input {
   flex: 1;
   min-width: 0;
-  padding: 0.35rem 0.5rem;
-  border: 1px solid #0007;
-  border-radius: 6px;
-  background: var(--panel);
+  padding: 0.4rem 0.55rem;
+  border: 1px solid #fff2;
+  border-radius: 0.45rem;
+  background: var(--bg);
 }
 
 .chat__input:focus {
@@ -782,26 +878,66 @@ input {
 }
 
 .chat__input:disabled {
-  opacity: 0.6;
+  border-style: dashed;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
+/* Only while typing: it appears with the first character and goes with the
+   last one. */
 .chat__count {
-  font-size: 0.7rem;
+  flex: none;
+  font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
 
+.chat__count:empty {
+  display: none;
+}
+
 .chat__count[data-tone='error'] {
   color: var(--bad);
+  font-weight: 600;
 }
 
 .chat__hint {
+  flex: none;
   margin: 0;
-  font-size: 0.8rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  font-size: 0.75rem;
   color: var(--muted);
 }
 
 .chat__hint[data-tone='error'] {
   color: var(--bad);
+  font-weight: 600;
+}
+
+.chat__hintkey {
+  white-space: nowrap;
+}
+
+.chat__hint kbd {
+  font: inherit;
+  font-size: 0.7rem;
+  padding: 0.05rem 0.3rem;
+  border: 1px solid #fff3;
+  border-radius: 0.25rem;
+  background: #ffffff14;
+  color: var(--text);
+}
+
+/* A short window: the log gives up height before the panel stops fitting. */
+@media (max-height: 640px) {
+  .chat {
+    gap: 0.35rem;
+    padding: 0.5rem 0.9rem 0.6rem;
+  }
+
+  .chat__log {
+    max-height: 22vh;
+  }
 }
