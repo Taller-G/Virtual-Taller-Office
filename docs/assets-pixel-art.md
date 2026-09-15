@@ -27,11 +27,11 @@ assets are added separately, here in `virtual-taller-office`.
 Three playable characters, one per person on the team. They keep each person's recognisable traits
 (hair length and colour, clothing colour) so it is clear who is who.
 
-| id         | Person (traits)                          | Base sprite |
-| ---------- | ---------------------------------------- | ----------- |
-| `persona1` | Long light/blonde hair, cream blouse     | `lucy`      |
-| `persona2` | Long black hair, black leather jacket    | `nancy`     |
-| `persona3` | Brown hair, light top                    | `ash`       |
+| id         | Person (traits)                       | Base sprite |
+| ---------- | ------------------------------------- | ----------- |
+| `persona1` | Long light/blonde hair, cream blouse  | `lucy`      |
+| `persona2` | Long black hair, black leather jacket | `nancy`     |
+| `persona3` | Brown hair, light top                 | `ash`       |
 
 - **Files:** `apps/client/public/assets/avatars/persona1.png`, `persona2.png`, `persona3.png`
 - **How they were made:** with `tools/person-avatars.py` (Python + Pillow, development only). It
@@ -59,8 +59,52 @@ Every avatar shares exactly the same format, defined in `packages/shared/src/ava
   | idle      | 0-5   | 6-11  | 12-17 | 18-23 |
   | walk      | 24-29 | 30-35 | 36-41 | 42-47 |
 
-  Frames 48-51 are the sitting pose (not used yet).
+  Frames 48-51 are the sitting pose, one still frame per direction: 48 down, 49 left, 50 right,
+  51 up (`SIT_FRAME`). They are not a pose of the walking character — the legs are bent forward
+  and the front one is drawn with a pair of legs the four bases share.
+
+Inside a frame the art is drawn at half that resolution: every drawn pixel is a **2x2 block**, so
+a frame is 16x24 drawn pixels. Anything added by hand has to land on that grid or it reads as a
+finer sprite glued onto a coarser one.
 
 Because the three sheets share dimensions, general palette and frame count, they look consistent
 with each other and with the avatars that already existed, and the engine loads them without any
 reprocessing (`apps/client/src/game/BootScene.ts` walks `AVATAR_IDS`).
+
+## The composed avatar's layers
+
+A composed avatar (the "Customise" tab) is not one sheet but a stack of them, all in the same
+52-frame layout, under `apps/client/public/assets/avatars/layers/`. Which ones are stacked, in
+which order and with which tint is decided once in `packages/shared/src/avatars.ts`
+(`appearanceLayers`), and both the office and the entry preview walk that list — a new part is
+declared there, not wired into each renderer.
+
+| Layer       | File                          | Tinted with  |
+| ----------- | ----------------------------- | ------------ |
+| body        | `<base>/body-<skin tone>.png` | —            |
+| shoes       | `<base>/shoes.png`            | `shoeColor`  |
+| trousers    | `<base>/pants.png`            | `pantsColor` |
+| top         | `<base>/top.png`              | `topColor`   |
+| facial hair | `<base>/facial-<style>.png`   | `hairColor`  |
+| hair        | `<base>/hair-<style>.png`     | `hairColor`  |
+| glasses     | `accessories/<glasses>.png`   | —            |
+| hat         | `accessories/<hat>.png`       | —            |
+
+Everything but the body is greyscale so Phaser's `setTint()` can colour it, and each greyscale
+sheet is stretched so its brightest shade is white: a tint multiplies the texel, so a layer that
+kept the art's own luminance turned every colour you picked into a muddy version of itself.
+
+The tools that write these sheets are in `tools/`, and they run in this order:
+
+1. `split-layers.py` — cuts each base avatar into body, `hair-short`, top, trousers and shoes, and
+   makes the skin-tone variants of the body.
+2. `gen-hair.py` — draws the other four hair styles (long, bun, curly, ponytail) **on top of**
+   `hair-short`. They add to the cut rather than replace it: the dark outline ringing the hair
+   lives in the body layer, and on lucy and nancy the hair also covers part of the shoulders, so a
+   smaller style would leave an empty outline over a hole.
+3. `gen-facial-hair.py` — draws stubble, moustache and beard, hung off the face it measures in
+   each frame.
+4. `gen-accessories.py` — draws the hats and glasses, hung off the head of a reference avatar.
+
+`tools/avatar_frames.py` holds what all four agree on: the frame size, the 2x grid and which way
+the character faces in each frame.

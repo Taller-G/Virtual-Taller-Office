@@ -1,10 +1,10 @@
 import Phaser from 'phaser'
 import {
   AVATAR_FRAME,
-  HAIR_COLORS,
+  NO_TINT,
   PLAYER_BODY,
   SIT_FRAME,
-  TOP_COLORS,
+  appearanceLayers,
   parseAppearance,
   type Appearance,
   type Direction,
@@ -218,22 +218,24 @@ export class Avatar extends Phaser.GameObjects.Container {
     this.add(children)
   }
 
-  /** Creates the layered sprites for a composed appearance. */
+  /**
+   * Creates the layered sprites for a composed appearance.
+   *
+   * Which layers there are, in what order and with which tint comes from
+   * `appearanceLayers()` in the catalogue — the same list the entry screen's
+   * preview paints, so what someone builds there is what the office shows.
+   * A layer whose sheet failed to load is skipped: the rest of the avatar
+   * still appears.
+   */
   private buildLayers(a: Appearance, feetY: number) {
-    const addLayer = (texKey: string, tint?: number) => {
-      if (!this.scene.textures.exists(texKey)) return
+    for (const layer of appearanceLayers(a)) {
+      const texKey = layerTextureKey(layer.group, layer.part, layer.variant)
+      if (!this.scene.textures.exists(texKey)) continue
       const sprite = this.scene.add.sprite(0, feetY, texKey).setOrigin(0.5, 1)
-      if (tint !== undefined && tint !== 0xffffff) sprite.setTint(tint)
+      if (layer.tint !== NO_TINT) sprite.setTint(layer.tint)
       this.layers.push(sprite)
       this.layerTexKeys.push(texKey)
     }
-
-    // Order: body → top → hair → glasses → hat
-    addLayer(layerTextureKey(a.base, 'body', a.skinTone))
-    addLayer(layerTextureKey(a.base, 'top'), TOP_COLORS[a.topColor])
-    addLayer(layerTextureKey(a.base, 'hair'), HAIR_COLORS[a.hairColor])
-    if (a.glasses !== 'none') addLayer(layerTextureKey('acc', a.glasses))
-    if (a.hat !== 'none') addLayer(layerTextureKey('acc', a.hat))
   }
 
   // -------------------------------------------------------------------------

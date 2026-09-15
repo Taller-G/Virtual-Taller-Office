@@ -7,8 +7,10 @@ import {
   type Player,
 } from '@vto/shared'
 import type { OfficeConnection, OfficeRoom } from '../network/connection'
-import { avatarThumb } from './avatarThumb'
+import { avatarBadge } from './avatarThumb'
+import { personColors } from './personColor'
 import { toast } from './toasts'
+import { youTag } from './youTag'
 
 /**
  * The "who is in the office" panel + join/leave notices + one's own controls
@@ -49,7 +51,20 @@ export function mountPresence(connection: OfficeConnection) {
 
     const n = players.size
     countEl.textContent = n === 0 ? '' : String(n)
-    listEl.replaceChildren(...rows.map(([id, player]) => row(player, id === room?.sessionId)))
+    const colors = personColors(room)
+    listEl.replaceChildren(
+      ...rows.map(([id, player]) =>
+        row(player, id === room?.sessionId, colors.get(id) ?? 'var(--accent-bright)'),
+      ),
+    )
+    // Alone in the office: said out loud, so an all-but-empty list reads as a
+    // fact about the office and not as a list that failed to load.
+    if (mine && others.length === 0) {
+      const alone = document.createElement('li')
+      alone.className = 'presence__alone'
+      alone.textContent = 'Nobody else is here yet.'
+      listEl.append(alone)
+    }
 
     if (mine) {
       if (document.activeElement !== nameInput) nameInput.value = mine.name
@@ -66,26 +81,31 @@ export function mountPresence(connection: OfficeConnection) {
     panel.dataset.state = mine ? 'in' : 'out'
   }
 
-  function row(player: Player, isMe: boolean): HTMLLIElement {
+  function row(player: Player, isMe: boolean, color: string): HTMLLIElement {
     const li = document.createElement('li')
     li.className = 'presence__row'
     li.dataset.session = player.sessionId
+    li.dataset.me = String(isMe)
     const status = playerStatus(player)
     li.dataset.status = status
+    // The person's colour, for the ring on the portrait and the name.
+    li.style.setProperty('--person', color)
+
     const name = document.createElement('span')
     name.className = 'presence__name'
     name.textContent = player.name
-    if (isMe) {
-      const you = document.createElement('span')
-      you.className = 'presence__you'
-      you.textContent = 'you'
-      name.append(' ', you)
-    }
+    if (isMe) name.append(' ', youTag())
+
     const statusEl = document.createElement('span')
     statusEl.className = 'presence__status'
     statusEl.textContent = PLAYER_STATUS_TEXT[status]
     if (status === 'focused') statusEl.title = 'Heads-down at a desk: not available to talk'
-    li.append(avatarThumb(player.avatar, 1), name, statusEl)
+
+    const text = document.createElement('span')
+    text.className = 'presence__text'
+    text.append(name, statusEl)
+
+    li.append(avatarBadge(player.avatar, color, 40), text)
     return li
   }
 

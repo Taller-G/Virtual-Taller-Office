@@ -1,14 +1,13 @@
 import Phaser from 'phaser'
 import {
   ANIM_START,
-  APPEARANCE_BASES,
   AVATAR_IDS,
   DEFAULT_AVATAR,
   DIRECTIONS,
   FRAMES_PER_ANIM,
-  GLASSES_OPTIONS,
-  HAT_OPTIONS,
-  SKIN_TONES,
+  allLayerSheets,
+  layerSheetFile,
+  type AppearanceLayer,
   type Direction,
 } from '@vto/shared'
 
@@ -25,6 +24,18 @@ export function textureKey(avatar: string): string {
  */
 export function layerTextureKey(group: string, part: string, variant?: string): string {
   return variant ? `layer-${group}-${part}-${variant}` : `layer-${group}-${part}`
+}
+
+/**
+ * URL of a layer's sprite sheet: the catalogue names the file, this puts it
+ * under the avatars folder. Phaser's loader and the entry screen's preview
+ * (which fetches the same sheets itself, outside the game) both go through it.
+ */
+export function layerSheetUrl(
+  avatarsUrl: string,
+  layer: Pick<AppearanceLayer, 'group' | 'part' | 'variant'>,
+): string {
+  return `${avatarsUrl}layers/${layerSheetFile(layer)}`
 }
 
 /**
@@ -110,16 +121,8 @@ export function createAvatarAnims(scene: Phaser.Scene) {
     }
   }
 
-  // Layers: body (per tone), hair, top, accessories.
-  for (const base of APPEARANCE_BASES) {
-    for (const tone of SKIN_TONES) {
-      registerLayerAnims(scene, layerTextureKey(base, 'body', tone))
-    }
-    registerLayerAnims(scene, layerTextureKey(base, 'hair'))
-    registerLayerAnims(scene, layerTextureKey(base, 'top'))
-  }
-  for (const acc of [...HAT_OPTIONS, ...GLASSES_OPTIONS]) {
-    if (acc === 'none') continue
-    registerLayerAnims(scene, layerTextureKey('acc', acc))
+  // Layers: body (per tone), hair, top, accessories — the catalogue's list.
+  for (const sheet of allLayerSheets()) {
+    registerLayerAnims(scene, layerTextureKey(sheet.group, sheet.part, sheet.variant))
   }
 }
