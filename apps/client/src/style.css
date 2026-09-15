@@ -1,19 +1,23 @@
 :root {
   color-scheme: dark;
-  --bg: #12161f;
-  --panel: #1e2433;
-  --panel-2: #252b3c;
-  --line: #0006;
+  /* Near-black surfaces with a vivid indigo doing all the pointing: the app's
+     chrome steps back so the world, the people and their colours are what
+     carry it. */
+  --bg: #0b0b0e;
+  --panel: #17171b;
+  --panel-2: #212127;
+  --line: #0008;
   /* A divider that reads as a seam between two lit surfaces rather than a
      black gap: the sections of the side panel are separated with this. */
   --line-soft: #ffffff14;
-  --text: #e8ecf3;
-  --muted: #a3aec4;
-  --accent: #1b6ef3;
-  /* The accent as text on a dark surface: #1b6ef3 is a button colour, too
-     dark to read small against the panel. */
-  --accent-bright: #8ab4ff;
-  --ok: #4ade80;
+  --text: #f4f4f5;
+  --muted: #a1a1aa;
+  /* The primary. White on it measures 5.4:1, so it can carry a button. */
+  --accent: #5b5bd6;
+  /* The accent as text on a dark surface: --accent itself only reaches 3.4:1
+     against the panel, which is not enough to read a name in. */
+  --accent-bright: #a5a6f6;
+  --ok: #22c55e;
   --warn: #f5c451;
   --bad: #ff7280;
   /* Focused: heads-down at a desk. Violet, like the doors of the Chiron
@@ -22,13 +26,15 @@
 
   /* The side panel's four surfaces. Each section sits on its own so the eye
      finds the edge between them without reading the titles: the people list
-     is the panel's own ground, the bubble is a step up and tinted towards the
-     accent, the conversation is sunk below both (a canvas for the messages to
-     sit on) and one's own controls are sunk furthest of all. */
-  --side-1: #222a3b;
-  --side-2: #28314a;
-  --side-3: #191e2b;
-  --side-4: #131823;
+     is the panel's own ground, the bubble is a step up, the conversation is
+     sunk below both (a canvas for the messages to sit on) and one's own
+     controls are sunk furthest of all. */
+  --side-1: #141418;
+  --side-2: #1e1e25;
+  --side-3: #0e0e11;
+  --side-4: #08080a;
+  /* The card that floats over the world on clicking someone. */
+  --card: #1a1a1e;
 
   /* Width of the side panel. In pixels and not in `rem` on purpose: the page
      sets its own font to 14px, so `rem` here is 14px and "20rem" would come
@@ -227,8 +233,8 @@ input {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--accent-bright);
-  background: #8ab4ff1f;
-  border: 1px solid #8ab4ff3d;
+  background: color-mix(in srgb, var(--accent-bright) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-bright) 24%, transparent);
   border-radius: 0.3rem;
   padding: 0 0.28rem;
   vertical-align: 1px;
@@ -251,7 +257,7 @@ input {
   height: 0.45rem;
   border-radius: 50%;
   background: var(--ok);
-  box-shadow: 0 0 0 2px #4ade8033;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ok) 20%, transparent);
 }
 
 .presence__row[data-status='focused'] .presence__status {
@@ -261,7 +267,7 @@ input {
 .presence__row[data-status='focused'] .presence__status::before {
   background: var(--focus);
   /* A ring rather than a dot: focused is present, but not available. */
-  box-shadow: 0 0 0 2px #b79cff40;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus) 25%, transparent);
 }
 
 .presence__row[data-status='away'] .presence__status {
@@ -270,7 +276,7 @@ input {
 
 .presence__row[data-status='away'] .presence__status::before {
   background: var(--warn);
-  box-shadow: 0 0 0 2px #f5c45133;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--warn) 20%, transparent);
 }
 
 /* Away and offline dim the picture, never the name: who someone is stays as
@@ -285,7 +291,7 @@ input {
 
 .presence__row[data-status='offline'] .presence__status::before {
   background: var(--bad);
-  box-shadow: 0 0 0 2px #ff728033;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 20%, transparent);
 }
 
 .presence__row[data-status='offline'] .avatar-badge {
@@ -336,7 +342,7 @@ input {
 
 .presence__field input:focus,
 .entry__field input:focus {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--accent-bright);
   outline-offset: 1px;
 }
 
@@ -390,7 +396,7 @@ input {
   border-radius: 0.55rem;
   background: #0006;
   box-shadow:
-    inset 0 0 0 1.5px color-mix(in srgb, var(--person, #8ab4ff) 70%, transparent),
+    inset 0 0 0 1.5px color-mix(in srgb, var(--person, var(--accent-bright)) 70%, transparent),
     0 1px 2px #0005;
 }
 
@@ -415,13 +421,13 @@ input {
 }
 
 .avatar-pick:hover {
-  background: #3a4256;
+  background: #2b2b33;
 }
 
 .avatar-pick[aria-pressed='true'] {
   border-color: var(--accent);
   color: var(--text);
-  background: #1b6ef322;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 /* ---- Entry screen ---------------------------------------------------------- */
@@ -433,7 +439,7 @@ input {
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  background: #0d1017d9;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
   backdrop-filter: blur(3px);
   z-index: 10;
 }
@@ -604,13 +610,13 @@ input {
 }
 
 .appearance-opt:hover {
-  background: #3a4256;
+  background: #2b2b33;
 }
 
 .appearance-opt[aria-pressed='true'] {
   border-color: var(--accent);
   color: var(--text);
-  background: #1b6ef322;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .color-swatch {
@@ -666,7 +672,7 @@ input {
 .toast {
   padding: 0.4rem 0.7rem;
   border-radius: 0.4rem;
-  background: #252b3ceb;
+  background: color-mix(in srgb, var(--panel-2) 92%, transparent);
   border: 1px solid #fff2;
   font-size: 0.8rem;
   animation: toast-in 0.25s ease-out;
@@ -744,11 +750,12 @@ input {
   padding: 0.2rem 0.5rem 0.2rem 0.2rem;
   border-radius: 999px;
   background: #ffffff0f;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--person, #8ab4ff) 28%, transparent);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--person, var(--accent-bright)) 28%, transparent);
 }
 
 .bubble__row[data-me='true'] {
-  background: #8ab4ff1f;
+  background: color-mix(in srgb, var(--accent-bright) 12%, transparent);
 }
 
 .bubble__name {
@@ -829,7 +836,7 @@ input {
 /* A message arrived with the window in the background: a standing mark that
    is still there when one comes back. */
 .chat--alert {
-  background: #1b6ef31a;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
@@ -839,7 +846,7 @@ input {
   height: 0.45rem;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 0 3px #1b6ef333;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 /* A brief light when a bubble opens (before anyone presses Tab) and when one
@@ -850,12 +857,12 @@ input {
 
 @keyframes chat-spark {
   0% {
-    background: #1b6ef333;
-    box-shadow: inset 0 0 0 1px #1b6ef366;
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent);
   }
   100% {
     background: var(--side-3);
-    box-shadow: inset 0 0 0 1px #1b6ef300;
+    box-shadow: inset 0 0 0 1px transparent;
   }
 }
 
@@ -941,7 +948,7 @@ input {
   font-size: 0.8rem;
   font-weight: 700;
   color: var(--person, var(--text));
-  background: color-mix(in srgb, var(--person, #8ab4ff) 20%, var(--side-3));
+  background: color-mix(in srgb, var(--person, var(--accent-bright)) 20%, var(--side-3));
 }
 
 .chat__stack {
@@ -986,15 +993,16 @@ input {
   border-radius: 0.75rem;
   /* Tinted with the author's colour, but faintly: enough to belong to them,
      not enough to get in the way of reading what they said. */
-  background: color-mix(in srgb, var(--person, #8ab4ff) 14%, var(--side-3));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--person, #8ab4ff) 22%, transparent);
+  background: color-mix(in srgb, var(--person, var(--accent-bright)) 14%, var(--side-3));
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--person, var(--accent-bright)) 22%, transparent);
 }
 
 /* One's own carry the accent instead of a person's hue: on their own side, in
    the colour the whole app uses for "you". */
 .chat__group[data-mine='true'] .chat__msg {
-  background: color-mix(in srgb, var(--accent) 32%, var(--side-3));
-  box-shadow: inset 0 0 0 1px #8ab4ff3d;
+  background: color-mix(in srgb, var(--accent) 38%, var(--side-3));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-bright) 24%, transparent);
 }
 
 /* The corner nearest the portrait is squared off on the first of a group, so
@@ -1077,7 +1085,7 @@ input {
 }
 
 .chat__input:focus {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--accent-bright);
   outline-offset: 1px;
 }
 
@@ -1154,4 +1162,282 @@ input {
   .chat__log {
     max-height: 22vh;
   }
+}
+
+/* ---- The person card ------------------------------------------------------
+
+   Floats over whoever you picked out, following their avatar. Positioned with
+   `transform` and not `left`/`top`: it is moved every frame, and a transform
+   is the one property the browser can move without laying the page out again. */
+
+.pcard {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 6;
+  /* In px for the same reason the side panel is: `rem` here is 14px. */
+  width: 276px;
+  max-width: calc(100% - 1rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-radius: 1.15rem;
+  background: var(--card);
+  border: 1px solid #ffffff14;
+  box-shadow:
+    0 18px 40px #000000a6,
+    0 2px 8px #0000007a;
+  /* The card is over the canvas, which has its own click handling: the card
+     itself takes the clicks, nothing else. */
+  pointer-events: auto;
+}
+
+/* A small tail pointing at the person, on whichever side the card ended up. */
+.pcard::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-left: -0.35rem;
+  background: var(--card);
+  border: 1px solid #ffffff14;
+  transform: rotate(45deg);
+}
+
+.pcard[data-side='above']::after {
+  bottom: -0.36rem;
+  border-top: 0;
+  border-left: 0;
+}
+
+.pcard[data-side='below']::after {
+  top: -0.36rem;
+  border-bottom: 0;
+  border-right: 0;
+}
+
+/* ---- Who it is ------------------------------------------------------------- */
+
+.pcard__who {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+/* The portrait is round here, unlike the square ones in the list: it is the
+   subject of the card rather than a marker in a row. */
+.pcard__portrait {
+  position: relative;
+  flex: none;
+  line-height: 0;
+}
+
+.pcard__portrait .avatar-badge {
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--person, var(--accent-bright)) 75%, transparent),
+    0 2px 6px #0007;
+}
+
+/* The status as a dot on the rim of the portrait, the way the reference has
+   it: readable before the word underneath is. */
+.pcard__portrait::after {
+  content: '';
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  background: var(--ok);
+  border: 2.5px solid var(--card);
+}
+
+.pcard[data-status='away'] .pcard__portrait::after {
+  background: var(--warn);
+}
+
+.pcard[data-status='focused'] .pcard__portrait::after {
+  background: var(--focus);
+}
+
+.pcard[data-status='offline'] .pcard__portrait::after {
+  background: var(--bad);
+}
+
+.pcard__id {
+  min-width: 0;
+}
+
+.pcard__name {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pcard__status {
+  margin: 0.1rem 0 0;
+  font-size: 0.95rem;
+  /* "active" is written lower case everywhere it appears in a list; at this
+     size, opening a sentence, it wants a capital. */
+  text-transform: capitalize;
+  color: var(--muted);
+}
+
+.pcard[data-status='focused'] .pcard__status {
+  color: var(--focus);
+}
+
+.pcard[data-status='away'] .pcard__status {
+  color: var(--warn);
+}
+
+.pcard[data-status='offline'] .pcard__status {
+  color: var(--bad);
+}
+
+/* ---- The actions ----------------------------------------------------------- */
+
+.pcard__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* The one thing the card is mainly for, so it takes the room the rest leaves
+   and the only filled colour on the card. */
+.pcard__primary {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  height: 2.9rem;
+  padding: 0 0.9rem;
+  border: 0;
+  border-radius: 0.85rem;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pcard__primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 85%, #fff);
+}
+
+.pcard__primary:disabled {
+  background: color-mix(in srgb, var(--accent) 45%, var(--card));
+  color: #ffffffb8;
+  cursor: default;
+}
+
+.pcard__wave {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.pcard__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.9rem;
+  height: 2.9rem;
+  padding: 0;
+  border: 1px solid #ffffff1f;
+  border-radius: 0.85rem;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.pcard__icon:hover:not(:disabled) {
+  background: #ffffff14;
+  border-color: #ffffff33;
+}
+
+.pcard__icon:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.pcard__icon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The three dots are round caps on a zero-length line, so they need no path
+   of their own. */
+.pcard__icon svg [data-icon='More'],
+.pcard__icon svg path[d^='M12 6.2'] {
+  stroke-width: 2.6;
+}
+
+.pcard__primary:focus-visible,
+.pcard__icon:focus-visible,
+.pcard__menuitem:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 2px;
+}
+
+/* ---- The overflow menu ------------------------------------------------------ */
+
+.pcard__menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.pcard__menuline {
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.pcard__menuitem {
+  padding: 0.5rem 0.55rem;
+  border: 0;
+  border-radius: 0.55rem;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.88rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pcard__menuitem:hover {
+  background: #ffffff14;
+}
+
+/* ---- The row that opens it -------------------------------------------------- */
+
+.presence__row[role='button'] {
+  cursor: pointer;
+}
+
+.presence__row[role='button']:hover {
+  background: #ffffff0f;
+}
+
+.presence__row[role='button']:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: -2px;
 }

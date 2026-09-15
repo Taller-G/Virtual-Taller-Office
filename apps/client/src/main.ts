@@ -10,6 +10,7 @@ import { mountHud } from './ui/hud'
 import { mountPresence } from './ui/presence'
 import { mountBubble } from './ui/bubble'
 import { mountChat } from './ui/chat'
+import { mountPersonCard } from './ui/personCard'
 
 /** World the office is entered through (the First Office). */
 const startWorld = getWorld(DEFAULT_WORLD_ID)!
@@ -20,10 +21,14 @@ mountPresence(connection)
 mountBubble(connection)
 mountChat(connection)
 
+// Kept so the card can ask it where people are and tell it to walk.
+const office = new OfficeScene(connection, { debug: config.debug })
+mountPersonCard(connection, office)
+
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
-  backgroundColor: '#1b1f2a',
+  backgroundColor: '#0b0b0e',
   // Pixel art: no smoothing when scaling and rounded positions.
   pixelArt: true,
   // The canvas fills the whole container and adapts to the window size.
@@ -33,10 +38,7 @@ const game = new Phaser.Game({
   // that way the game keeps running with the tab in the background (automated
   // tests).
   fps: { forceSetTimeOut: config.debug },
-  scene: [
-    new BootScene(startWorld, config.avatarsUrl, config.logoUrl),
-    new OfficeScene(connection, { debug: config.debug }),
-  ],
+  scene: [new BootScene(startWorld, config.avatarsUrl, config.logoUrl), office],
 })
 
 // While typing in a text field, key presses do not reach the game.

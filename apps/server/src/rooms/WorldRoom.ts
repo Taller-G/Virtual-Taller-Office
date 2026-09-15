@@ -24,12 +24,14 @@ import {
   type RoomInfoPayload,
   type SetAwayPayload,
   type SetNamePayload,
+  type WaveSendPayload,
   type SitPayload,
   type SpawnPoint,
   type WorldDefinition,
 } from '@vto/shared'
 import { BubbleManager } from '../bubbles'
 import { ChatRelay } from '../chat'
+import { WaveRelay } from '../waves'
 import { config, DEFAULT_BUBBLE_RADIUS_TILES } from '../config'
 import { worldMap, type WorldMap } from '../map'
 
@@ -106,6 +108,7 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
   map!: WorldMap
   bubbles!: BubbleManager
   chat!: ChatRelay
+  waves!: WaveRelay
   /** Latest instant (ms, room clock) with activity, by sessionId. */
   private lastActivity = new Map<string, number>()
 
@@ -137,6 +140,8 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
       windowMs: config.chatRateWindowMs,
     })
 
+    this.waves = new WaveRelay(this.state, { cooldownMs: config.waveCooldownMs })
+
     this.onMessage(Message.MOVE, (client, payload: MovePayload) => this.onMove(client, payload))
     this.onMessage(Message.SET_NAME, (client, payload: SetNamePayload) =>
       this.onSetName(client, payload),
@@ -148,6 +153,9 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
     this.onMessage(Message.STAND, (client) => this.onStand(client))
     this.onMessage(Message.CHAT_SEND, (client, payload: ChatSendPayload) =>
       this.onChatSend(client, payload),
+    )
+    this.onMessage(Message.WAVE_SEND, (client, payload: WaveSendPayload) =>
+      this.onWaveSend(client, payload),
     )
 
     this.clock.setInterval(() => this.checkAway(), AWAY_CHECK_INTERVAL_MS)
@@ -344,6 +352,22 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
     if (player) this.markActive(player)
   }
 
+  /**
+   * Wave: `WaveRelay` resolves it (both people in the room, not oneself, off
+   * cooldown) and it goes to the person waved at alone. A rejected wave is
+   * answered with silence on purpose - the client holds the same cooldown, so
+   * the only way to reach one here is a client that ignored it, and there is
+   * nothing useful to tell it.
+   */
+  private onWaveSend(client: Client, payload: WaveSendPayload) {
+    const outcome = this.waves.submit(client.sessionId, payload, Date.now())
+    if (!outcome.ok) return
+    this.clients.getById(outcome.to)?.send(Message.WAVE, outcome.wave)
+    // Waving is activity: it does not leave you marked away.
+    const player = this.state.players.get(client.sessionId)
+    if (player) this.markActive(player)
+  }
+
   /** Records activity; the automatic away state lifts, the manual one does not. */
   private markActive(player: Player) {
     this.touch(player.sessionId)
@@ -407,6 +431,7 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
     if (player) this.bubbles.onPlayerLeft(player)
     this.lastActivity.delete(client.sessionId)
     this.chat.forget(client.sessionId)
+    this.waves.forget(client.sessionId)
     const reason = code === CloseCode.CONSENTED ? 'consented leave' : `code=${code}`
     console.log(
       `[world ${this.world.id}] ${client.sessionId} leaves (${reason}; ${this.state.players.size} present)`,

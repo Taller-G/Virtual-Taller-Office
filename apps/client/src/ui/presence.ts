@@ -9,6 +9,7 @@ import {
 import type { OfficeConnection, OfficeRoom } from '../network/connection'
 import { avatarBadge } from './avatarThumb'
 import { personColors } from './personColor'
+import { selectPerson } from './selection'
 import { toast } from './toasts'
 import { youTag } from './youTag'
 
@@ -106,6 +107,19 @@ export function mountPresence(connection: OfficeConnection) {
     text.append(name, statusEl)
 
     li.append(avatarBadge(player.avatar, color, 40), text)
+    // Everyone but me opens their card: there is nothing on it to do to
+    // oneself that the footer below does not already do.
+    if (!isMe) {
+      li.tabIndex = 0
+      li.setAttribute('role', 'button')
+      li.setAttribute('aria-label', `Open ${player.name}'s card`)
+      li.addEventListener('click', () => selectPerson(player.sessionId))
+      li.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        selectPerson(player.sessionId, true)
+      })
+    }
     return li
   }
 

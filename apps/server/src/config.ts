@@ -39,6 +39,8 @@ export const config = {
   chatMaxPerWindow: integer('CHAT_MAX_PER_WINDOW', 5),
   /** Window of the chat rate limit, in ms. */
   chatRateWindowMs: integer('CHAT_RATE_WINDOW_MS', 2000),
+  /** Shortest gap between two waves from the same person, in ms. */
+  waveCooldownMs: integer('WAVE_COOLDOWN_MS', 3000),
   pingIntervalMs: integer('PING_INTERVAL_MS', 2000),
   pingMaxRetries: integer('PING_MAX_RETRIES', 2),
   isProduction: process.env.NODE_ENV === 'production',
