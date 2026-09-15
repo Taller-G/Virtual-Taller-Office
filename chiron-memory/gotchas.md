@@ -57,3 +57,19 @@ What: The panel's highlight was restarted the usual way — drop the class, add 
 ## Vite's first page load can throw away a form that was just submitted
 
 What: Driving the client over CDP, the first page load after starting `npm run dev` submits the entry form, the server logs the join, and then Vite finishes optimizing dependencies and forces a full reload: the fresh page is back at the entry screen with `window.__vto` gone and the session orphaned · Why: it reads as "the client cannot join", and the server log showing a successful join sends you looking in the wrong place · Where: automated runs against `http://localhost:5173/?debug` · Learned: wait for `window.__vto` to exist before submitting, and retry the whole entry once if the room does not appear — or warm the dev server with a throwaway page load first
+
+## The avatar sheets are 2x art: one drawn pixel is a 2x2 block
+
+What: inside a 32x48 frame the LimeZu art is drawn at 16x24 and scaled up, so every source pixel is an identical 2x2 block · Why: nothing in the format says so, and a layer drawn one pixel at a time still composites correctly — it just reads as a finer sprite glued onto a coarser one, which is the kind of wrongness you see without being able to name it · Where: tools/avatar_frames.py (`ART`, `get_art`, `put_art`), tools/split-layers.py · Learned: check for the doubling before drawing anything new (compare `px[x,y]` with `px[x+1,y]` and `px[x,y+1]` over a frame); tools/gen-accessories.py predates the check and its hats are drawn on the fine grid
+
+## A tint multiplies, so a greyscale layer has to be stretched to white
+
+What: `setTint()` multiplies the texel, so a greyscale layer that keeps the art's own luminance (an olive shirt around 40% grey) turns every colour you pick into a dark version of itself — pink hair came out maroon · Why: the layers were split by converting to luminance, which is right for keeping the shading and wrong for keeping the colour · Where: tools/split-layers.py (`normalize`) · Learned: scale each layer by a single factor so its brightest shade is white; the shading survives because the ratios do
+
+## Every base's shoes are painted in its own shirt colour
+
+What: on all four bases the feet reuse a shade of the shirt (adam's purple, ash's maroon, nancy's grey-blue) and lucy's reuse a skin shade, so no colour list can tell a shoe from a sleeve · Why: they are one character's palette, not a set of parts · Where: tools/split-layers.py (`frame_hem`, `SHOES`) · Learned: find the hem first — the row under the lowest shirt pixel above `HEM_MAX` — and only look for shoe colours below it; a hem guessed from how wide the silhouette is drifts by an art pixel in the frames where one leg is lifted, and a drifting hem paints a stripe of shirt in the trouser colour
+
+## adam's hair and shirt colour sets were the wrong way round
+
+What: `HAIR["adam"]` held the purple of his shirt and `TOP["adam"]` the olive of his hair, so `hairColor` tinted his shirt and `topColor` his hair · Why: both sets are plausible-looking lists of hex triples and nothing checks which part they land on; the split still produced two clean layers · Where: tools/split-layers.py · Learned: after splitting, compare the mean y of each layer's pixels — hair belongs around y 15, a shirt around y 34; they are impossible to mix up that way
