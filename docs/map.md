@@ -122,6 +122,12 @@ place in the world, not a feature of the app: adding one is adding an object to 
 - Sitting is decided by the **server**: a seat somebody else is in cannot be taken, and the seat is
   freed when the person stands up, walks away, marks themselves away, loses the connection or
   leaves the world. Nothing in the map says any of that.
+- The seats around a **meeting room's** big table are the same kind of object: there is no separate
+  class for them. What makes them the table's seats is that they fall inside a zone marked as a
+  meeting room (see ["Zones"](#zones-recommended)), and that is what "Enter meeting" looks for when
+  it seats somebody. In the First Office they are named after their room
+  (`West Meeting Room seat 1`), numbered round the table: the north side first, then the south, then
+  the chair at each end.
 
 In `?debug` the seats are drawn in teal with their name and facing, over the same view that shows
 the collision bodies: a seat with a collision body on it is visible at a glance.
@@ -141,6 +147,12 @@ as well.
 - A room's zone covers the **whole room**, wall to wall. That is what makes the label land inside it
   and what a meeting means when it says which room it is in: the seats of a meeting room are the
   `seat` objects inside its zone.
+- Property `meeting` (bool, optional): the zone is a **meeting room**, that is, a room a meeting can
+  be scheduled into. Its seats are the ones around its big table, and entering a meeting seats
+  people in them or, when they are all taken, stands them on free floor inside the rectangle. A room
+  with the property and no seat inside it is a room nobody could sit in, so the tests reject it.
+  Adding a meeting room is drawing the zone, ticking `meeting` and naming its chairs: no code
+  changes.
 - The server's tests require the First Office's four minimum zones (a reception, the desks, a
   kitchen and the meeting rooms), that every zone is named, that none of the names is repeated, and
   that **every** zone can be reached on foot from the spawn: a room without a walkable door makes
@@ -170,6 +182,7 @@ as well.
 | Arrival point         | Object (point or rectangle)    | class `spawn` + unique name; optional `radius` and `dir` |
 | Door to another world | Rectangle object               | class `door` + `world` (id) and `spawn` (name) of target |
 | Named zone            | Rectangle object               | class `zone` + name                                      |
+| Meeting room          | Rectangle object               | class `zone` + name + `meeting: true`; seats inside it   |
 | Seat (focus desk)     | Rectangle object               | class `seat` + unique name; optional `dir`               |
 | World ambient         | Map → property                 | `ambient` (colour `#AARRGGBB`)                           |
 | Tilesets              | Map                            | embedded, images relative to the map file                |

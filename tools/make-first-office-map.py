@@ -513,6 +513,12 @@ def zones() -> list[dict]:
     """
     The named places. Every room is one, its rectangle covering the whole room,
     so the label lands inside it and everybody in the room is in the same zone.
+
+    The three rooms of the wing also carry the `meeting` property: that is what
+    makes a room bookable (`findMeetingRooms` in `packages/shared/src/map.ts`),
+    and it is what a scheduled meeting means when it names a room. Its seats
+    are the `seat` objects inside its rectangle, which is why the rectangle
+    covers the whole room and no more.
     """
     out = [
         (KITCHEN[0], KITCHEN[1], NORTH_BAND.start, KITCHEN[2], NORTH_BAND.stop - 1),
@@ -522,8 +528,10 @@ def zones() -> list[dict]:
         ('Meeting Wing', FIRST_COL, CORRIDOR.start, LAST_COL, CORRIDOR.stop - 1),
     ]
     out += [(name, first, WING.start, last, WING.stop - 1) for name, first, last, _ in MEETING_ROOMS]
-    return [
-        {
+    meeting = {name for name, _, _, _ in MEETING_ROOMS}
+    zones = []
+    for name, c0, r0, c1, r1 in out:
+        zone = {
             'name': name,
             'type': 'zone',
             'x': c0 * TILE,
@@ -531,8 +539,10 @@ def zones() -> list[dict]:
             'width': (c1 - c0 + 1) * TILE,
             'height': (r1 - r0 + 1) * TILE,
         }
-        for name, c0, r0, c1, r1 in out
-    ]
+        if name in meeting:
+            zone['properties'] = [{'name': 'meeting', 'type': 'bool', 'value': True}]
+        zones.append(zone)
+    return zones
 
 
 def tile_layer(layer_id: int, name: str, data: list[int]) -> dict:

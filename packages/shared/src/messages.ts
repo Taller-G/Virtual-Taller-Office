@@ -1,5 +1,6 @@
 import type { ChatRejection } from './chat'
 import type { Direction } from './avatars'
+import type { MeetingDraft, MeetingRejection } from './meetings'
 
 /**
  * Client <-> server message types. They are used as keys in `room.send` /
@@ -40,6 +41,27 @@ export const Message = {
   WAVE_SEND: 'wave_send',
   /** Server -> the person waved at: somebody waved. */
   WAVE: 'wave',
+  /** Client -> server: schedule a meeting (title, time, room, invitees). */
+  MEETING_SCHEDULE: 'meeting_schedule',
+  /** Client -> server: cancel a meeting I am the organiser of. */
+  MEETING_CANCEL: 'meeting_cancel',
+  /**
+   * Client -> server: enter a meeting. The server decides everything about
+   * it: whether I was invited, whether it is open, and where in the room I end
+   * up. A refusal comes back as `MEETING_ERROR` and leaves me where I was.
+   */
+  MEETING_ENTER: 'meeting_enter',
+  /** Client -> server: leave the meeting I am in. */
+  MEETING_LEAVE: 'meeting_leave',
+  /** Server -> the one who asked: the meeting action was not accepted, and why. */
+  MEETING_ERROR: 'meeting_error',
+  /**
+   * Server -> the participants: the meeting they were in is over, because the
+   * end time came or because the organiser cancelled it. The state says the
+   * same thing (the meeting is gone), but not *why*, and being tipped out of a
+   * conversation without a word is the thing to avoid.
+   */
+  MEETING_ENDED: 'meeting_ended',
 } as const
 
 export type MessageType = (typeof Message)[keyof typeof Message]
@@ -108,4 +130,29 @@ export interface ChatMessagePayload {
 export interface ChatErrorPayload {
   id: string
   reason: ChatRejection
+}
+
+/** What a client sends to schedule a meeting (see `MeetingDraft`). */
+export type MeetingSchedulePayload = MeetingDraft
+
+export interface MeetingActionPayload {
+  /** Id of the meeting to cancel, enter or leave. */
+  meetingId: string
+}
+
+export interface MeetingErrorPayload {
+  reason: MeetingRejection
+  /**
+   * For `room_conflict`: the meeting already holding that room. The panel
+   * names it and its time in the reader's own time zone — the server's is
+   * nobody's.
+   */
+  conflict?: { title: string; startsAt: number; endsAt: number }
+}
+
+export interface MeetingEndedPayload {
+  meetingId: string
+  title: string
+  /** `cancelled` while it was still running, `ended` when its time was up. */
+  reason: 'cancelled' | 'ended'
 }

@@ -10,6 +10,7 @@ import { mountHud } from './ui/hud'
 import { mountPresence } from './ui/presence'
 import { mountBubble } from './ui/bubble'
 import { mountChat } from './ui/chat'
+import { mountMeetings } from './ui/meetings'
 import { mountPersonCard } from './ui/personCard'
 
 /** World the office is entered through (the First Office). */
@@ -21,9 +22,11 @@ mountPresence(connection)
 mountBubble(connection)
 mountChat(connection)
 
-// Kept so the card can ask it where people are and tell it to walk.
+// Kept so the card can ask it where people are and tell it to walk, and so
+// the meetings panel can send somebody across to another world's meeting room.
 const office = new OfficeScene(connection, { debug: config.debug })
 mountPersonCard(connection, office)
+mountMeetings(connection, office)
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,

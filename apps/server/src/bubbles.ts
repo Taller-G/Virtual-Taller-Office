@@ -1,4 +1,4 @@
-import { Bubble, isFocused, type OfficeState, type Player } from '@vto/shared'
+import { Bubble, isAvailableToTalkNearby, type OfficeState, type Player } from '@vto/shared'
 
 /**
  * Proximity conversation bubbles: the semantics of WorkAdventure's "groups"
@@ -22,15 +22,24 @@ import { Bubble, isFocused, type OfficeState, type Player } from '@vto/shared'
  *   open a new bubble without waiting for anyone to walk.
  * - A bubble with `maxMembers` members absorbs nobody else; as soon as it
  *   stops being full, it absorbs the free players within reach.
- * - Somebody **focused** (sitting at a desk, see `Player.seatId`) is outside
- *   all of this: they neither open a bubble nor get absorbed into one, and
- *   sitting down takes them out of the one they were in. Walking up to
- *   someone who is heads-down does not start a conversation with them; you
- *   have to wait until they stand up.
+ * - Somebody **focused** (sitting at a desk, see `Player.seatId`) or **in a
+ *   meeting** is outside all of this: they neither open a bubble nor get
+ *   absorbed into one, and sitting down or entering a meeting takes them out
+ *   of the one they were in. Walking up to someone who is heads-down does not
+ *   start a conversation with them; walking past a meeting does not put you
+ *   in it, and does not pull anybody out of it either.
  *
  * Bubbles form on entering the radius, without waiting for the player to stop
  * (WorkAdventure waits until they halt): the requirement asks that both see
  * it in under 300 ms.
+ *
+ * **A meeting's conversation is a bubble too** — that is what makes the
+ * members panel, the chat relay and the avatars' rings work for it without
+ * knowing anything about meetings — but it is not decided by distance. It is
+ * opened when the first participant enters, holds everyone who entered
+ * however far apart the table puts them, has no member cap, takes nobody in
+ * by proximity and is closed when the meeting ends. `Bubble.meetingId` is what
+ * separates the two kinds.
  */
 
 export interface BubbleSettings {
@@ -84,8 +93,17 @@ export class BubbleManager {
    */
   onPlayerMoved(player: Player) {
     const current = this.bubbleOf(player)
-    if (current && isFocused(player)) {
-      // Sitting down leaves the conversation you were in.
+    if (current?.meetingId) {
+      // The meeting is the conversation: while they are in it, where they are
+      // standing decides nothing. When they are no longer in it (they left, it
+      // ended), they drop out of it and go back to ordinary proximity.
+      if (player.meetingId === current.meetingId) return
+      this.leave(current, player)
+      this.tryJoin(player)
+      return
+    }
+    if (current && !isAvailableToTalkNearby(player)) {
+      // Sitting down, or entering a meeting, leaves the conversation you were in.
       this.leave(current, player)
       return
     }
@@ -114,17 +132,59 @@ export class BubbleManager {
     if (bubble) this.leave(bubble, player)
   }
 
+  /** The conversation of that meeting, if it has been opened. */
+  meetingBubble(meetingId: string): Bubble | undefined {
+    let found: Bubble | undefined
+    this.state.bubbles.forEach((bubble) => {
+      if (bubble.meetingId !== '' && bubble.meetingId === meetingId) found = bubble
+    })
+    return found
+  }
+
+  /**
+   * Puts the player into the meeting's conversation, opening it if they are
+   * the first one in. Whatever proximity bubble they were in is left first:
+   * you are in one conversation at a time.
+   */
+  joinMeeting(meetingId: string, player: Player) {
+    const current = this.bubbleOf(player)
+    if (current?.meetingId === meetingId) return
+    if (current) this.leave(current, player)
+
+    let bubble = this.meetingBubble(meetingId)
+    if (!bubble) {
+      bubble = new Bubble({ id: `b${this.nextId++}`, meetingId })
+      this.state.bubbles.set(bubble.id, bubble)
+      this.events.onCreated?.(bubble)
+    }
+    bubble.members.push(player.sessionId)
+    player.bubbleId = bubble.id
+    this.updatePosition(bubble)
+    this.events.onJoined?.(bubble, player)
+  }
+
+  /**
+   * Closes a meeting's conversation: the meeting ended or was cancelled. The
+   * members are freed and re-evaluated right away, so whoever is left standing
+   * next to somebody opens an ordinary bubble there and then. Call it **after**
+   * clearing their `meetingId`, or they are not available to be regrouped.
+   */
+  closeMeeting(meetingId: string) {
+    const bubble = this.meetingBubble(meetingId)
+    if (bubble) this.destroy(bubble)
+  }
+
   // ---------------------------------------------------------------------------
 
   /** Looks for the closest free player or non-full bubble within the radius. */
   private tryJoin(player: Player) {
-    if (isFocused(player)) return
+    if (!isAvailableToTalkNearby(player)) return
     const radius = this.settings.radius
     let best: { kind: 'player'; target: Player } | { kind: 'bubble'; target: Bubble } | undefined
     let bestDistance = radius
 
     this.state.players.forEach((other) => {
-      if (other === player || other.bubbleId || isFocused(other)) return
+      if (other === player || other.bubbleId || !isAvailableToTalkNearby(other)) return
       const d = distance(player, other)
       if (d <= bestDistance) {
         bestDistance = d
@@ -133,7 +193,8 @@ export class BubbleManager {
     })
 
     this.state.bubbles.forEach((bubble) => {
-      if (this.isFull(bubble)) return
+      // A meeting is joined by entering it, never by standing next to it.
+      if (bubble.meetingId !== '' || this.isFull(bubble)) return
       const d = distance(player, bubble)
       if (d <= bestDistance) {
         bestDistance = d
@@ -176,6 +237,12 @@ export class BubbleManager {
     player.bubbleId = ''
     this.events.onLeft?.(bubble, player)
 
+    if (bubble.meetingId !== '') {
+      // A meeting's conversation is not held together by how many people are
+      // in it: it lives until the meeting does, even with one left or nobody.
+      this.updatePosition(bubble)
+      return
+    }
     if (bubble.members.length <= 1) {
       this.destroy(bubble)
     } else {
@@ -210,8 +277,10 @@ export class BubbleManager {
 
   /** Adds to the bubble the free players that are within the radius of its centre. */
   private absorbNearby(bubble: Bubble) {
+    // Nobody is absorbed into a meeting by walking past the room.
+    if (bubble.meetingId !== '') return
     this.state.players.forEach((other) => {
-      if (this.isFull(bubble) || other.bubbleId || isFocused(other)) return
+      if (this.isFull(bubble) || other.bubbleId || !isAvailableToTalkNearby(other)) return
       if (distance(other, bubble) <= this.settings.radius) this.join(bubble, other)
     })
   }

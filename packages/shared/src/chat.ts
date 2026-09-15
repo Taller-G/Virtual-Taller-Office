@@ -12,6 +12,8 @@
  * again, because a client can lie.
  */
 
+import { normalizeLine } from './text'
+
 /** Maximum number of characters of a message, once normalised. */
 export const CHAT_MAX_LENGTH = 240
 
@@ -32,38 +34,15 @@ export const CHAT_REJECTION_TEXT: Record<ChatRejection, string> = {
 }
 
 /**
- * Invisible characters that are always stripped: zero-width spaces and
- * direction marks (LRO/RLO/isolates). They add nothing to a message and are
- * used to disguise text or reverse the order of what is read.
- */
-const INVISIBLE = /[​-‏‪-‮⁦-⁩﻿]/g
-
-/**
- * Turns control characters (C0 and C1) into spaces, which the whitespace
- * collapse then removes. It is done by code point instead of with a regular
- * expression because a control-character class is unreadable and the linter
- * flags it (`no-control-regex`).
- */
-function withoutControls(value: string): string {
-  let out = ''
-  for (const char of value) {
-    const code = char.codePointAt(0) ?? 0
-    out += code < 0x20 || (code >= 0x7f && code <= 0x9f) ? ' ' : char
-  }
-  return out
-}
-
-/**
  * Normalises the text of a message: strips invisible and control characters,
  * collapses any whitespace (line breaks included: the field is single-line)
- * and trims the ends. It does **not** cap the length nor escape anything: the
- * message travels exactly as it was written and is shown as plain text
- * (`textContent` in the panel, `Phaser.Text` in the balloon), so `<b>hi</b>`
- * reads literally instead of turning into HTML.
+ * and trims the ends (see `normalizeLine`). It does **not** cap the length nor
+ * escape anything: the message travels exactly as it was written and is shown
+ * as plain text (`textContent` in the panel, `Phaser.Text` in the balloon), so
+ * `<b>hi</b>` reads literally instead of turning into HTML.
  */
 export function sanitizeChatText(value: unknown): string {
-  if (typeof value !== 'string') return ''
-  return withoutControls(value.replace(INVISIBLE, '')).replace(/\s+/g, ' ').trim()
+  return normalizeLine(value)
 }
 
 export type ChatTextResult =

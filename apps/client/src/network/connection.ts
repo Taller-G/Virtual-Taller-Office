@@ -11,6 +11,10 @@ import {
   type ChatRejection,
   type ChatSendPayload,
   type JoinOptions,
+  type MeetingActionPayload,
+  type MeetingEndedPayload,
+  type MeetingErrorPayload,
+  type MeetingSchedulePayload,
   type OfficeState,
   type RoomInfoPayload,
   type SetAwayPayload,
@@ -19,6 +23,7 @@ import {
   type WaveSendPayload,
 } from '@vto/shared'
 import type { WorldRoom } from '@vto/server/rooms/WorldRoom'
+import { myPersonId } from './person'
 
 export type OfficeRoom = Room<WorldRoom, OfficeState>
 
@@ -44,6 +49,10 @@ export interface ConnectionEvents {
   chatError: (error: ChatErrorPayload) => void
   /** Somebody waved at me. */
   wave: (wave: WavePayload) => void
+  /** A meeting action of mine was refused, with the reason. */
+  meetingError: (error: MeetingErrorPayload) => void
+  /** The meeting I was in is over (its time came, or it was cancelled). */
+  meetingEnded: (ended: MeetingEndedPayload) => void
   /** I changed world: the room in `room` is already the new world's. */
   world: (worldId: string) => void
 }
@@ -87,6 +96,8 @@ export class OfficeConnection {
     chat: new Set(),
     chatError: new Set(),
     wave: new Set(),
+    meetingError: new Set(),
+    meetingEnded: new Set(),
     world: new Set(),
   }
   private rejoinAttempts = 0
@@ -117,9 +128,14 @@ export class OfficeConnection {
     this.emit('status', status, detail)
   }
 
-  /** Joins the room with the chosen identity and arms the automatic recovery. */
+  /**
+   * Joins the room with the chosen identity and arms the automatic recovery.
+   * Who this tab is (`personId`) travels with the identity from here on: every
+   * rejoin and every door carries the same one, which is what lets a meeting
+   * keep pointing at a person after they cross a world.
+   */
   async start(options: JoinOptions) {
-    this.joinOptions = options
+    this.joinOptions = { ...options, personId: myPersonId() }
     this.stopped = false
     this.setStatus('connecting')
     await this.join()
@@ -163,6 +179,37 @@ export class OfficeConnection {
     return true
   }
 
+  /**
+   * Schedules a meeting. Everything about whether it is allowed — the time,
+   * the duration, whether the room is free — is the server's answer, and it
+   * comes back as a `meetingError` if it is no.
+   */
+  scheduleMeeting(draft: MeetingSchedulePayload) {
+    this.room?.send(Message.MEETING_SCHEDULE, draft)
+  }
+
+  /** Cancels a meeting I organised. */
+  cancelMeeting(meetingId: string) {
+    const payload: MeetingActionPayload = { meetingId }
+    this.room?.send(Message.MEETING_CANCEL, payload)
+  }
+
+  /**
+   * Enters a meeting held in the world I am already in. One in another world
+   * is reached by travelling with `meeting` in the join options (see
+   * `travelTo`), so that the trip and the seat are a single action.
+   */
+  enterMeeting(meetingId: string) {
+    const payload: MeetingActionPayload = { meetingId }
+    this.room?.send(Message.MEETING_ENTER, payload)
+  }
+
+  /** Leaves the meeting I am in. Standing up does the same thing. */
+  leaveMeeting(meetingId: string) {
+    const payload: MeetingActionPayload = { meetingId }
+    this.room?.send(Message.MEETING_LEAVE, payload)
+  }
+
   /** Sets or clears my "away" state by hand. */
   setAway(away: boolean) {
     const payload: SetAwayPayload = { away }
@@ -190,6 +237,7 @@ export class OfficeConnection {
   async travelTo(
     worldId: string,
     spawn: string,
+    extra: Partial<JoinOptions> = {},
   ): Promise<{ ok: true } | { ok: false; reason: string }> {
     const world = getWorld(worldId)
     if (!world) return { ok: false, reason: `The world "${worldId}" does not exist` }
@@ -204,6 +252,9 @@ export class OfficeConnection {
       spawn,
       away: me?.away ?? false,
       awayManual: me?.awayManual ?? false,
+      // What the trip is for, when it is for something: `meeting` makes the
+      // arrival and the seat at the table one action.
+      ...extra,
     }
 
     try {
@@ -281,6 +332,8 @@ export class OfficeConnection {
     room.onMessage(Message.CHAT_MESSAGE, (message) => this.emit('chat', message))
     room.onMessage(Message.CHAT_ERROR, (error) => this.emit('chatError', error))
     room.onMessage(Message.WAVE, (wave) => this.emit('wave', wave))
+    room.onMessage(Message.MEETING_ERROR, (error) => this.emit('meetingError', error))
+    room.onMessage(Message.MEETING_ENDED, (ended) => this.emit('meetingEnded', ended))
 
     room.onDrop((code, reason) => {
       if (this.room !== room) return

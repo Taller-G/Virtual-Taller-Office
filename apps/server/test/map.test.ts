@@ -4,14 +4,22 @@ import { dirname, join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   AVATAR_FRAME,
+  canStandAt,
   CLASS_ZONE,
   doorAt,
   findDoors,
+  findMeetingRooms,
   findSeats,
   findSpawnPoint,
   findSpawnPoints,
+  freeStandingSpots,
   getZones,
   isSolidAt,
+  meetingRoomByName,
+  PLAYER_BODY,
+  playerBodyRect,
+  rectsOverlap,
+  rectWithin,
   objectClass,
   objectCollides,
   objectLayers,
@@ -44,6 +52,8 @@ const LOGO = { width: 160, offsetY: 64 }
 /** What a meeting room is called, and how many seats every one of them has. */
 const MEETING_ROOM = 'Meeting Room'
 const MEETING_SEATS = 10
+/** The rooms of the First Office's meeting wing, west to east. */
+const MEETING_ROOMS = ['West Meeting Room', 'Centre Meeting Room', 'East Meeting Room']
 
 /**
  * These tests run against the REAL map that gets deployed. If someone edits
@@ -129,6 +139,77 @@ describe('Office map (real file)', () => {
         `the zone "${zone.name}" cannot be reached on foot`,
       ).toBe(true)
     }
+  })
+
+  /**
+   * The rooms a meeting can be booked into. Which rooms those are is map data
+   * (a zone with `meeting`), and so is where somebody ends up when they enter
+   * one: a chair around the big table, or — when every chair is taken — a
+   * piece of free floor inside the room. Nothing about either is in code, so
+   * what has to hold is that the map really offers both.
+   */
+  describe('the meeting rooms', () => {
+    const rooms = findMeetingRooms(map)
+
+    it('offers three meeting rooms, each named and marked in the map', () => {
+      expect(rooms.map((r) => r.name)).toEqual(MEETING_ROOMS)
+      for (const room of rooms) expect(room.meeting, `"${room.name}"`).toBe(true)
+      // A room nobody booked is still a zone; a zone is not a meeting room.
+      expect(meetingRoomByName(map, 'Focus Room')).toBeUndefined()
+      expect(meetingRoomByName(map, MEETING_ROOMS[0])?.seats).toHaveLength(MEETING_SEATS)
+    })
+
+    it('every seat of a room is at its own table, inside the room and facing it', () => {
+      for (const room of rooms) {
+        expect(room.seats.length, `"${room.name}" has no seats`).toBeGreaterThanOrEqual(2)
+        const names = room.seats.map((s) => s.name)
+        expect(new Set(names).size, `two seats of "${room.name}" share a name`).toBe(names.length)
+        for (const seat of room.seats) {
+          const { x, y } = seatAnchor(seat)
+          expect(zoneNameAt(map, x, y), `seat "${seat.name}"`).toBe(room.name)
+          expect(isSolidAt(map, x, y), `seat "${seat.name}" is on a colliding tile`).toBe(false)
+          // Facing the table: the seats along the top face down, the ones
+          // along the bottom face up, and the ends face inwards.
+          expect(['up', 'down', 'left', 'right']).toContain(seat.dir)
+        }
+        // Seats on opposite sides of a big table are farther apart than the
+        // proximity radius — which is the whole reason a meeting needs its own
+        // conversation instead of leaning on bubbles.
+        const anchors = room.seats.map(seatAnchor)
+        const widest = Math.max(
+          ...anchors.flatMap((a) => anchors.map((b) => Math.hypot(a.x - b.x, a.y - b.y))),
+        )
+        expect(widest, `"${room.name}" is not a big table`).toBeGreaterThan(64)
+      }
+    })
+
+    it('a full table still has somewhere legal to stand inside the room', () => {
+      for (const room of rooms) {
+        const spots = freeStandingSpots(map, room, room.seats)
+        expect(spots.length, `"${room.name}" has nowhere to stand`).toBeGreaterThan(0)
+        for (const spot of spots) {
+          const body = playerBodyRect(spot.x, spot.y)
+          expect(rectWithin(body, room), `a spot of "${room.name}" is outside the room`).toBe(true)
+          expect(
+            room.seats.some((seat) => rectsOverlap(body, seat)),
+            `a spot of "${room.name}" is on a chair`,
+          ).toBe(false)
+          expect(canStandAt(map, spot.x, spot.y, room.seats)).toBe(true)
+        }
+      }
+    })
+
+    it('somebody already standing there is not stood on', () => {
+      const room = rooms[0]
+      const first = freeStandingSpots(map, room, room.seats)[0]
+      const occupied = [...room.seats, playerBodyRect(first.x, first.y)]
+      const next = freeStandingSpots(map, room, occupied)
+      expect(next.length).toBeGreaterThan(0)
+      expect(next).not.toContainEqual(first)
+      for (const spot of next) {
+        expect(Math.abs(spot.x - first.x) >= PLAYER_BODY.width || spot.y !== first.y).toBe(true)
+      }
+    })
   })
 
   it('the collision of the objects lives in the map, not in code', () => {

@@ -19,6 +19,14 @@ export const PROP_COLLIDES = 'collides'
 export const CLASS_SPAWN = 'spawn'
 /** Class of the rectangles that name areas of the office (reception, kitchen...). */
 export const CLASS_ZONE = 'zone'
+/**
+ * Boolean property of a zone: this room is a **meeting room**, one a meeting
+ * can be scheduled into. Its seats (the ones inside its rectangle) are the
+ * chairs around its big table, and entering a meeting seats people in them.
+ * Marking a room in the map rather than listing rooms in code is what lets
+ * someone add a meeting room in Tiled without touching the app.
+ */
+export const PROP_ZONE_MEETING = 'meeting'
 /** Optional property (px) of a spawn: players appear scattered within that radius. */
 export const PROP_SPAWN_RADIUS = 'radius'
 /** Default radius if the spawn does not define `radius`. */
@@ -202,6 +210,26 @@ export interface Zone {
   y: number
   width: number
   height: number
+  /** The room a meeting can be held in (property `meeting` in Tiled). */
+  meeting: boolean
+}
+
+/** A rectangle in map pixels. Zones, seats, doors and bodies are all this. */
+export interface Rect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/**
+ * A room a meeting can be scheduled into: a zone marked `meeting` together
+ * with the seats around its big table (every seat inside its rectangle, in the
+ * order the map has them). The name is what a meeting names, so it has to be
+ * unique among the meeting rooms of a world.
+ */
+export interface MeetingRoom extends Zone {
+  seats: Seat[]
 }
 
 /**
@@ -377,17 +405,8 @@ export function doorAt(map: TiledMap, x: number, y: number): Door | undefined {
  * the player's body, so that stepping on the threshold is enough and the
  * exact centre of the body does not have to be inside the area.
  */
-export function doorAtRect(
-  map: TiledMap,
-  rect: { x: number; y: number; width: number; height: number },
-): Door | undefined {
-  return findDoors(map).find(
-    (d) =>
-      rect.x < d.x + d.width &&
-      rect.x + rect.width > d.x &&
-      rect.y < d.y + d.height &&
-      rect.y + rect.height > d.y,
-  )
+export function doorAtRect(map: TiledMap, rect: Rect): Door | undefined {
+  return findDoors(map).find((d) => rectsOverlap(rect, d))
 }
 
 /** How a door is named in error messages. */
@@ -430,17 +449,8 @@ export function seatByName(map: TiledMap, name: string): Seat | undefined {
  * **physics body** (the feet), like `doorAtRect`: standing on the chair is
  * enough, the exact centre of the body does not have to be inside it.
  */
-export function seatAtRect(
-  map: TiledMap,
-  rect: { x: number; y: number; width: number; height: number },
-): Seat | undefined {
-  return findSeats(map).find(
-    (s) =>
-      rect.x < s.x + s.width &&
-      rect.x + rect.width > s.x &&
-      rect.y < s.y + s.height &&
-      rect.y + rect.height > s.y,
-  )
+export function seatAtRect(map: TiledMap, rect: Rect): Seat | undefined {
+  return findSeats(map).find((s) => rectsOverlap(rect, s))
 }
 
 /**
@@ -465,10 +475,7 @@ export function seatAnchor(seat: Seat): { x: number; y: number } {
 export const PLAYER_BODY = { width: 18, height: 12 } as const
 
 /** The player's body rectangle at a position (their origin is its top centre). */
-export function playerBodyRect(
-  x: number,
-  y: number,
-): { x: number; y: number; width: number; height: number } {
+export function playerBodyRect(x: number, y: number): Rect {
   return {
     x: x - PLAYER_BODY.width / 2,
     y,
@@ -479,13 +486,7 @@ export function playerBodyRect(
 
 /** Is the player at that position still standing on (or in) the given seat? */
 export function isAtSeat(seat: Seat, x: number, y: number): boolean {
-  const body = playerBodyRect(x, y)
-  return (
-    body.x < seat.x + seat.width &&
-    body.x + body.width > seat.x &&
-    body.y < seat.y + seat.height &&
-    body.y + body.height > seat.y
-  )
+  return rectsOverlap(playerBodyRect(x, y), seat)
 }
 
 /** How a seat is named in error messages. */
@@ -502,7 +503,134 @@ export function getZones(map: TiledMap): Zone[] {
       y: o.y,
       width: o.width ?? 0,
       height: o.height ?? 0,
+      meeting: getProperty<boolean>(o.properties, PROP_ZONE_MEETING) === true,
     }))
+}
+
+/** Does the rectangle contain the point? */
+export function rectContains(rect: Rect, x: number, y: number): boolean {
+  return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height
+}
+
+/** Do the two rectangles touch? Doors, seats and bodies are all resolved this way. */
+export function rectsOverlap(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+}
+
+/** Is the whole rectangle inside the other one? */
+export function rectWithin(inner: Rect, outer: Rect): boolean {
+  return (
+    inner.x >= outer.x &&
+    inner.y >= outer.y &&
+    inner.x + inner.width <= outer.x + outer.width &&
+    inner.y + inner.height <= outer.y + outer.height
+  )
+}
+
+/**
+ * The rooms a meeting can be held in: the zones marked `meeting`, each with
+ * the seats that fall inside it — the chairs around its big table. The order
+ * is the map's, so the seats of a room are always offered in the same order
+ * and "the first free seat" means the same thing on every client.
+ */
+export function findMeetingRooms(map: TiledMap): MeetingRoom[] {
+  const seats = findSeats(map)
+  return getZones(map)
+    .filter((zone) => zone.meeting)
+    .map((zone) => ({
+      ...zone,
+      seats: seats.filter((seat) => {
+        const { x, y } = seatAnchor(seat)
+        return rectContains(zone, x, y)
+      }),
+    }))
+}
+
+/** The meeting room called `name`, or `undefined` if this map has no such room. */
+export function meetingRoomByName(map: TiledMap, name: string): MeetingRoom | undefined {
+  const wanted = name.trim()
+  return wanted === '' ? undefined : findMeetingRooms(map).find((room) => room.name === wanted)
+}
+
+/**
+ * The rectangles of the furniture that blocks the way: the tile objects with
+ * `collides` (their own, or their layer's). Tiled anchors a tile object by its
+ * bottom-left corner, which is why the top edge is `y - height`.
+ *
+ * The client turns these same objects into physics bodies; the server needs
+ * them to answer "is there room to stand here?" without a physics engine.
+ */
+export function solidObjectRects(map: TiledMap): Rect[] {
+  const rects: Rect[] = []
+  for (const layer of objectLayers(map)) {
+    for (const obj of layer.objects) {
+      if (obj.visible === false || !obj.gid || !objectCollides(layer, obj)) continue
+      const width = obj.width ?? 0
+      const height = obj.height ?? 0
+      rects.push({ x: obj.x, y: obj.y - height, width, height })
+    }
+  }
+  return rects
+}
+
+/**
+ * Is there room for somebody to stand with their origin at this point? The
+ * whole **body** has to fit: on floor that is not solid, clear of the solid
+ * furniture and clear of `blocked` (the seats of the room and whoever is
+ * already standing there).
+ */
+export function canStandAt(
+  map: TiledMap,
+  x: number,
+  y: number,
+  blocked: readonly Rect[] = [],
+  solids: readonly Rect[] = solidObjectRects(map),
+): boolean {
+  const body = playerBodyRect(x, y)
+  const corners = [
+    [body.x, body.y],
+    [body.x + body.width, body.y],
+    [body.x, body.y + body.height],
+    [body.x + body.width, body.y + body.height],
+    [body.x + body.width / 2, body.y + body.height / 2],
+  ] as const
+  if (corners.some(([cx, cy]) => isSolidAt(map, cx, cy))) return false
+  if (solids.some((rect) => rectsOverlap(body, rect))) return false
+  return !blocked.some((rect) => rectsOverlap(body, rect))
+}
+
+/** How far apart the candidate standing spots of a room are sampled, in px. */
+export const STANDING_SPOT_STEP = 16
+
+/**
+ * Where somebody can stand inside a room: every point on a `step` lattice
+ * whose body fits entirely within the room, on free floor, off the furniture,
+ * off the chairs and clear of `blocked`. Closest to the middle of the room
+ * first, so whoever arrives to a full table ends up beside it rather than in
+ * a far corner.
+ *
+ * This is what makes "the table is full" an ordinary outcome instead of an
+ * error: there is always somewhere legal to put a person inside the room.
+ */
+export function freeStandingSpots(
+  map: TiledMap,
+  room: Zone,
+  blocked: readonly Rect[] = [],
+  step = STANDING_SPOT_STEP,
+): { x: number; y: number }[] {
+  const solids = solidObjectRects(map)
+  const centerX = room.x + room.width / 2
+  const centerY = room.y + room.height / 2
+  const spots: { x: number; y: number; d: number }[] = []
+  for (let y = room.y; y <= room.y + room.height; y += step) {
+    for (let x = room.x; x <= room.x + room.width; x += step) {
+      const body = playerBodyRect(x, y)
+      if (!rectWithin(body, room)) continue
+      if (!canStandAt(map, x, y, blocked, solids)) continue
+      spots.push({ x, y, d: Math.hypot(x - centerX, y - centerY) })
+    }
+  }
+  return spots.sort((a, b) => a.d - b.d).map(({ x, y }) => ({ x, y }))
 }
 
 /** Random position within the spawn's radius, clamped to the map. */
@@ -598,6 +726,30 @@ export function validateMap(map: TiledMap): string[] {
     // A seat you cannot walk onto is a seat nobody can sit in.
     const { x, y } = seatAnchor(seat)
     if (isSolidAt(map, x, y)) problems.push(`The seat ${label} falls on a colliding tile`)
+  }
+
+  const roomNames = new Set<string>()
+  for (const room of findMeetingRooms(map)) {
+    if (!room.name) {
+      problems.push(
+        `There is a zone marked "${PROP_ZONE_MEETING}" without a name, and the name is what a meeting books`,
+      )
+    } else if (roomNames.has(room.name)) {
+      problems.push(`There is more than one meeting room named "${room.name}"`)
+    }
+    roomNames.add(room.name)
+    // A meeting room with no seat inside it is a room nobody can sit down in,
+    // and one with nowhere to stand strands whoever arrives to a full table.
+    if (room.seats.length === 0) {
+      problems.push(
+        `The meeting room "${room.name}" has no seat inside it: a meeting there would seat nobody`,
+      )
+    }
+    if (freeStandingSpots(map, room, room.seats).length === 0) {
+      problems.push(
+        `The meeting room "${room.name}" has nowhere to stand: whoever enters a full table would have no room`,
+      )
+    }
   }
   return problems
 }
