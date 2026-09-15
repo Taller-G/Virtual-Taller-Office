@@ -5,11 +5,15 @@ import {
   doorAtRect,
   getWorld,
   Message,
+  seatAtRect,
+  seatByName,
   worldName,
   type Direction,
   type Door,
   type MovePayload,
   type Player,
+  type Seat,
+  type SitPayload,
 } from '@vto/shared'
 import type { OfficeConnection, OfficeRoom } from '../network/connection'
 import { toast } from '../ui/toasts'
@@ -17,6 +21,7 @@ import { Avatar, BODY } from './Avatar'
 import { createAvatarAnims } from './avatarAnims'
 import { BubbleArea } from './BubbleArea'
 import { buildOfficeMap, drawCollisionDebug, type BuiltMap } from './officeMap'
+import { SeatHint, SIT_KEY } from './SeatHint'
 import { isTyping } from './typingGuard'
 import { loadWorld } from './worldAssets'
 
@@ -34,6 +39,8 @@ interface Keys {
   down: Phaser.Input.Keyboard.Key[]
   left: Phaser.Input.Keyboard.Key[]
   right: Phaser.Input.Keyboard.Key[]
+  /** Sits down at the seat under the feet, and stands up again. */
+  sit: Phaser.Input.Keyboard.Key
 }
 
 interface Sent {
@@ -61,6 +68,14 @@ interface Sent {
  *
  * Bubble chat messages appear as a balloon over the author's avatar and are
  * not stored: the balloon goes away on its own (see `Avatar.say`).
+ *
+ * Focus desks: standing on an object of class `seat` shows a hint over it,
+ * and pressing that key asks the server to sit down. Being seated is not
+ * decided here: `player.seatId` is written by the server alone, and this
+ * scene only reflects it — it pins the body to the seat, draws the seated
+ * pose (one's own and everyone else's) and stops the movement keys, which
+ * instead stand the person up. That is why a refused seat (taken a moment
+ * ago) needs no reply: nothing changed, so nothing is drawn.
  *
  * Doors: stepping on an object of class `door` in the map leads to another
  * world. There is no key press and no confirmation: as soon as the feet enter
@@ -90,6 +105,10 @@ export class OfficeScene extends Phaser.Scene {
    * having moved.
    */
   private doorArmed = false
+  /** The hint over the seat under my feet (see `SeatHint`). */
+  private seatHint?: SeatHint
+  /** Seat I am sitting at according to the server, or `''` if I am standing. */
+  private mySeatId = ''
 
   constructor(
     private connection: OfficeConnection,
@@ -104,6 +123,7 @@ export class OfficeScene extends Phaser.Scene {
     this.worldId = data?.worldId ?? this.connection.worldId ?? DEFAULT_WORLD_ID
     this.traveling = false
     this.doorArmed = false
+    this.mySeatId = ''
   }
 
   create() {
@@ -131,7 +151,9 @@ export class OfficeScene extends Phaser.Scene {
       down: [cursors.down, wasd.S],
       left: [cursors.left, wasd.A],
       right: [cursors.right, wasd.D],
+      sit: keyboard.addKey(SIT_KEY),
     }
+    this.seatHint = new SeatHint(this)
 
     this.offRoom = this.connection.on('room', (room) => this.bindRoom(room))
     if (this.connection.room) this.bindRoom(this.connection.room)
@@ -144,12 +166,15 @@ export class OfficeScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.offRoom?.()
       this.offChat?.()
+      this.seatHint?.destroy()
+      this.seatHint = undefined
       this.clearRoom()
     })
   }
 
   update(time: number, delta: number) {
     if (this.me) this.moveMe(time)
+    this.checkSeats()
     this.checkDoors()
     for (const avatar of this.avatars.values()) {
       if (!avatar.isMe) avatar.interpolate(delta)
@@ -170,6 +195,15 @@ export class OfficeScene extends Phaser.Scene {
     const down = (keys: Phaser.Input.Keyboard.Key[]) => !typing && keys.some((k) => k.isDown)
     const dx = (down(this.keys.right) ? 1 : 0) - (down(this.keys.left) ? 1 : 0)
     const dy = (down(this.keys.down) ? 1 : 0) - (down(this.keys.up) ? 1 : 0)
+
+    if (this.mySeatId !== '') {
+      // Sitting: the body stays in the chair and the movement keys are what
+      // gets you out of it. The position is not sent either — the server
+      // pinned it when it granted the seat.
+      body.setVelocity(0, 0)
+      if (dx || dy) this.stand()
+      return
+    }
 
     if (dx || dy) {
       const length = Math.hypot(dx, dy)
@@ -192,6 +226,99 @@ export class OfficeScene extends Phaser.Scene {
     this.lastSent = { x, y, dir, moving, at: time }
     const payload: MovePayload = { x, y, dir, moving }
     this.room.send(Message.MOVE, payload)
+  }
+
+  /**
+   * The seat under my feet, if any. Same idiom as the doors: the **physics
+   * body** is what is compared against the seat's rectangle, so standing on
+   * the chair is enough.
+   */
+  private seatUnderMe(): Seat | undefined {
+    if (!this.me?.body) return undefined
+    const body = this.me.body as Phaser.Physics.Arcade.Body
+    return seatAtRect(this.map.raw, {
+      x: body.x,
+      y: body.y,
+      width: body.width,
+      height: body.height,
+    })
+  }
+
+  /** Who, if anybody, is sitting at that seat according to the server. */
+  private sitterAt(seatId: string): string | undefined {
+    const state = this.room?.state
+    if (!state) return undefined
+    let found: string | undefined
+    state.players.forEach((player, sessionId) => {
+      if (player.seatId === seatId) found = sessionId
+    })
+    return found
+  }
+
+  /**
+   * The hint over the seat, and the key that sits down or stands up. What the
+   * hint says comes from the server's state, so a seat somebody else took a
+   * moment ago already reads as taken before it is pressed.
+   */
+  private checkSeats() {
+    const hint = this.seatHint
+    if (!hint || !this.me || this.traveling) return
+
+    if (this.mySeatId !== '') {
+      // Nothing is drawn in the world while sitting (see `SeatHint`); the key
+      // still works, and the sidebar says so.
+      hint.hide()
+      if (this.sitPressed()) this.stand()
+      return
+    }
+
+    const seat = this.seatUnderMe()
+    if (!seat) {
+      hint.hide()
+      return
+    }
+    const taken = this.sitterAt(seat.name) !== undefined
+    hint.show(seat, taken ? 'taken' : 'free')
+    if (!taken && this.sitPressed()) {
+      const payload: SitPayload = { seat: seat.name }
+      this.room?.send(Message.SIT, payload)
+    }
+  }
+
+  /** Was the sit key pressed this frame (and not while typing)? */
+  private sitPressed(): boolean {
+    return !isTyping() && Phaser.Input.Keyboard.JustDown(this.keys.sit)
+  }
+
+  private stand() {
+    if (this.mySeatId === '') return
+    this.room?.send(Message.STAND, {})
+  }
+
+  /**
+   * Reflects what the server says about my seat: it pins the body to the
+   * chair on sitting down and lets it go on standing up. Everyone's seated
+   * pose (mine included) is drawn in `syncAnim`.
+   */
+  private applyMySeat(player: Player) {
+    this.mySeatId = player.seatId
+    const me = this.me
+    if (!me) return
+    if (player.seatId !== '') {
+      me.setPosition(player.x, player.y)
+      me.updateDepth()
+      const body = me.body as Phaser.Physics.Arcade.Body | undefined
+      body?.reset(player.x, player.y + BODY.offsetY)
+      // Nothing of mine is in flight any more: the seat is the position.
+      this.lastSent = {
+        x: player.x,
+        y: player.y,
+        dir: player.dir as Direction,
+        moving: false,
+        at: 0,
+      }
+    }
+    this.syncAnim(me, player)
   }
 
   /**
@@ -270,12 +397,17 @@ export class OfficeScene extends Phaser.Scene {
           $.listen(player, 'bubbleId', () => this.refreshBubbles()),
         )
         // This client sends its own position and animation: they are not overwritten by the echo.
-        if (!isMe) {
+        if (isMe) {
+          // Except the seat: sitting down is the server's decision, and with
+          // it come the position and the facing it pinned me to.
+          this.unbindRoom.push($.listen(player, 'seatId', () => this.applyMySeat(player)))
+        } else {
           this.unbindRoom.push(
             $.listen(player, 'x', (x) => avatar.setTarget({ x })),
             $.listen(player, 'y', (y) => avatar.setTarget({ y })),
             $.listen(player, 'dir', () => this.syncAnim(avatar, player)),
             $.listen(player, 'moving', () => this.syncAnim(avatar, player)),
+            $.listen(player, 'seatId', () => this.syncAnim(avatar, player)),
           )
         }
       }),
@@ -333,7 +465,13 @@ export class OfficeScene extends Phaser.Scene {
 
   private syncAnim(avatar: Avatar, player: Player) {
     const dir = player.dir as Direction
-    avatar.playAnim(player.moving ? 'walk' : 'idle', dir)
+    // Seated comes first: it is a still pose, not an animation, and it is the
+    // same for the person themself and for everyone watching. The seat also
+    // gives the depth to draw at, so the sitter is in the chair and not
+    // hidden behind it.
+    const seat = player.seatId ? seatByName(this.map.raw, player.seatId) : undefined
+    avatar.setSeated(seat !== undefined, dir, seat && seat.y + seat.height + 1)
+    if (!seat) avatar.playAnim(player.moving ? 'walk' : 'idle', dir)
   }
 
   private clearRoom() {
@@ -343,6 +481,8 @@ export class OfficeScene extends Phaser.Scene {
     this.bubbleAreas.clear()
     this.room = undefined
     this.me = undefined
+    this.mySeatId = ''
+    this.seatHint?.hide()
   }
 
   private addAvatar(player: Player, sessionId: string, isMe: boolean): Avatar {
@@ -369,6 +509,8 @@ export class OfficeScene extends Phaser.Scene {
       this.physics.add.collider(avatar, this.map.solids)
       this.cameras.main.startFollow(avatar, true, 0.15, 0.15)
       this.lastSent = { x: player.x, y: player.y, dir: 'down', moving: false, at: 0 }
+      // Rejoining a room I was sitting in: come back into the chair.
+      this.applyMySeat(player)
     }
     return avatar
   }

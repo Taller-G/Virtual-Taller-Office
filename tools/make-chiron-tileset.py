@@ -27,6 +27,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from chiron_tiles import (  # noqa: E402
+    LIGHT_COLD,
     LIGHT_WARM,
     SHEET_COLUMNS,
     SHEET_ROWS,
@@ -191,7 +192,90 @@ def draw_threshold() -> Image.Image:
     return out
 
 
+# 5x7 glyphs for the world's name on the wall. Only the six letters of
+# "CHIRON": this is a sign, not a font.
+GLYPHS = {
+    'C': ('.###.', '#...#', '#....', '#....', '#....', '#...#', '.###.'),
+    'H': ('#...#', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'),
+    'I': ('#####', '..#..', '..#..', '..#..', '..#..', '..#..', '#####'),
+    'R': ('####.', '#...#', '#...#', '####.', '#.#..', '#..#.', '#...#'),
+    'O': ('.###.', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'),
+    'N': ('#...#', '##..#', '#.#.#', '#..##', '#...#', '#...#', '#...#'),
+}
+#: How many pixels a glyph pixel becomes (5x7 -> 20x28 inside a 32x32 tile).
+GLYPH_SCALE = 4
+
+
+def draw_letter(glyph: str) -> Image.Image:
+    """
+    One letter of the sign, lit from within: a solid cold core with a halo
+    bled around it, so it reads as a light and not as paint. Tiles are laid
+    side by side to spell the world's name.
+    """
+    rows = GLYPHS[glyph]
+    width, height = len(rows[0]) * GLYPH_SCALE, len(rows) * GLYPH_SCALE
+    x0, y0 = (TILE - width) // 2, (TILE - height) // 2
+
+    core = [[False] * TILE for _ in range(TILE)]
+    for j, row in enumerate(rows):
+        for i, cell in enumerate(row):
+            if cell != '#':
+                continue
+            for dy in range(GLYPH_SCALE):
+                for dx in range(GLYPH_SCALE):
+                    core[y0 + j * GLYPH_SCALE + dy][x0 + i * GLYPH_SCALE + dx] = True
+
+    out = Image.new('RGBA', (TILE, TILE))
+    px = out.load()
+    for y in range(TILE):
+        for x in range(TILE):
+            if core[y][x]:
+                px[x, y] = (236, 250, 255, 255)
+                continue
+            # Halo: the closer to a lit pixel, the brighter.
+            near = min(
+                (
+                    math.hypot(x - cx, y - cy)
+                    for cy in range(max(0, y - 3), min(TILE, y + 4))
+                    for cx in range(max(0, x - 3), min(TILE, x + 4))
+                    if core[cy][cx]
+                ),
+                default=None,
+            )
+            if near is None:
+                continue
+            alpha = round(190 * falloff(near, 4))
+            if alpha:
+                px[x, y] = (*LIGHT_COLD, alpha)
+    return out
+
+
+def draw_arrow(facing: str) -> Image.Image:
+    """
+    A chevron painted on the floor, pointing the way out of the arrival hall.
+    Two of them stacked, so the direction still reads when an avatar is
+    standing on the tile.
+    """
+    out = Image.new('RGBA', (TILE, TILE))
+    px = out.load()
+    thickness, arm = 3, 10
+    for tip in (16, 25):
+        for step in range(arm + 1):
+            for t in range(thickness):
+                # The tip is at `tip` and both arms trail back from it.
+                along = tip - step - t
+                for across in (TILE // 2 + step, TILE // 2 - step):
+                    # North is the same chevron on the other axis, mirrored:
+                    # its tip has to end up at the top, not at the bottom.
+                    x, y = (along, across) if facing == 'e' else (across, TILE - 1 - along)
+                    if 0 <= x < TILE and 0 <= y < TILE:
+                        px[x, y] = (*LIGHT_COLD, 150)
+    return out
+
+
 DRAWINGS = {
+    'letter': draw_letter,
+    'arrow': draw_arrow,
     'pool': draw_pool,
     'spot': draw_spot,
     'led': draw_led,

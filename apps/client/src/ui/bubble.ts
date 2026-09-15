@@ -1,3 +1,4 @@
+import { isFocused } from '@vto/shared'
 import type { OfficeConnection, OfficeRoom } from '../network/connection'
 import { avatarThumb } from './avatarThumb'
 import { toast } from './toasts'
@@ -16,11 +17,19 @@ interface BubbleView {
   members: Member[]
   /** There is a bubble within my reach that is at the cap and will not let me in. */
   fullNearby: boolean
+  /** I am sitting at a focus desk: no conversation until I stand up. */
+  focused: boolean
   /** Member cap reported by the server. */
   maxMembers: number
 }
 
-const EMPTY: BubbleView = { bubbleId: '', members: [], fullNearby: false, maxMembers: 0 }
+const EMPTY: BubbleView = {
+  bubbleId: '',
+  members: [],
+  fullNearby: false,
+  focused: false,
+  maxMembers: 0,
+}
 
 /**
  * The "In conversation" panel + bubble notices.
@@ -46,17 +55,19 @@ export function mountBubble(connection: OfficeConnection) {
     const maxMembers = state.bubbleMaxMembers
     if (!me) return { ...EMPTY, maxMembers }
 
+    const focused = isFocused(me)
     const bubble = me.bubbleId ? state.bubbles.get(me.bubbleId) : undefined
     if (!bubble) {
-      // No bubble: is there one within reach that is full?
+      // No bubble: is there one within reach that is full? (While focused the
+      // answer does not matter: none of them would take me anyway.)
       let fullNearby = false
       state.bubbles.forEach((other) => {
         const full = other.members.length >= maxMembers
-        if (full && Math.hypot(me.x - other.x, me.y - other.y) <= state.bubbleRadius) {
+        if (!focused && full && Math.hypot(me.x - other.x, me.y - other.y) <= state.bubbleRadius) {
           fullNearby = true
         }
       })
-      return { bubbleId: '', members: [], fullNearby, maxMembers }
+      return { bubbleId: '', members: [], fullNearby, focused, maxMembers }
     }
 
     const members: Member[] = []
@@ -69,12 +80,18 @@ export function mountBubble(connection: OfficeConnection) {
       if (b.sessionId === room.sessionId) return 1
       return a.name.localeCompare(b.name, 'en')
     })
-    return { bubbleId: me.bubbleId, members, fullNearby: false, maxMembers }
+    return { bubbleId: me.bubbleId, members, fullNearby: false, focused, maxMembers }
   }
 
   function render(next: BubbleView, mySessionId: string) {
     const others = next.members.filter((m) => m.sessionId !== mySessionId)
-    panel.dataset.state = next.bubbleId ? 'in' : next.fullNearby ? 'full' : 'none'
+    panel.dataset.state = next.bubbleId
+      ? 'in'
+      : next.focused
+        ? 'focused'
+        : next.fullNearby
+          ? 'full'
+          : 'none'
     titleEl.textContent = next.bubbleId
       ? `In conversation - ${next.members.length}`
       : 'In conversation'
@@ -82,9 +99,11 @@ export function mountBubble(connection: OfficeConnection) {
       ? others.length === 0
         ? 'Waiting for someone else...'
         : ''
-      : next.fullNearby
-        ? `That bubble is full (cap ${next.maxMembers}).`
-        : 'Walk up to someone to open a bubble.'
+      : next.focused
+        ? 'Focused at a desk: nobody can start a conversation with you. Press E or move to stand up.'
+        : next.fullNearby
+          ? `That bubble is full (cap ${next.maxMembers}).`
+          : 'Walk up to someone to open a bubble.'
     listEl.replaceChildren(
       ...next.members.map((member) => {
         const li = document.createElement('li')
@@ -116,9 +135,7 @@ export function mountBubble(connection: OfficeConnection) {
     if (next.bubbleId !== previous.bubbleId) {
       if (next.bubbleId) {
         const withWhom = names(next.members)
-        toast(
-          withWhom ? `You joined a conversation with ${withWhom}` : 'You opened a conversation',
-        )
+        toast(withWhom ? `You joined a conversation with ${withWhom}` : 'You opened a conversation')
       } else if (previous.bubbleId) {
         // If the bubble no longer exists, it closed (a single person was
         // left); if it still exists, the one who left was me.
@@ -146,6 +163,8 @@ export function mountBubble(connection: OfficeConnection) {
     if (next.fullNearby && !previous.fullNearby) {
       toast(`That bubble is full (cap ${next.maxMembers}): you cannot join`)
     }
+    if (next.focused && !previous.focused)
+      toast('Focused: conversations are off until you stand up')
   }
 
   function bind(room: OfficeRoom) {

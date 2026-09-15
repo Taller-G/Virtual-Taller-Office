@@ -6,6 +6,7 @@ import {
   CLASS_ZONE,
   doorAt,
   findDoors,
+  findSeats,
   findSpawnPoint,
   findSpawnPoints,
   getZones,
@@ -13,6 +14,8 @@ import {
   objectCollides,
   objectLayers,
   PROP_COLLIDES,
+  seatAnchor,
+  seatAtRect,
   tileCollides,
   tileLayers,
   tilesetForGid,
@@ -26,6 +29,10 @@ import { DEFAULT_MAP_FILE, loadOfficeMap, loadWorldMaps } from '../src/map'
 
 /** The Chiron Office's own tileset (see `tools/make-chiron-tileset.py`). */
 const DARK_TILESET = 'ChironDark'
+/** Zone you land in coming through the door from the First Office. */
+const ARRIVAL_ZONE = 'Arrival Hall'
+/** How many focus desks the Chiron Office is meant to have. */
+const FOCUS_DESKS = 6
 
 /**
  * These tests run against the REAL map that gets deployed. If someone edits
@@ -316,10 +323,11 @@ describe('Chiron Office (real file)', () => {
   const chiron = loadWorldMaps().get('chiron-office')!
   const map = chiron.data
 
-  it('has an arrival lobby and several more zones, all named', () => {
+  it('has an arrival hall and several more zones, all named', () => {
     const zones = getZones(map)
     const names = zones.map((z) => z.name)
-    expect(names).toContain('Lobby')
+    expect(names).toContain(ARRIVAL_ZONE)
+    expect(names).toContain('Focus Desks')
     expect(names.length).toBeGreaterThanOrEqual(3)
     for (const zone of zones) expect(zone.name.trim(), 'unnamed zone').not.toBe('')
     // No repeats: two identical labels on the map cannot be told apart.
@@ -339,16 +347,21 @@ describe('Chiron Office (real file)', () => {
     }
   })
 
-  it('arriving from the First Office lands in the lobby, not just anywhere', () => {
+  it('arriving from the First Office lands in the arrival hall, not just anywhere', () => {
     const arrival = findSpawnPoint(map, 'from-first-office')
-    const zone = getZones(map).find(
-      (z) =>
-        arrival.x >= z.x &&
-        arrival.x < z.x + z.width &&
-        arrival.y >= z.y &&
-        arrival.y < z.y + z.height,
-    )
-    expect(zone?.name).toBe('Lobby')
+    expect(zoneNameAt(map, arrival.x, arrival.y)).toBe(ARRIVAL_ZONE)
+  })
+
+  /**
+   * Arriving has to tell you where you are and how to get out again without
+   * moving: the Chiron mark (the world's name in light on the wall) and the
+   * way back are both a few tiles from where you land.
+   */
+  it('lands you within sight of the return door', () => {
+    const arrival = findSpawnPoint(map, 'from-first-office')
+    const [door] = findDoors(map)
+    const tiles = Math.hypot(door.x - arrival.x, door.y - arrival.y) / map.tilewidth
+    expect(tiles).toBeLessThanOrEqual(4)
   })
 
   it('is painted with its own dark tileset, not the First Office one', () => {
@@ -367,6 +380,76 @@ describe('Chiron Office (real file)', () => {
       }
     }
     expect([...foreign]).toEqual([])
+  })
+
+  /**
+   * The focus desks. A seat is what someone sits at to be "focused", so the
+   * ones that matter here are the properties that make that possible at all:
+   * you can walk onto it, you can be told apart from the next one, and the
+   * desk it belongs to does not wall it in.
+   */
+  describe('the focus desks', () => {
+    const seats = findSeats(map)
+
+    it(`has ${FOCUS_DESKS} seats, each with its own name`, () => {
+      expect(seats).toHaveLength(FOCUS_DESKS)
+      const names = seats.map((s) => s.name)
+      for (const name of names) expect(name.trim(), 'unnamed seat').not.toBe('')
+      expect(new Set(names).size, 'two seats share a name').toBe(names.length)
+    })
+
+    it('every seat is in the Focus Desks zone and faces its desk', () => {
+      for (const seat of seats) {
+        const { x, y } = seatAnchor(seat)
+        expect(zoneNameAt(map, x, y), `seat "${seat.name}"`).toBe('Focus Desks')
+        // The chairs are drawn above their desks, so sitting is facing south.
+        expect(seat.dir, `seat "${seat.name}"`).toBe('down')
+      }
+    })
+
+    /**
+     * Nothing may block a seat: not a wall tile, not the desk it belongs to.
+     * This is the check behind "the debug collision view shows no collision
+     * body on any seat tile".
+     */
+    it('no seat has anything solid on it, and all of them are reachable on foot', () => {
+      const furniture = tilesBlockedByFurniture(map)
+      const reachable = reachableTiles(map, {
+        col: Math.floor(chiron.spawn.x / map.tilewidth),
+        row: Math.floor(chiron.spawn.y / map.tileheight),
+      })
+      for (const seat of seats) {
+        const { x, y } = seatAnchor(seat)
+        expect(isSolidAt(map, x, y), `seat "${seat.name}" is on a colliding tile`).toBe(false)
+        expect(
+          furniture.has(tileKey(map, x, y)),
+          `seat "${seat.name}" is under a solid piece of furniture`,
+        ).toBe(false)
+        expect(
+          reachable.has(tileKey(map, x, y)),
+          `seat "${seat.name}" cannot be reached on foot`,
+        ).toBe(true)
+      }
+    })
+
+    /** Sitting down must never be a way to stand in a doorway. */
+    it('no seat overlaps a door', () => {
+      for (const seat of seats) {
+        const { x, y } = seatAnchor(seat)
+        expect(doorAt(map, x, y), `seat "${seat.name}"`).toBeUndefined()
+      }
+    })
+
+    /**
+     * A seat is found from where the body is, so two of them may not overlap:
+     * standing between them would make "which seat is this?" a coin toss.
+     * `seatAtRect` with a seat's own rectangle has to answer that same seat.
+     */
+    it('no two seats overlap', () => {
+      for (const seat of seats) {
+        expect(seatAtRect(map, seat)?.name, `seat "${seat.name}"`).toBe(seat.name)
+      }
+    })
   })
 
   it('has its lights layer, and it does not block the way', () => {
@@ -408,6 +491,12 @@ function facingAwayFromDoor(map: TiledMap, spawn: SpawnPoint): boolean {
     right: { x: 1, y: 0 },
   }[spawn.dir]
   return facing.x * away.x + facing.y * away.y > 0
+}
+
+/** Name of the zone that contains the point, if any. */
+function zoneNameAt(map: TiledMap, x: number, y: number): string | undefined {
+  return getZones(map).find((z) => x >= z.x && x < z.x + z.width && y >= z.y && y < z.y + z.height)
+    ?.name
 }
 
 /** Key of the cell that contains the point. */

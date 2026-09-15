@@ -14,6 +14,14 @@ export const Message = {
   SET_NAME: 'set_name',
   /** Client -> server: set or clear the "away" state by hand. */
   SET_AWAY: 'set_away',
+  /**
+   * Client -> server: sit down at a seat of the map (an object of class
+   * `seat`). The server decides: it refuses a seat that does not exist or is
+   * already taken, and whoever sits is "focused" until they stand up.
+   */
+  SIT: 'sit',
+  /** Client -> server: stand up from wherever I am sitting. */
+  STAND: 'stand',
   /** Client -> server: send a message to my conversation bubble. */
   CHAT_SEND: 'chat_send',
   /**
@@ -51,6 +59,11 @@ export interface SetNamePayload {
 
 export interface SetAwayPayload {
   away: boolean
+}
+
+export interface SitPayload {
+  /** Name of the seat in the map (see `Seat`). */
+  seat: string
 }
 
 export interface ChatSendPayload {

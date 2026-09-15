@@ -4,7 +4,9 @@ import {
   findSpawnPoint,
   getWorld,
   guestName,
+  isAtSeat,
   isDirection,
+  isFocused,
   MapError,
   Message,
   OfficeState,
@@ -13,6 +15,8 @@ import {
   sanitizeAppearance,
   sanitizeAvatar,
   sanitizeName,
+  seatAnchor,
+  seatByName,
   worldForRoomName,
   type ChatSendPayload,
   type JoinOptions,
@@ -20,6 +24,7 @@ import {
   type RoomInfoPayload,
   type SetAwayPayload,
   type SetNamePayload,
+  type SitPayload,
   type SpawnPoint,
   type WorldDefinition,
 } from '@vto/shared'
@@ -58,6 +63,15 @@ const AWAY_CHECK_INTERVAL_MS = 1_000
  *   they go back to active.
  * - `SET_AWAY` sets the away state by hand (`awayManual`): moving does not
  *   clear it, only another `SET_AWAY { away: false }`.
+ *
+ * Focus desks (see `seat` in `docs/map.md`): `SIT` takes the name of a seat
+ * in this world's map and, if it exists and nobody is in it, pins the player
+ * there (`seatId`, position, facing) — that is the whole "focused" state, and
+ * with it the seat is taken for everyone. `STAND` clears it, and so does
+ * anything that means the person is no longer there: going away, the
+ * connection dropping, or leaving the room (through a door or by closing the
+ * tab). The server is the only writer, so a seat can never be held by two
+ * people nor kept by someone who has gone.
  *
  * Conversation bubbles (see `bubbles.ts`): membership is recomputed after
  * every clamped `MOVE` and on every departure. The client has no message to
@@ -130,6 +144,8 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
     this.onMessage(Message.SET_AWAY, (client, payload: SetAwayPayload) =>
       this.onSetAway(client, payload),
     )
+    this.onMessage(Message.SIT, (client, payload: SitPayload) => this.onSit(client, payload))
+    this.onMessage(Message.STAND, (client) => this.onStand(client))
     this.onMessage(Message.CHAT_SEND, (client, payload: ChatSendPayload) =>
       this.onChatSend(client, payload),
     )
@@ -205,6 +221,17 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
     const x = Number(payload?.x)
     const y = Number(payload?.y)
     if (!Number.isFinite(x) || !Number.isFinite(y)) return
+    if (player.seatId !== '') {
+      // Sitting pins you to the chair: the position the client reports is not
+      // applied. Only a position whose body is clear of the seat stands you
+      // up — measured with the very rectangle the client uses to offer the
+      // seat in the first place, so a `MOVE` still in flight from the instant
+      // before sitting down (sent from the rim of that same rectangle) cannot
+      // knock you straight back out of the chair.
+      const seat = seatByName(this.map.data, player.seatId)
+      if (seat && isAtSeat(seat, x, y)) return
+      this.release(player)
+    }
     player.x = clamp(Math.round(x), 0, this.map.bounds.width)
     player.y = clamp(Math.round(y), 0, this.map.bounds.height)
     if (isDirection(payload.dir)) player.dir = payload.dir
@@ -226,6 +253,9 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
     const player = this.state.players.get(client.sessionId)
     if (!player) return
     if (payload?.away === true) {
+      // Away and focused are two different things, and stepping away from the
+      // keyboard is not holding a desk: the seat goes back into the pool.
+      this.release(player)
       player.away = true
       player.awayManual = true
     } else {
@@ -233,6 +263,65 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
       player.awayManual = false
       this.touch(client.sessionId)
     }
+  }
+
+  /**
+   * Sitting down at a focus desk. The seat has to exist in this world's map
+   * and be free: the client already knows both from the state, so a refusal
+   * means it raced someone else, and the state it gets back (unchanged) is
+   * the answer. Whoever sits is pinned to the seat, so everyone draws them in
+   * the same chair, facing the same way.
+   */
+  private onSit(client: Client, payload: SitPayload) {
+    const player = this.state.players.get(client.sessionId)
+    if (!player) return
+    const seat = seatByName(this.map.data, String(payload?.seat ?? ''))
+    if (!seat || this.sitterAt(seat.name)) return
+    if (player.seatId === seat.name) return
+
+    player.seatId = seat.name
+    const { x, y } = seatAnchor(seat)
+    player.x = x
+    player.y = y
+    player.dir = seat.dir
+    player.moving = false
+    // Sitting down to work is the opposite of having stepped away, so it
+    // clears the away state even when it was set by hand: that way focused
+    // and away never hold at once and the status shown is never ambiguous.
+    player.away = false
+    player.awayManual = false
+    this.markActive(player)
+    // Focused is outside the conversations: this is what takes them out of
+    // the bubble they were in and keeps them out while they are sitting.
+    this.bubbles.onPlayerMoved(player)
+  }
+
+  /** Standing up: back to being present and available like everyone else. */
+  private onStand(client: Client) {
+    const player = this.state.players.get(client.sessionId)
+    if (!player || player.seatId === '') return
+    this.release(player)
+    this.markActive(player)
+    // Standing up next to someone opens a conversation there and then.
+    this.bubbles.onPlayerMoved(player)
+  }
+
+  /** Whoever is sitting at that seat, if anybody. */
+  private sitterAt(seatId: string): Player | undefined {
+    let found: Player | undefined
+    this.state.players.forEach((player) => {
+      if (player.seatId === seatId) found = player
+    })
+    return found
+  }
+
+  /**
+   * Frees the seat the player was holding, if any. Every way of ceasing to be
+   * heads-down goes through here, so no seat is left taken by somebody who is
+   * no longer sitting in it.
+   */
+  private release(player: Player) {
+    player.seatId = ''
   }
 
   /**
@@ -270,6 +359,11 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
     const now = this.clock.currentTime
     this.state.players.forEach((player, sessionId) => {
       if (player.away) return
+      // Sitting at a focus desk IS the activity: being heads-down without
+      // touching a key is the whole point, so the inactivity sweep leaves
+      // whoever is focused alone. Away while seated only happens by hand,
+      // and that frees the desk (see `onSetAway`).
+      if (isFocused(player)) return
       const last = this.lastActivity.get(sessionId) ?? now
       if (now - last >= limit) player.away = true
     })
@@ -281,7 +375,14 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
     if (code === CloseCode.SERVER_SHUTDOWN) return
 
     const player = this.state.players.get(client.sessionId)
-    if (player) player.connected = false
+    if (player) {
+      player.connected = false
+      // The place in the room is held for them; the desk is not. Somebody
+      // whose connection went is not working at it, and the next person to
+      // come along should be able to use it.
+      this.release(player)
+      this.bubbles.onPlayerMoved(player)
+    }
     console.log(
       `[world ${this.world.id}] ${client.sessionId} dropped (code=${code}); holding the seat for ${config.reconnectGraceSeconds}s`,
     )

@@ -1,4 +1,4 @@
-import { Bubble, type OfficeState, type Player } from '@vto/shared'
+import { Bubble, isFocused, type OfficeState, type Player } from '@vto/shared'
 
 /**
  * Proximity conversation bubbles: the semantics of WorkAdventure's "groups"
@@ -22,6 +22,11 @@ import { Bubble, type OfficeState, type Player } from '@vto/shared'
  *   open a new bubble without waiting for anyone to walk.
  * - A bubble with `maxMembers` members absorbs nobody else; as soon as it
  *   stops being full, it absorbs the free players within reach.
+ * - Somebody **focused** (sitting at a desk, see `Player.seatId`) is outside
+ *   all of this: they neither open a bubble nor get absorbed into one, and
+ *   sitting down takes them out of the one they were in. Walking up to
+ *   someone who is heads-down does not start a conversation with them; you
+ *   have to wait until they stand up.
  *
  * Bubbles form on entering the radius, without waiting for the player to stop
  * (WorkAdventure waits until they halt): the requirement asks that both see
@@ -72,9 +77,18 @@ export class BubbleManager {
     return bubble.members.length >= this.settings.maxMembers
   }
 
-  /** Recomputes the player's membership after a change of position. */
+  /**
+   * Recomputes the player's membership after a change of position — or after
+   * sitting down or standing up, which is why it is also what enforces that
+   * someone focused is in no bubble.
+   */
   onPlayerMoved(player: Player) {
     const current = this.bubbleOf(player)
+    if (current && isFocused(player)) {
+      // Sitting down leaves the conversation you were in.
+      this.leave(current, player)
+      return
+    }
     if (current) {
       // If the new position leaves the player outside the centroid, they leave.
       const center = this.barycenter(current)
@@ -104,12 +118,13 @@ export class BubbleManager {
 
   /** Looks for the closest free player or non-full bubble within the radius. */
   private tryJoin(player: Player) {
+    if (isFocused(player)) return
     const radius = this.settings.radius
     let best: { kind: 'player'; target: Player } | { kind: 'bubble'; target: Bubble } | undefined
     let bestDistance = radius
 
     this.state.players.forEach((other) => {
-      if (other === player || other.bubbleId) return
+      if (other === player || other.bubbleId || isFocused(other)) return
       const d = distance(player, other)
       if (d <= bestDistance) {
         bestDistance = d
@@ -196,7 +211,7 @@ export class BubbleManager {
   /** Adds to the bubble the free players that are within the radius of its centre. */
   private absorbNearby(bubble: Bubble) {
     this.state.players.forEach((other) => {
-      if (this.isFull(bubble) || other.bubbleId) return
+      if (this.isFull(bubble) || other.bubbleId || isFocused(other)) return
       if (distance(other, bubble) <= this.settings.radius) this.join(bubble, other)
     })
   }

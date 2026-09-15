@@ -46,7 +46,7 @@ SLATE = ((7, 10, 20), (96, 116, 144))
 #: Violet accent for the rug in The Pit: the one spot of colour in the map, so
 #: the lounge is not yet another grey rectangle.
 VIOLET = ((13, 10, 28), (118, 86, 168))
-#: Green-cyan accent for the technical grating in the Archive and the Monitors.
+#: Green-cyan accent for the technical grating in the Archive and the focus desks.
 CYAN = ((6, 14, 18), (78, 132, 140))
 #: Walls. A shorter ramp than `SLATE`: the pack paints them white, and with the
 #: long ramp they come out mid-grey and wash the whole office out.
@@ -113,7 +113,7 @@ FLOORS = [
     DarkTile('floor', 668),
     # The gallery's own floor, a shade apart so the axis reads on its own.
     DarkTile('hall', 412, palette=HALL),
-    # Technical grating (Archive and Monitors).
+    # Technical grating (Archive and focus desks).
     DarkTile('grate_a', 1802, palette=CYAN),
     DarkTile('grate_b', 1803, palette=CYAN),
     DarkTile('grate_c', 1866, palette=CYAN),
@@ -156,7 +156,26 @@ PORTAL = [
     DarkTile('threshold', draw='threshold'),
 ]
 
-TILES: list[DarkTile] = WALLS + FLOORS + LIGHTS + PORTAL
+# The world's name, spelled out in light on the wall of the arrival hall: one
+# glowing letter per tile. This is the Chiron mark — what tells you at a glance
+# which of the two offices you are standing in. Drawn as decorative furniture
+# over the north wall, the only wall this art style shows face-on.
+MARK = [
+    DarkTile(f'mark_{glyph.lower()}', draw='letter', args={'glyph': glyph})
+    for glyph in 'CHIRON'
+]
+
+# Signposting painted on the floor: chevrons that point the way out of the
+# arrival hall, so nobody has to wander to find the desks or the door back.
+SIGNS = [
+    DarkTile('arrow_e', draw='arrow', args={'facing': 'e'}),
+    DarkTile('arrow_n', draw='arrow', args={'facing': 'n'}),
+]
+
+# New tiles are appended: the sheet's order *is* the map's gid order, so
+# inserting in the middle would silently move every tile after it (and the
+# First Office embeds this tileset too, for the doorway).
+TILES: list[DarkTile] = WALLS + FLOORS + LIGHTS + PORTAL + MARK + SIGNS
 
 #: Index (0-based) of each tile within the sheet, by name.
 INDEX = {tile.name: i for i, tile in enumerate(TILES)}

@@ -1,5 +1,11 @@
 import { Callbacks } from '@colyseus/sdk'
-import { NAME_MAX_LENGTH, sanitizeName, type Player } from '@vto/shared'
+import {
+  NAME_MAX_LENGTH,
+  PLAYER_STATUS_TEXT,
+  playerStatus,
+  sanitizeName,
+  type Player,
+} from '@vto/shared'
 import type { OfficeConnection, OfficeRoom } from '../network/connection'
 import { avatarThumb } from './avatarThumb'
 import { toast } from './toasts'
@@ -10,8 +16,13 @@ import { toast } from './toasts'
  *
  * The list is a direct reflection of `room.state.players`: entries are added
  * in `onAdd`, removed in `onRemove` and redrawn with every change of name,
- * avatar, away state or connection. The client never adds or retains players
+ * avatar, presence or connection. The client never adds or retains players
  * on its own; on changing room or disconnecting, it is emptied.
+ *
+ * The status of each row comes from `playerStatus()`, shared with the server:
+ * "Focused" (sitting at a focus desk) is a state of its own, apart from away
+ * and from offline, and while someone is in it nobody can open a conversation
+ * with them.
  */
 export function mountPresence(connection: OfficeConnection) {
   const panel = document.getElementById('presence')!
@@ -48,7 +59,9 @@ export function mountPresence(connection: OfficeConnection) {
         ? mine.awayManual
           ? 'You set the away state by hand'
           : 'Away through inactivity; move or click to come back'
-        : 'Everyone else will see you as away until you clear it'
+        : playerStatus(mine) === 'focused'
+          ? 'You are focused at a desk; marking yourself away frees the seat'
+          : 'Everyone else will see you as away until you clear it'
     }
     panel.dataset.state = mine ? 'in' : 'out'
   }
@@ -57,7 +70,8 @@ export function mountPresence(connection: OfficeConnection) {
     const li = document.createElement('li')
     li.className = 'presence__row'
     li.dataset.session = player.sessionId
-    li.dataset.status = !player.connected ? 'offline' : player.away ? 'away' : 'active'
+    const status = playerStatus(player)
+    li.dataset.status = status
     const name = document.createElement('span')
     name.className = 'presence__name'
     name.textContent = player.name
@@ -67,10 +81,11 @@ export function mountPresence(connection: OfficeConnection) {
       you.textContent = 'you'
       name.append(' ', you)
     }
-    const status = document.createElement('span')
-    status.className = 'presence__status'
-    status.textContent = !player.connected ? 'offline' : player.away ? 'away' : 'active'
-    li.append(avatarThumb(player.avatar, 1), name, status)
+    const statusEl = document.createElement('span')
+    statusEl.className = 'presence__status'
+    statusEl.textContent = PLAYER_STATUS_TEXT[status]
+    if (status === 'focused') statusEl.title = 'Heads-down at a desk: not available to talk'
+    li.append(avatarThumb(player.avatar, 1), name, statusEl)
     return li
   }
 
@@ -87,6 +102,7 @@ export function mountPresence(connection: OfficeConnection) {
           $.listen(player, 'name', render),
           $.listen(player, 'avatar', render),
           $.listen(player, 'away', render),
+          $.listen(player, 'seatId', render),
           $.listen(player, 'connected', render),
         )
         if (!initial && sessionId !== newRoom.sessionId) toast(`${player.name} joined the office`)

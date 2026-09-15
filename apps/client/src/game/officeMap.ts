@@ -1,10 +1,12 @@
 import Phaser from 'phaser'
 import {
   CLASS_DOOR,
+  CLASS_SEAT,
   CLASS_SPAWN,
   CLASS_ZONE,
   DEFAULT_SPAWN_NAME,
   findDoors,
+  findSeats,
   findSpawnPoints,
   flattenLayers,
   getAmbient,
@@ -16,6 +18,7 @@ import {
   tilesetForGid,
   worldName,
   type Door,
+  type Seat,
   type SpawnPoint,
   type TiledMap,
   type TiledObject,
@@ -54,6 +57,8 @@ const AMBIENT_DEPTH = OVERLAY_DEPTH - 10
 
 /** Colour of the doors: the same on the map and in the debug view. */
 const DOOR_COLOR = 0xa78bfa
+/** Colour of the seats in the debug view. */
+const SEAT_COLOR = 0x34d399
 
 export interface BuiltMap {
   /** World this map belongs to. */
@@ -67,6 +72,8 @@ export interface BuiltMap {
   solids: Phaser.Physics.Arcade.StaticGroup
   /** Doors to other worlds: crossed by walking (see `OfficeScene`). */
   doors: Door[]
+  /** Places you can sit at to be "focused" (see `OfficeScene`). */
+  seats: Seat[]
   /** Every spawn point, the entrance one and the arrival ones. */
   spawns: SpawnPoint[]
   spawn?: { x: number; y: number }
@@ -84,6 +91,8 @@ export interface BuiltMap {
  * - Object of class `spawn` -> spawn point (the camera uses it at the start).
  * - Object of class `door` -> door to another world: it is marked on the floor
  *   and the scene uses it to travel when someone steps on it.
+ * - Object of class `seat` -> a place to sit. Nothing is drawn for it: the
+ *   chair is already furniture, and the hint appears when you stand on it.
  */
 export function buildOfficeMap(scene: Phaser.Scene, worldId: string): BuiltMap {
   const key = mapKey(worldId)
@@ -140,6 +149,7 @@ export function buildOfficeMap(scene: Phaser.Scene, worldId: string): BuiltMap {
     collisionLayers,
     solids,
     doors,
+    seats: findSeats(raw),
     spawns,
     spawn: entry ? { x: entry.x, y: entry.y } : undefined,
   }
@@ -209,8 +219,8 @@ function addObjects(
     const cls = objectClass(obj)
     if (cls === CLASS_ZONE) {
       addZoneLabel(scene, obj)
-    } else if (cls === CLASS_SPAWN || cls === CLASS_DOOR) {
-      // Spawns and doors are not drawn here: they are data, not furniture.
+    } else if (cls === CLASS_SPAWN || cls === CLASS_DOOR || cls === CLASS_SEAT) {
+      // Spawns, doors and seats are not drawn here: they are data, not furniture.
       continue
     } else if (obj.gid) {
       addTileObject(scene, raw, layer, obj, solids)
@@ -292,7 +302,9 @@ export function zoneAt(raw: TiledMap, x: number, y: number): string | undefined 
 
 /**
  * `?debug` mode: collision bodies of the tile layers (yellow), spawn points
- * (green) and door areas (purple, with their destination).
+ * (green), door areas (purple, with their destination) and seats (teal, with
+ * their name). A seat with a collision body drawn over it is a seat nobody
+ * can reach: this view is how you see that.
  */
 export function drawCollisionDebug(scene: Phaser.Scene, built: BuiltMap) {
   const graphics = scene.add
@@ -311,6 +323,23 @@ export function drawCollisionDebug(scene: Phaser.Scene, built: BuiltMap) {
     graphics.fillCircle(spawn.x, spawn.y, 5)
     graphics.lineStyle(1, 0x3ddc84, 0.8)
     graphics.strokeCircle(spawn.x, spawn.y, spawn.radius)
+  }
+  for (const seat of built.seats) {
+    graphics.fillStyle(SEAT_COLOR, 0.35)
+    graphics.fillRect(seat.x, seat.y, seat.width, seat.height)
+    graphics.lineStyle(1, SEAT_COLOR, 1)
+    graphics.strokeRect(seat.x, seat.y, seat.width, seat.height)
+    scene.add
+      .text(seat.x + 2, seat.y - 2, `${seat.name} (${seat.dir})`, {
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: '7px',
+        color: '#ecfdf5',
+        backgroundColor: '#065f46cc',
+        padding: { x: 2, y: 1 },
+      })
+      .setOrigin(0, 1)
+      .setResolution(4)
+      .setDepth(OVERLAY_DEPTH)
   }
   for (const door of built.doors) {
     graphics.fillStyle(DOOR_COLOR, 0.45)

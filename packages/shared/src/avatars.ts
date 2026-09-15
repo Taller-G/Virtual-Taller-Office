@@ -5,7 +5,7 @@
  *
  *   idle: right 0-5 - up 6-11 - left 12-17 - down 18-23
  *   walk: right 24-29 - up 30-35 - left 36-41 - down 42-47
- *   (48-51: sitting, not used yet)
+ *   sit:  down 48 - left 49 - right 50 - up 51 (one frame each, see SIT_FRAME)
  *
  * The server validates the chosen avatar against this list; the client uses
  * it for the entry picker and to load the sheets.
@@ -49,6 +49,17 @@ export const ANIM_START: Record<'idle' | 'walk', Record<Direction, number>> = {
   idle: { right: 0, up: 6, left: 12, down: 18 },
   walk: { right: 24, up: 30, left: 36, down: 42 },
 }
+
+/**
+ * Seated pose, one still frame per direction (the sheets have no seated
+ * animation). They are the last four frames of the LimeZu layout; the
+ * direction is the way the seated character faces, so a desk above its chair
+ * means `down`.
+ *
+ * The composed-avatar layers (body, hair, top, accessories) carry the same
+ * four frames, so a layered avatar sits down exactly like a preset one.
+ */
+export const SIT_FRAME: Record<Direction, number> = { down: 48, left: 49, right: 50, up: 51 }
 
 export function isAvatarId(value: unknown): value is string {
   return typeof value === 'string' && AVATAR_IDS.includes(value)

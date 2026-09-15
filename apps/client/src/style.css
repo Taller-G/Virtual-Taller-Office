@@ -10,6 +10,9 @@
   --ok: #3ddc84;
   --warn: #f5c451;
   --bad: #ff5d6c;
+  /* Focused: heads-down at a desk. Violet, like the doors of the Chiron
+     Office, where the focus desks are. */
+  --focus: #a78bfa;
 }
 
 * {
@@ -184,6 +187,16 @@ input {
   margin-right: 0.35rem;
   border-radius: 50%;
   background: var(--ok);
+}
+
+.presence__row[data-status='focused'] .presence__status {
+  color: var(--focus);
+}
+
+.presence__row[data-status='focused'] .presence__status::before {
+  background: var(--focus);
+  /* A ring rather than a dot: focused is present, but not available. */
+  box-shadow: 0 0 0 2px #a78bfa40;
 }
 
 .presence__row[data-status='away'] .presence__status::before {

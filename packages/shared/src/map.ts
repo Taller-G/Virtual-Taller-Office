@@ -44,6 +44,20 @@ export const PROP_DOOR_WORLD = 'world'
 export const PROP_DOOR_SPAWN = 'spawn'
 
 /**
+ * Class of the rectangles you can sit at: a chair in front of a desk. Sitting
+ * down is what puts someone in the "focused" state, so a seat is a place in
+ * the world, not a feature of the app. See `docs/map.md`.
+ */
+export const CLASS_SEAT = 'seat'
+/**
+ * Optional property of a seat: which way whoever sits there faces (towards
+ * the desk). Same values as a spawn's `dir`.
+ */
+export const PROP_SEAT_DIR = PROP_SPAWN_DIR
+/** Default facing of a seat that does not declare `dir`. */
+export const DEFAULT_SEAT_DIR: Direction = 'down'
+
+/**
  * Optional property of the map: ambient colour (Tiled's `#AARRGGBB`) with
  * which the client tints the whole world. That way a world can look dark
  * without drawing new tiles.
@@ -188,6 +202,27 @@ export interface Zone {
   y: number
   width: number
   height: number
+}
+
+/**
+ * A place to sit: the chair of a focus desk. Sitting down is what puts
+ * someone in the "focused" state, so the world is what decides where that is
+ * possible and which way you end up facing.
+ *
+ * The `name` identifies the seat everywhere (it is what travels in the
+ * messages and in `player.seatId`), so it has to be unique within the map.
+ */
+export interface Seat {
+  /** Id of the object in Tiled: identifies the seat in error messages. */
+  id: number
+  /** Unique name within the map; this is the seat's id in the state. */
+  name: string
+  x: number
+  y: number
+  width: number
+  height: number
+  /** Which way whoever sits here faces: towards the desk. */
+  dir: Direction
 }
 
 export interface MapBounds {
@@ -366,6 +401,98 @@ export function getAmbient(map: TiledMap): string | undefined {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 }
 
+/** The seats of the map, in the order they have in Tiled. */
+export function findSeats(map: TiledMap): Seat[] {
+  return allObjects(map)
+    .filter((o) => objectClass(o) === CLASS_SEAT)
+    .map((o) => {
+      const dir = getProperty(o.properties, PROP_SEAT_DIR)
+      return {
+        id: o.id,
+        name: (o.name ?? '').trim(),
+        x: o.x,
+        y: o.y,
+        width: o.width ?? 0,
+        height: o.height ?? 0,
+        dir: isDirection(dir) ? dir : DEFAULT_SEAT_DIR,
+      }
+    })
+}
+
+/** The seat called `name`, or `undefined` if the map has no such seat. */
+export function seatByName(map: TiledMap, name: string): Seat | undefined {
+  const wanted = name.trim()
+  return wanted === '' ? undefined : findSeats(map).find((s) => s.name === wanted)
+}
+
+/**
+ * The seat (if any) the rectangle touches. It is used with the player's
+ * **physics body** (the feet), like `doorAtRect`: standing on the chair is
+ * enough, the exact centre of the body does not have to be inside it.
+ */
+export function seatAtRect(
+  map: TiledMap,
+  rect: { x: number; y: number; width: number; height: number },
+): Seat | undefined {
+  return findSeats(map).find(
+    (s) =>
+      rect.x < s.x + s.width &&
+      rect.x + rect.width > s.x &&
+      rect.y < s.y + s.height &&
+      rect.y + rect.height > s.y,
+  )
+}
+
+/**
+ * Where an avatar stands once it sits down: the centre of the seat. The
+ * server pins whoever sits there to this point, so everyone draws them in the
+ * same place and nobody has to agree on anything else.
+ */
+export function seatAnchor(seat: Seat): { x: number; y: number } {
+  return { x: Math.round(seat.x + seat.width / 2), y: Math.round(seat.y + seat.height / 2) }
+}
+
+/**
+ * The avatar's physics body ("the feet") for a position: smaller than the
+ * sprite, so it fits through one-tile doorways. Doors and seats are both
+ * decided against this rectangle rather than against a point.
+ *
+ * It lives here, and not only in the client that draws it, because the server
+ * has to answer the very same question — "is this player still at that
+ * seat?" — and a second, slightly different notion of where someone is
+ * standing is exactly what makes a seat let go of somebody who never moved.
+ */
+export const PLAYER_BODY = { width: 18, height: 12 } as const
+
+/** The player's body rectangle at a position (their origin is its top centre). */
+export function playerBodyRect(
+  x: number,
+  y: number,
+): { x: number; y: number; width: number; height: number } {
+  return {
+    x: x - PLAYER_BODY.width / 2,
+    y,
+    width: PLAYER_BODY.width,
+    height: PLAYER_BODY.height,
+  }
+}
+
+/** Is the player at that position still standing on (or in) the given seat? */
+export function isAtSeat(seat: Seat, x: number, y: number): boolean {
+  const body = playerBodyRect(x, y)
+  return (
+    body.x < seat.x + seat.width &&
+    body.x + body.width > seat.x &&
+    body.y < seat.y + seat.height &&
+    body.y + body.height > seat.y
+  )
+}
+
+/** How a seat is named in error messages. */
+export function seatLabel(seat: Seat): string {
+  return seat.name ? `"${seat.name}" (object ${seat.id})` : `object ${seat.id}`
+}
+
 export function getZones(map: TiledMap): Zone[] {
   return allObjects(map)
     .filter((o) => objectClass(o) === CLASS_ZONE && (o.width ?? 0) > 0 && (o.height ?? 0) > 0)
@@ -454,6 +581,23 @@ export function validateMap(map: TiledMap): string[] {
         `The door ${label} does not declare the property "${PROP_DOOR_SPAWN}" (arrival spawn)`,
       )
     }
+  }
+
+  const seatNames = new Set<string>()
+  for (const seat of findSeats(map)) {
+    const label = seatLabel(seat)
+    if (!(seat.width > 0 && seat.height > 0)) {
+      problems.push(`The seat ${label} has no area: it has to be a rectangle`)
+    }
+    if (!seat.name) {
+      problems.push(`The seat ${label} has no name, and the name is what identifies it`)
+    } else if (seatNames.has(seat.name)) {
+      problems.push(`There is more than one seat named "${seat.name}"`)
+    }
+    seatNames.add(seat.name)
+    // A seat you cannot walk onto is a seat nobody can sit in.
+    const { x, y } = seatAnchor(seat)
+    if (isSolidAt(map, x, y)) problems.push(`The seat ${label} falls on a colliding tile`)
   }
   return problems
 }

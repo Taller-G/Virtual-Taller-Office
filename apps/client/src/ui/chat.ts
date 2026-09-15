@@ -1,6 +1,7 @@
 import {
   CHAT_MAX_LENGTH,
   CHAT_REJECTION_TEXT,
+  isFocused,
   type ChatMessagePayload,
   type ChatRejection,
 } from '@vto/shared'
@@ -27,6 +28,8 @@ const INPUT_MAX_LENGTH = CHAT_MAX_LENGTH * 2
 
 const HINT_NO_BUBBLE = 'Walk up to someone to talk'
 const HINT_IN_BUBBLE = 'Enter to type and send - Esc to close'
+/** While sitting at a focus desk there is no conversation to be had. */
+const HINT_FOCUSED = 'Focused at a desk - stand up to talk'
 
 const time = new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit' })
 
@@ -60,6 +63,8 @@ export function mountChat(connection: OfficeConnection) {
   let unbind: (() => void) | undefined
   /** Bubble the history below belongs to. `''` = none. */
   let bubbleId = ''
+  /** I am sitting at a focus desk: the reason there is no bubble to talk in. */
+  let focused = false
   let entries: Entry[] = []
   /** Reason for the latest rejection, until the text is corrected. */
   let rejection: ChatRejection | undefined
@@ -71,7 +76,9 @@ export function mountChat(connection: OfficeConnection) {
       ? CHAT_REJECTION_TEXT[rejection]
       : canChat()
         ? HINT_IN_BUBBLE
-        : HINT_NO_BUBBLE
+        : focused
+          ? HINT_FOCUSED
+          : HINT_NO_BUBBLE
     hintEl.dataset.tone = rejection ? 'error' : 'info'
   }
 
@@ -124,9 +131,9 @@ export function mountChat(connection: OfficeConnection) {
   }
 
   function render() {
-    panel.dataset.state = canChat() ? 'in' : 'none'
+    panel.dataset.state = canChat() ? 'in' : focused ? 'focused' : 'none'
     inputEl.disabled = !canChat()
-    inputEl.placeholder = canChat() ? 'Write a message...' : HINT_NO_BUBBLE
+    inputEl.placeholder = canChat() ? 'Write a message...' : focused ? HINT_FOCUSED : HINT_NO_BUBBLE
     renderHint()
     renderCount()
     renderLog()
@@ -270,7 +277,16 @@ export function mountChat(connection: OfficeConnection) {
   function bind(next: OfficeRoom) {
     unbind?.()
     room = next
-    const refresh = () => setBubble(next.state.players.get(next.sessionId)?.bubbleId ?? '')
+    const refresh = () => {
+      const me = next.state.players.get(next.sessionId)
+      const nowFocused = me ? isFocused(me) : false
+      const changed = nowFocused !== focused
+      focused = nowFocused
+      setBubble(me?.bubbleId ?? '')
+      // `setBubble` only redraws when the bubble changed; sitting down and
+      // standing up change the reason the panel is empty, not the bubble.
+      if (changed) render()
+    }
     next.onStateChange(refresh)
     unbind = () => next.onStateChange.remove(refresh)
     setBubble('')
@@ -281,6 +297,7 @@ export function mountChat(connection: OfficeConnection) {
     unbind?.()
     unbind = undefined
     room = undefined
+    focused = false
     setBubble('')
     render()
   }

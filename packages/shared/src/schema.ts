@@ -43,10 +43,48 @@ export const Player = schema(
      * to request or force membership.
      */
     bubbleId: t.string().default(''),
+    /**
+     * Name of the seat they are sitting at (an object of class `seat` in the
+     * map), or `''` if they are standing. It is the whole of the "focused"
+     * state: there is no second flag to keep in step, whoever has a seat is
+     * focused and the seat is taken. **Only the server writes it.**
+     */
+    seatId: t.string().default(''),
   },
   'Player',
 )
 export type Player = SchemaType<typeof Player>
+
+/**
+ * What a player is doing, as the people list and the avatar label show it.
+ * The order is the precedence: someone whose connection dropped reads as
+ * offline even if they were focused, and sitting down beats being away (the
+ * server frees the seat when someone goes away, so the two never overlap).
+ */
+export type PlayerStatus = 'offline' | 'focused' | 'away' | 'active'
+
+export function playerStatus(player: {
+  connected: boolean
+  seatId: string
+  away: boolean
+}): PlayerStatus {
+  if (!player.connected) return 'offline'
+  if (player.seatId !== '') return 'focused'
+  return player.away ? 'away' : 'active'
+}
+
+/** Visible text of each status, shared by the list and the avatar's badge. */
+export const PLAYER_STATUS_TEXT: Record<PlayerStatus, string> = {
+  offline: 'offline',
+  focused: 'Focused',
+  away: 'away',
+  active: 'active',
+}
+
+/** Is the player heads-down at a desk? Conversations are off while they are. */
+export function isFocused(player: { seatId: string }): boolean {
+  return player.seatId !== ''
+}
 
 /**
  * Conversation bubble: the group of players who ended up within the radius of

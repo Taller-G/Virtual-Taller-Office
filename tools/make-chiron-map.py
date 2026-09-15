@@ -64,16 +64,18 @@ HALL_ROWS = range(11, 15)
 
 #: Partitions between alcoves. Short on purpose: they let you cut across
 #: behind them, and they make the place read as a warehouse rather than as a
-#: row of offices.
-STUBS_NORTH = [(11, range(2, 9)), (22, range(2, 9))]
+#: row of offices. The one between the arrival hall and the desks stops at row
+#: 6, so you can walk straight from where you land to a desk without going
+#: round through the gallery.
+STUBS_NORTH = [(10, range(2, 7)), (22, range(2, 9))]
 STUBS_SOUTH = [(12, range(17, 22)), (21, range(17, 22))]
 #: Free-standing columns framing the gallery.
 PILLARS = [(6, 11), (6, 14), (17, 11), (17, 14), (28, 11), (28, 14)]
 
 #: Zones: name and rectangle in tiles (col0, row0, col1, row1), inclusive.
 ZONES = [
-    ('Lobby', 1, 2, 10, 10),
-    ('Monitors', 12, 2, 21, 10),
+    ('Arrival Hall', 1, 2, 9, 10),
+    ('Focus Desks', 11, 2, 21, 10),
     ('Archive', 23, 2, 32, 10),
     ('Gallery', 1, 11, 32, 14),
     ('The Pit', 1, 15, 11, 21),
@@ -83,12 +85,25 @@ ZONES = [
 
 # The door goes in the north wall, the only one seen face-on: the other three
 # are a thin line (seen edge-on) and an opening cut into them would not read.
-#: Door back to the First Office, against the Lobby's north wall.
-DOOR_TILE = (5, 2)
+#: Door back to the First Office, against the arrival hall's north wall.
+DOOR_TILE = (2, 2)
 #: Where you land coming from the First Office: two tiles in, back to the door.
-ARRIVAL_TILE = (5, 4)
+ARRIVAL_TILE = (2, 4)
 #: World entrance, for whoever opens the app straight into Chiron.
-ENTRY_TILE = (5, 7)
+ENTRY_TILE = (5, 3)
+
+#: The world's name in light on the north wall, left-hand column of the six
+#: letter tiles. It sits beside the doorway, not over it, so from the arrival
+#: point you see the mark and the way back in the same glance.
+MARK_TILE = (4, 1)
+
+#: The six focus desks: left-hand column of each three-tile desk unit, and the
+#: rows their seats are on. Each unit draws its chair one tile above the seat
+#: and its desk on the two tiles below, so a bank occupies rows seat-1..seat+2
+#: and the gaps between units (cols 14 and 18) stay clear from the gallery all
+#: the way to the north wall: nobody sitting down blocks a way through.
+DESK_COLS = (11, 15, 19)
+DESK_SEAT_ROWS = (4, 8)
 
 #: Ambient colour (#AARRGGBB). Low on purpose: floors and walls are already
 #: dark, so the veil only has to tone down the furniture, which comes from
@@ -170,10 +185,11 @@ def build_floor(firstgid: int) -> list[int]:
     # The gallery, a shade apart: the axis reads without needing a wall.
     floor.fill(inner, HALL_ROWS, 'hall')
 
-    # Technical grating in the Archive and the Monitors.
+    # Technical grating: the Archive, and the whole floor of the desks, which
+    # is what tells the focus alcove apart from the arrival hall next to it.
     grate = [['grate_a', 'grate_b'], ['grate_c', 'grate_d']]
     floor.motif(range(23, 33), range(3, 10), grate)
-    floor.motif(range(12, 22), range(8, 11), grate)
+    floor.motif(range(11, 22), range(3, 11), grate)
 
     # The rug in The Pit.
     rug = [['rug_a', 'rug_b', 'rug_c'], ['rug_d', 'rug_e', 'rug_f']]
@@ -199,7 +215,13 @@ def build_lights(firstgid: int) -> list[int]:
         lights.put(col, row + 1, 'pool_bl')
         lights.put(col + 1, row + 1, 'pool_br')
 
-    for col, row in [(4, 3), (13, 4), (16, 4), (19, 4), (5, 18), (15, 17), (26, 17)]:
+    # One over where you land, and one over every focus desk: in a world this
+    # dark, lighting a seat is what says it is meant to be used.
+    pool(ARRIVAL_TILE[0] - 1, ARRIVAL_TILE[1] - 1)
+    for row in DESK_SEAT_ROWS:
+        for col in DESK_COLS:
+            pool(col, row - 1)
+    for col, row in [(5, 18), (15, 17), (26, 17)]:
         pool(col, row)
 
     # Single lamps: warm over the gallery, cold over the Archive.
@@ -210,6 +232,13 @@ def build_lights(firstgid: int) -> list[int]:
 
     # Threshold of the door back: the light coming in from the other world.
     lights.put(DOOR_TILE[0], DOOR_TILE[1], 'threshold')
+
+    # Signposting, so nobody arriving has to wander: a chevron between where
+    # you land and the door you came through, and a line of them along the
+    # clear lane that leads east into the desks.
+    lights.put(DOOR_TILE[0], DOOR_TILE[1] + 1, 'arrow_n')
+    for col in range(6, 10):
+        lights.put(col, 8, 'arrow_e')
     return lights.data
 
 
@@ -310,23 +339,31 @@ def furniture(source: dict, firstgid: int) -> tuple[list[dict], list[dict]]:
 
     # Pieces reused from the First Office: the same assets, already assembled.
     long_table = piece(source, 8, 19, 9, 5)  # meeting table with its chairs
-    desk = piece(source, 25, 14, 3, 5)  # desk with a PC and a chair
+    # A workstation for one: the First Office desk cut short of its second
+    # chair, so the chair that is left is unambiguously *this* desk's seat.
+    focus_desk = piece(source, 25, 14, 3, 3)
 
-    # --- Lobby: the opening in the north wall, and the middle left clear,
-    # because that is where people appear.
+    # --- Arrival hall: the doorway and the world's name on the north wall,
+    # plants framing the way in, and the middle kept clear, because that is
+    # where people appear.
     objects += portal(DOOR_TILE[0], 0, firstgid)
-    objects += block(8, 1, LIT_SCREEN)
-    objects += block(2, 6, COLD_ARMCHAIR)
-    objects += block(8, 6, WARM_ARMCHAIR)
-    objects += block(4, 8, BENCH, solid=True)
-    objects += plant(1, 3)
-    objects += plant(9, 3)
+    objects += mark(MARK_TILE[0], MARK_TILE[1], firstgid)
+    objects += plant(DOOR_TILE[0] - 1, 3)
+    objects += plant(DOOR_TILE[0] + 1, 3)
+    # Everything else hugs the edges: a hall you arrive in has to read as open
+    # floor, and the lane east to the desks must not be furnished shut.
+    objects += block(7, 3, BENCH, solid=True)
+    objects += block(1, 9, SOFA, solid=True)
+    objects += block(4, 9, LOW_TABLE, solid=True)
+    objects += block(6, 9, WARM_ARMCHAIR, solid=True)
 
-    # --- Monitors: three workstations in a row under a wall of screens.
-    for col in (12, 15, 18):
-        objects += place(desk, col, 4)
+    # --- Focus desks: six workstations in two banks, each with its own seat,
+    # under a wall of screens. The aisles between the banks are left open on
+    # purpose (see DESK_COLS).
+    for col in DESK_COLS:
         objects += block(col, 1, DARK_SCREEN)
-    objects += plant(21, 7)
+        for row in DESK_SEAT_ROWS:
+            objects += place(focus_desk, col, row)
 
     # --- Archive: cabinets against the wall and two islands with an aisle.
     for col in (23, 26, 29):
@@ -367,6 +404,43 @@ def furniture(source: dict, firstgid: int) -> tuple[list[dict], list[dict]]:
     decor = [o for o in objects if not o['_solid']]
     solid = [o for o in objects if o['_solid']]
     return decor, solid
+
+
+def seats() -> list[dict]:
+    """
+    One `seat` object per focus desk: the tile the chair stands on, which is
+    also where whoever sits is pinned. `dir` is `down` because every chair is
+    drawn above its desk, so sitting means facing south, into the work.
+
+    They are map data, like the doors: the app has no list of its own, and
+    moving a desk in Tiled moves the seat with it.
+    """
+    out = []
+    for row in DESK_SEAT_ROWS:
+        for col in DESK_COLS:
+            out.append(
+                {
+                    'name': f'Focus desk {len(out) + 1}',
+                    'type': 'seat',
+                    # The chair is the middle column of the three-tile unit.
+                    'x': (col + 1) * TILE,
+                    'y': row * TILE,
+                    'width': TILE,
+                    'height': TILE,
+                    'properties': [{'name': 'dir', 'type': 'string', 'value': 'down'}],
+                }
+            )
+    return out
+
+
+def mark(col: int, row: int, firstgid: int) -> list[dict]:
+    """
+    The world's name in light on the wall: one glowing letter per tile, drawn
+    as decorative furniture over the wall (which already blocks the way), the
+    same way the doorway is. This is the Chiron mark.
+    """
+    letters = [[firstgid + INDEX[f'mark_{glyph}'] for glyph in 'chiron']]
+    return block(col, row, letters)
 
 
 def portal(col: int, row: int, firstgid: int) -> list[dict]:
@@ -459,7 +533,12 @@ def object_layer(layer_id: int, name: str, objects: list[dict], collides: bool |
 def build() -> dict:
     source = json.loads(SOURCE.read_text(encoding='utf-8'))
 
-    tilesets = [dict(ts) for ts in source['tilesets']]
+    # The First Office's tilesets, so its furniture can be copied by gid --
+    # except its copy of ours (it embeds ChironDark for the doorway). Two
+    # tilesets with the same name in one map is a trap: Phaser registers the
+    # name once, every gid of the second one then resolves against the first,
+    # and the tiles come out as whatever happens to sit at that index.
+    tilesets = [dict(ts) for ts in source['tilesets'] if ts['name'] != TILESET_NAME]
     last = max(tilesets, key=lambda ts: ts['firstgid'])
     firstgid = last['firstgid'] + last['tilecount']
     tilesets.append(chiron_tileset(firstgid))
@@ -495,6 +574,8 @@ def build() -> dict:
             for name, c0, r0, c1, r1 in ZONES
         ]
     )
+
+    desk_seats = numbered(seats())
 
     doors = numbered(
         [
@@ -556,7 +637,7 @@ def build() -> dict:
         'tilewidth': TILE,
         'tileheight': TILE,
         'backgroundcolor': '#05070d',
-        'nextlayerid': 9,
+        'nextlayerid': 10,
         'nextobjectid': next_id,
         'properties': [
             {'name': 'name', 'type': 'string', 'value': 'Chiron Office'},
@@ -570,8 +651,9 @@ def build() -> dict:
             object_layer(4, 'Furniture', decor, collides=False),
             object_layer(5, 'FurnitureCollision', solid, collides=True),
             object_layer(6, 'Zones', zones, collides=None),
-            object_layer(7, 'Doors', doors, collides=None),
-            object_layer(8, 'Spawn', spawns, collides=None),
+            object_layer(7, 'Seats', desk_seats, collides=None),
+            object_layer(8, 'Doors', doors, collides=None),
+            object_layer(9, 'Spawn', spawns, collides=None),
         ],
     }
 

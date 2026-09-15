@@ -2,6 +2,8 @@ import Phaser from 'phaser'
 import {
   AVATAR_FRAME,
   HAIR_COLORS,
+  PLAYER_BODY,
+  SIT_FRAME,
   TOP_COLORS,
   parseAppearance,
   type Appearance,
@@ -20,8 +22,13 @@ import {
  * Physics body of the avatar: the "feet", smaller than the sprite so it fits
  * through one-tile doorways. The container's origin is the top centre of the
  * body; the body occupies `[y, y + BODY.height]`.
+ *
+ * The size comes from `@vto/shared` because the server answers the same
+ * question about seats ("is this player still in that chair?") and the two
+ * have to agree. `offsetY` is how the sprite is hung off it, which only the
+ * client cares about.
  */
-export const BODY = { width: 18, height: 12, offsetY: 6 } as const
+export const BODY = { ...PLAYER_BODY, offsetY: 6 } as const
 
 /** Time constant of the smoothing of the other avatars (ms). */
 const LERP_TAU_MS = 80
@@ -90,6 +97,16 @@ export class Avatar extends Phaser.GameObjects.Container {
   moving = false
   away = false
   connected = true
+  /** Sitting at a focus desk: the sprite holds a still seated frame. */
+  seated = false
+  /**
+   * Depth to draw at while seated, instead of the one the feet give. A chair
+   * is a tile object anchored to the bottom of the seat's own tile, so it
+   * would come out just above the avatar and hide whoever sat in it; the
+   * scene passes the seat's bottom edge so the sitter lands in the chair
+   * rather than behind it.
+   */
+  private seatDepth?: number
   target: { x: number; y: number }
 
   constructor(scene: Phaser.Scene, x: number, y: number, options: AvatarOptions) {
@@ -249,7 +266,7 @@ export class Avatar extends Phaser.GameObjects.Container {
     if (resolved === this.avatarId) return
     this.avatarId = resolved
     this.presetSprite?.setTexture(textureKey(resolved))
-    this.playAnim(this.moving ? 'walk' : 'idle', this.dir, true)
+    this.applyPose(true)
   }
 
   setAppearance(appearanceStr: string) {
@@ -261,13 +278,67 @@ export class Avatar extends Phaser.GameObjects.Container {
       return
     }
     this.buildVisual(appearanceStr)
-    this.playAnim(this.moving ? 'walk' : 'idle', this.dir, true)
+    this.applyPose(true)
   }
 
   setAway(away: boolean) {
     this.away = away
-    this.badge.setVisible(away)
+    this.refreshBadge()
     this.refreshAlpha()
+  }
+
+  /**
+   * Sitting down or standing up. Seated is a **still frame**, not an
+   * animation: the sheets have exactly one seated frame per direction. It is
+   * applied to the preset sprite or to every layer of a composed avatar
+   * alike, so everyone in the room sees the same pose.
+   */
+  setSeated(seated: boolean, dir: Direction = this.dir, depth?: number) {
+    const unchanged = this.seated === seated && this.dir === dir && this.seatDepth === depth
+    this.seatDepth = seated ? depth : undefined
+    this.updateDepth()
+    if (unchanged) return
+    this.seated = seated
+    this.dir = dir
+    if (seated) this.moving = false
+    this.applyPose(true)
+    this.refreshBadge()
+  }
+
+  /**
+   * Puts the current pose on the sprites: the seated still frame, or the
+   * walk/idle animation. It is what has to run again whenever the sprites are
+   * rebuilt (a change of avatar or of appearance), since new sprites start on
+   * frame 0 and would otherwise stand up on their own.
+   */
+  private applyPose(force = false) {
+    if (this.seated) {
+      for (const sprite of this.sprites()) {
+        sprite.anims.stop()
+        sprite.setFrame(SIT_FRAME[this.dir])
+      }
+      return
+    }
+    this.playAnim(this.moving ? 'walk' : 'idle', this.dir, force)
+  }
+
+  /** Every sprite that makes up the avatar: the preset one, or the layers. */
+  private sprites(): Phaser.GameObjects.Sprite[] {
+    return this.presetSprite ? [this.presetSprite] : this.layers
+  }
+
+  /**
+   * The badge over the name: "Focused" while sitting at a desk, "away"
+   * otherwise. Focused wins, the same way it does in the people list — and
+   * the server never lets the two hold at once anyway.
+   */
+  private refreshBadge() {
+    const label = this.seated ? 'Focused' : this.away ? 'away' : ''
+    this.badge.setVisible(label !== '')
+    if (label === '') return
+    this.badge.setText(label)
+    this.badge.setBackgroundColor(this.seated ? '#8b5cf6' : '#f5c451')
+    this.badge.setColor(this.seated ? '#f5f3ff' : '#1b1f2a')
   }
 
   setInBubble(inMyBubble: boolean) {
@@ -287,6 +358,9 @@ export class Avatar extends Phaser.GameObjects.Container {
   playAnim(state: AnimState, dir: Direction, force = false) {
     this.dir = dir
     this.moving = state === 'walk'
+    // While seated the pose is a still frame nothing else may overwrite; the
+    // way out is `setSeated(false)`.
+    if (this.seated) return
 
     if (this.presetSprite) {
       // Preset mode: single sprite
@@ -306,9 +380,9 @@ export class Avatar extends Phaser.GameObjects.Container {
     }
   }
 
-  /** Depth = bottom edge of the feet, like the map's furniture. */
+  /** Depth = bottom edge of the feet, like the map's furniture (or the seat's). */
   updateDepth() {
-    this.setDepth(this.y + BODY.height)
+    this.setDepth(this.seatDepth ?? this.y + BODY.height)
   }
 
   setTarget(partial: Partial<{ x: number; y: number }>) {
