@@ -29,3 +29,15 @@ What: Blocks of gids that look like one object in the tileset image are often so
 ## Tall furniture blocks only the tile row at its base, never the rows its art covers
 
 What: A cabinet, shelf or plant is drawn over two or three tile rows but only its bottom row goes in `FurnitureCollision`; the rows the art covers stay walkable · Why: it is the First Office's idiom (see its shelves) and it is what makes avatars pass behind tall furniture instead of bumping into a wall of it — depth sorting already puts them in front or behind · Where: tools/make-chiron-map.py (`shelf`, `plant`), apps/client/public/assets/map/first-office.json · Learned: blocking every row the sprite covers kills three tile rows per cabinet and can wall a room off — the reachability test catches it, but the fix is the idiom, not a bigger gap
+
+## An author `display` rule silently defeats `el.hidden = true`
+
+What: `[hidden]` in the UA stylesheet is an attribute selector of the same specificity as a class, and the author sheet wins on cascade origin — so `.avatar-grid { display: grid }` and `.appearance-editor { display: flex }` kept both entry-screen panels rendered at once no matter what `setMode()` set `hidden` to · Why: the tab bar looked wired up and toggled `aria-selected` correctly, so the symptom read as "the card is too tall", not "the tabs do nothing" · Where: apps/client/src/style.css (the global `[hidden] { display: none !important }` near the top), apps/client/src/ui/entry.ts (`setMode`) · Learned: any project that toggles the `hidden` property needs that one global rule once; without it every new class that sets `display` is a latent bug
+
+## A `<fieldset>` will not pass a constrained height to its children
+
+What: `display: flex` on a fieldset applies to the anonymous content box the browser wraps its children in, and that box keeps `height: auto` — so the fieldset itself shrank as a flex item while its inner scroller stayed at full content height and overflowed, painting the appearance editor straight over the submit button · Why: every measurement of the fieldset looked right (it really did shrink), so the bug only shows if you also measure the child · Where: apps/client/src/ui/entry.ts (the avatar group), apps/client/index.html · Learned: for a flex/grid container that must hand a constrained height down, use a `div` with `role="group"` + `aria-labelledby` instead of `fieldset`/`legend` — same semantics to a screen reader, none of the anonymous-box behaviour
+
+## Headless Chrome ignores `::-webkit-scrollbar`, so screenshots cannot prove a scrollbar
+
+What: The same page gives `offsetWidth - clientWidth` of 0 in headless Chrome and 8px headed, so a styled scrollbar is absent from every headless screenshot even though real users see it · Why: it reads as "my CSS did not apply" and invites chasing a bug that is not there · Where: verified against apps/client/src/style.css (`.entry__panels::-webkit-scrollbar`) · Learned: assert scroll behaviour with `scrollHeight > clientHeight`, and check scrollbar _rendering_ with a headed browser
