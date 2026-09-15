@@ -102,9 +102,10 @@ interface Sent {
  * instead stand the person up. That is why a refused seat (taken a moment
  * ago) needs no reply: nothing changed, so nothing is drawn.
  *
- * Agent mascots: each player carries `agents` robots in the state, and this
- * scene gives every avatar a `MascotTrain` that draws them and walks them
- * along their owner's path. They are decoration and nothing else: they have
+ * Agent mascots: each player carries in the state how many mascots they have
+ * and what they look like (`agents` and `agentType`), and this scene gives
+ * every avatar a `MascotTrain` that draws that many of that type and walks
+ * them along their owner's path. They are decoration and nothing else: they have
  * no physics body, no name and no entry in any list, so nothing here — seats,
  * doors, bubbles, chat — ever asks about them.
  *
@@ -627,6 +628,12 @@ export class OfficeScene extends Phaser.Scene {
           $.listen(player, 'agents', (agents) =>
             this.mascots.get(sessionId)?.setCount(agents, avatar),
           ),
+          // Everyone's mascots are drawn as their owner chose, mine included:
+          // the type is in the state beside the count, and it is read the same
+          // way for every player in the room.
+          $.listen(player, 'agentType', (type) =>
+            this.mascots.get(sessionId)?.setType(type, avatar),
+          ),
           $.listen(player, 'bubbleId', () => this.refreshBubbles()),
         )
         // This client sends its own position and animation: they are not overwritten by the echo.
@@ -732,7 +739,7 @@ export class OfficeScene extends Phaser.Scene {
     avatar.setAway(player.away)
     this.syncAnim(avatar, player)
     this.avatars.set(sessionId, avatar)
-    this.mascots.set(sessionId, new MascotTrain(this, avatar, player.agents))
+    this.mascots.set(sessionId, new MascotTrain(this, avatar, player.agents, player.agentType))
     this.refreshBubbles()
 
     if (isMe) {

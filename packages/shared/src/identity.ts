@@ -18,6 +18,12 @@ export interface JoinOptions {
    * (see `sanitizeAgentCount`); anything unusable reads as none.
    */
   agents?: number
+  /**
+   * What those mascots look like (an id from `AGENT_TYPES`). The server
+   * validates it (see `sanitizeAgentType`); anything unusable reads as the
+   * classic robot.
+   */
+  agentType?: string
   /** The "away" state you travel with, so crossing a door does not lose it. */
   away?: boolean
   /** `true` if that away state had been set by hand by the user. */

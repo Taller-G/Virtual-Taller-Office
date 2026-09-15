@@ -13,6 +13,7 @@ import {
   Player,
   randomSpawnPosition,
   sanitizeAgentCount,
+  sanitizeAgentType,
   sanitizeAppearance,
   sanitizeAvatar,
   sanitizeName,
@@ -176,10 +177,13 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
       name: sanitizeName(options?.name) ?? guestName(client.sessionId),
       avatar: sanitizeAvatar(options?.avatar),
       appearance: sanitizeAppearance(options?.appearance),
-      // How many agent mascots walk behind them. It is part of the identity
-      // like the avatar is: validated here once, and from then on it is the
-      // state that everyone reads.
+      // How many agent mascots walk behind them, and what they look like. Both
+      // are part of the identity like the avatar is: validated here once, and
+      // from then on it is the state that everyone reads. An unknown type — an
+      // old client, a new one, an inventive one — enters as the classic robot
+      // rather than as a texture nobody can load.
       agents: sanitizeAgentCount(options?.agents),
+      agentType: sanitizeAgentType(options?.agentType),
       x,
       y,
       dir: spawn.dir,
@@ -202,7 +206,7 @@ export class WorldRoom extends Room<{ state: OfficeState }> {
     }
     client.send(Message.ROOM_INFO, info)
     console.log(
-      `[world ${this.world.id}] ${client.sessionId} joins as "${player.name}" (${player.avatar}; ${player.agents} agents; spawn "${spawn.name}"; ${this.state.players.size} present)`,
+      `[world ${this.world.id}] ${client.sessionId} joins as "${player.name}" (${player.avatar}; ${player.agents} ${player.agentType} agents; spawn "${spawn.name}"; ${this.state.players.size} present)`,
     )
   }
 

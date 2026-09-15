@@ -38,10 +38,7 @@ const game = new Phaser.Game({
   // that way the game keeps running with the tab in the background (automated
   // tests).
   fps: { forceSetTimeOut: config.debug },
-  scene: [
-    new BootScene(startWorld, config.avatarsUrl, config.mascotUrl, config.logoUrl),
-    office,
-  ],
+  scene: [new BootScene(startWorld, config.avatarsUrl, config.mascotsUrl, config.logoUrl), office],
 })
 
 // While typing in a text field, key presses do not reach the game.
