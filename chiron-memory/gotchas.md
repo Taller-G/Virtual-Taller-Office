@@ -41,3 +41,11 @@ What: `display: flex` on a fieldset applies to the anonymous content box the bro
 ## Headless Chrome ignores `::-webkit-scrollbar`, so screenshots cannot prove a scrollbar
 
 What: The same page gives `offsetWidth - clientWidth` of 0 in headless Chrome and 8px headed, so a styled scrollbar is absent from every headless screenshot even though real users see it · Why: it reads as "my CSS did not apply" and invites chasing a bug that is not there · Where: verified against apps/client/src/style.css (`.entry__panels::-webkit-scrollbar`) · Learned: assert scroll behaviour with `scrollHeight > clientHeight`, and check scrollbar _rendering_ with a headed browser
+
+## A CSS animation restarted on the next frame never runs in a background tab
+
+What: The panel's highlight was restarted the usual way — drop the class, add it back inside `requestAnimationFrame` — and it simply did not happen while the window was in the background, because rAF does not fire in a page that is not being painted; restarting with `for (const animation of el.getAnimations()) animation.currentTime = 0` works everywhere · Why: it fails exactly where the effect matters most (the highlight that says "you missed something" is queued for a window nobody is looking at) and passes every test run in a visible window · Where: apps/client/src/ui/chat.ts (`spark`) · Learned: `getAnimations()` flushes styles and gives the running animation directly, so it needs neither the rAF hop nor the `void el.offsetWidth` reflow trick that the linter rejects anyway
+
+## Vite's first page load can throw away a form that was just submitted
+
+What: Driving the client over CDP, the first page load after starting `npm run dev` submits the entry form, the server logs the join, and then Vite finishes optimizing dependencies and forces a full reload: the fresh page is back at the entry screen with `window.__vto` gone and the session orphaned · Why: it reads as "the client cannot join", and the server log showing a successful join sends you looking in the wrong place · Where: automated runs against `http://localhost:5173/?debug` · Learned: wait for `window.__vto` to exist before submitting, and retry the whole entry once if the room does not appear — or warm the dev server with a throwaway page load first
