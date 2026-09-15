@@ -33,3 +33,7 @@ What: `SIT` / `STAND` are requests; the server validates the seat, refuses one a
 ## A focus desk never marks you away by itself
 
 What: the inactivity sweep skips anyone who is focused; only a manual "mark me away" can make a seated person away, and that frees the desk · Why: being heads-down without touching a key is exactly what a focus desk is for — evicting someone for using it as intended defeats the feature · Where: apps/server/src/rooms/WorldRoom.ts (`checkAway`, `onSetAway`) · Learned: an inactivity timer has to ask what the inactivity means before acting on it
+
+## Tab opens the bubble chat only when the keyboard is on the game
+
+What: The chat's document-level shortcut takes `Tab` as well as `Enter`, but `Tab` is only intercepted when `document.activeElement` is the body or the canvas (and no modifier is held); from any control — the name field, the away button — it goes on moving the focus as the browser intends · Why: `isTyping()` alone is not enough of a guard for `Tab`: it only covers text fields, so a button with the focus would have had its `Tab` stolen and the panel would have become unreachable by keyboard · Where: apps/client/src/ui/chat.ts (`onGame`, the `document` keydown listener) · Learned: when a plain key is turned into a shortcut, the question is not only "is someone typing?" but "is the key already doing a job here?" — `Tab` is the browser's way of walking the controls, so it can only be borrowed from the one place that has no controls
